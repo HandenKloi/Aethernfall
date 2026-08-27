@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#16202b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Aethernfall">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
+<link rel="stylesheet" href="style.css">
+<title>Aethernfall</title>
+</head>
+<body>
+<canvas id="game" aria-label="Aethernfall game canvas"></canvas>
+<div id="hud">
+  <div class="topbar">
+    <div class="panel identity"><b id="heroName">Ari</b><span id="levelText">Lv 1</span><div class="bar hp"><span id="hpFill"></span></div><div class="bar xp"><span id="xpFill"></span></div></div>
+    <div class="panel zone"><b id="zoneText">Mistwood</b><span id="objectiveText">Найди лесной ресурс</span></div>
+    <button class="mini" id="inventoryBtn">Сумка</button><button class="mini" id="menuBtn">Меню</button>
+  </div>
+  <div id="toast"></div>
+</div>
+<div id="mobileControls">
+  <div id="joystick" class="joystick"><div id="stick"></div></div>
+  <div class="actions">
+    <button class="action attack" data-act="attack">⚔</button>
+    <button class="action" data-act="dodge">↝</button>
+    <button class="action" data-act="block">◈</button>
+    <button class="action skill" data-act="skill1">1</button>
+    <button class="action skill" data-act="skill2">2</button>
+    <button class="action skill" data-act="skill3">3</button>
+    <button class="action use" data-act="use">USE</button>
+  </div>
+</div>
+<div id="desktopHint">WASD • мышь • ЛКМ атака • Shift блок • Space уклонение • Q/E/R навыки • I сумка</div>
+<div id="modal" class="hidden"><div class="modalCard"><div class="modalHead"><b id="modalTitle">Меню</b><button id="modalClose">×</button></div><div id="modalBody"></div></div></div>
+<script src="game.js"></script>
+</body>
+</html>
