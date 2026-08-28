@@ -1,65 +1,17 @@
 <!doctype html>
 <html lang="ru">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no,maximum-scale=1">
-<meta name="theme-color" content="#0a1110">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Aethernfall">
-<meta name="mobile-web-app-capable" content="yes">
-<link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="assets/icon-192.png">
-<link rel="stylesheet" href="style.css">
-<title>Aethernfall</title>
-</head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="theme-color" content="#101817"><title>Aethernfall</title><link rel="manifest" href="manifest.json"><link rel="stylesheet" href="style.css?v=6"></head>
 <body>
-<canvas id="game"></canvas>
-<div id="vignette"></div>
-<div id="qualityBadge" class="hudBadge"></div>
-<header class="hudTop">
-  <section class="heroPanel panel">
-    <div class="portrait"><span>A</span></div>
-    <div class="heroMeta">
-      <div class="heroLine"><b>Ari</b><span id="levelText">Ур. 5</span></div>
-      <div class="bar hp"><span id="hpFill"></span></div>
-      <div class="bar stamina"><span id="staminaFill"></span></div>
-      <div class="bar xp"><span id="xpFill"></span></div>
-    </div>
-  </section>
-  <section class="zonePanel panel">
-    <span class="eyebrow">ТЕРРИТОРИЯ</span>
-    <b id="zoneText">Туманный лес</b>
-    <span id="objectiveText">Следуйте к древнему святилищу</span>
-  </section>
-  <div class="topActions">
-    <button id="inventoryBtn" class="topBtn">Сумка</button>
-    <button id="menuBtn" class="topBtn">Меню</button>
-  </div>
-</header>
-<div id="questTracker" class="panel">
-  <span class="eyebrow">ТЕКУЩАЯ ЦЕЛЬ</span>
-  <b id="questTitle">Следы в тумане</b>
-  <span id="questProgress">Поговорите с разведчиком</span>
-</div>
-<div id="minimapFrame" class="panel"><canvas id="minimap" width="240" height="240"></canvas><span id="zoneBadge">ЛЕС</span></div>
-<button id="interactPrompt" class="hidden"><span class="promptIcon">✦</span><span id="interactText">Использовать</span></button>
-<div id="toast"></div>
-<div id="loadingOverlay" class="hidden"><div class="loadingCard panel"><div class="loadingMark">A</div><b id="loadingText">Переход в другую зону</b><div class="loadBar"><span id="loadFill"></span></div></div></div>
-<div id="mobileControls">
-  <div id="joystick" class="joystick" aria-label="Движение"><div class="joyRing"></div><div id="stick"></div></div>
-  <div id="lookHint">Проведите справа, чтобы повернуть камеру</div>
-  <div class="actions">
-    <button class="action use" data-act="use"><small>ИСПОЛЬЗОВАТЬ</small><b>✦</b></button>
-    <button class="action skill" data-act="skill1"><small>НАВЫК</small><b>Ⅰ</b></button>
-    <button class="action skill" data-act="skill2"><small>НАВЫК</small><b>Ⅱ</b></button>
-    <button class="action skill" data-act="skill3"><small>НАВЫК</small><b>Ⅲ</b></button>
-    <button class="action block" data-act="block"><small>БЛОК</small><b>◈</b></button>
-    <button class="action dodge" data-act="dodge"><small>УКЛОН</small><b>↝</b></button>
-    <button class="action attack" data-act="attack"><small>АТАКА</small><b>⚔</b></button>
-  </div>
-</div>
+<canvas id="game"></canvas><div id="vignette"></div>
+<header class="hudTop"><section class="panel heroPanel"><div class="portrait"><span>A</span></div><div class="heroMeta"><div class="heroLine"><b>Ari</b><span id="levelText">Ур. 6</span></div><div class="bar hp"><span id="hpFill"></span></div><div class="bar stamina"><span id="staminaFill"></span></div><div class="bar xp"><span id="xpFill"></span></div></div></section><section class="panel zonePanel"><span class="eyebrow">ТЕКУЩАЯ ЗОНА</span><b id="zoneText">Туманный лес</b><span id="objectiveText">Поговорите с разведчиком</span></section><div class="topActions"><button class="topBtn" id="inventoryBtn">Сумка</button><button class="topBtn" id="menuBtn">Меню</button></div></header>
+<section id="questTracker" class="panel"><span class="eyebrow">КВЕСТ</span><b id="questTitle">Следы в тумане</b><span id="questProgress">Поговорите с разведчиком</span></section>
+<section id="minimapFrame" class="panel"><canvas id="minimap" width="240" height="240"></canvas><span id="zoneBadge">ЛЕС</span></section>
+<div id="resourceHud" class="panel"><span>🌿 <b id="herbCount">0</b></span><span>🪵 <b id="woodCount">0</b></span><span>⛏ <b id="oreCount">0</b></span><span>✦ <b id="goldCount">125</b></span></div>
+<button id="interactPrompt" class="hidden"><span class="promptIcon">✦</span><span id="interactText">Поговорить с разведчиком</span></button><div id="toast"></div>
+<div id="joystick" class="joystick"><div class="joyRing"></div><div id="stick"></div></div>
+<div class="actions"><button class="action use" data-act="use"><small>ДЕЙСТВИЕ</small><b>✦</b></button><button class="action skill" data-act="skill1"><small>НАВЫК</small><b>Ⅰ</b></button><button class="action skill" data-act="skill2"><small>НАВЫК</small><b>Ⅱ</b></button><button class="action skill" data-act="skill3"><small>НАВЫК</small><b>Ⅲ</b></button><button class="action block" data-act="block"><small>БЛОК</small><b>◈</b></button><button class="action dodge" data-act="dodge"><small>УКЛОН</small><b>↝</b></button><button class="action attack" data-act="attack"><small>АТАКА</small><b>⚔</b></button></div>
+<div id="lookHint">Проведите по свободной области для обзора</div>
 <div id="modal" class="hidden"><div class="modalCard panel"><div class="modalHead"><div><span class="eyebrow">AETHERFALL</span><b id="modalTitle">Меню</b></div><button id="modalClose">×</button></div><div id="modalBody" class="modalBody"></div></div></div>
-<script src="game.js?v=5" defer></script>
-</body>
-</html>
+<div id="loadingOverlay"><div class="loadingCard panel"><div class="loadingMark">A</div><b id="loadText">Загрузка Aethernfall</b><div class="loadBar"><span id="loadFill"></span></div></div></div>
+<script src="game.js?v=6" defer></script></body></html>
