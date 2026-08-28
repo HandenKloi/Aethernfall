@@ -1,0 +1,20 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Aethernfall v3.0 self-test</title>
+<body style="font-family:system-ui;background:#0f1715;color:#eee;padding:20px"><h2>Aethernfall v3.0 self-test</h2><pre id="out">Checking…</pre>
+<script>
+(async()=>{
+ const r=await fetch('./game.js?v=30',{cache:'no-store'}); const s=await r.text();
+ const tests=[
+ ['game.js loaded',s.length>30000],
+ ['real FPS monitor',s.includes('updatePerformanceMonitor(nowTime,renderMs,frameTimeMs)')],
+ ['FPS gate',s.includes('const interval=1000/fpsTarget')&&s.includes('nextRenderAt')],
+ ['touch only',s.includes('pointerdown')&&s.includes('setPointerCapture')],
+ ['zoom block',s.includes('gesturestart')],
+ ['loot',s.includes('lootDrops')],
+ ['quests',s.includes('advanceQuest')],
+ ['three zones',s.includes('mistwood')&&s.includes('stonevale')&&s.includes('ashfield')],
+ ['device profiling',s.includes('deviceMemory')&&s.includes('hardwareConcurrency')],
+ ['v3 cache',s.includes('aethernfall_save_v30')]
+ ];
+ document.getElementById('out').textContent=tests.map(x=>(x[1]?'PASS ':'FAIL ')+x[0]).join('\n');
+})().catch(e=>document.getElementById('out').textContent='FAIL '+e);
+</script>
