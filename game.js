@@ -1,13 +1,13 @@
 (()=>{'use strict';
 const $=id=>document.getElementById(id);const canvas=$('game'),ctx=canvas.getContext('2d',{alpha:false});const mcanvas=$('minimap'),mctx=mcanvas.getContext('2d',{alpha:false});
-const ui={hp:$('hpFill'),stamina:$('staminaFill'),xp:$('xpFill'),level:$('levelText'),zone:$('zoneText'),objective:$('objectiveText'),questTitle:$('questTitle'),questProgress:$('questProgress'),toast:$('toast'),modal:$('modal'),modalTitle:$('modalTitle'),modalBody:$('modalBody'),prompt:$('interactPrompt'),promptText:$('interactText'),badge:$('zoneBadge'),loading:$('loadingOverlay'),loadText:$('loadText'),loadFill:$('loadFill'),herb:$('herbCount'),wood:$('woodCount'),ore:$('oreCount'),gold:$('goldCount')};
+const ui={hp:$('hpFill'),stamina:$('staminaFill'),xp:$('xpFill'),level:$('levelText'),zone:$('zoneText'),objective:$('objectiveText'),questTitle:$('questTitle'),questProgress:$('questProgress'),toast:$('toast'),modal:$('modal'),modalTitle:$('modalTitle'),modalBody:$('modalBody'),prompt:$('interactPrompt'),promptText:$('interactText'),badge:$('zoneBadge'),loading:$('loadingOverlay'),loadText:$('loadText'),loadFill:$('loadFill'),herb:$('herbCount'),wood:$('woodCount'),ore:$('oreCount'),gold:$('goldCount'),perf:$('perfMonitor'),perfFps:$('perfFps'),perfTarget:$('perfTarget'),perfFrame:$('perfFrame'),perfRender:$('perfRender'),perfScale:$('perfScale'),perfDevice:$('perfDevice')};
 const touchCap=('ontouchstart'in window)||navigator.maxTouchPoints>0;if(!touchCap){ui.loadText.textContent='Откройте игру на сенсорном устройстве';return}
 const device={ram:Number(navigator.deviceMemory)||4,cores:Number(navigator.hardwareConcurrency)||4,dpr:Math.min(devicePixelRatio||1,2.5),ios:/iPhone|iPad|iPod/i.test(navigator.userAgent),android:/Android/i.test(navigator.userAgent)};
 const QUALITY={low:{render:.72,ambient:24,enemyCap:10,particles:16,textureScale:.50,shadow:.10,fog:.10,detail:0},medium:{render:.88,ambient:38,enemyCap:16,particles:28,textureScale:.68,shadow:.22,fog:.15,detail:1},high:{render:1.02,ambient:52,enemyCap:22,particles:42,textureScale:.82,shadow:.34,fog:.20,detail:2},'very-high':{render:1.14,ambient:72,enemyCap:28,particles:60,textureScale:.94,shadow:.48,fog:.24,detail:3}};
 const FPS=[30,40,45,60,90,120];const detected=(device.ram>=8&&device.cores>=8)?'high':(device.ram>=6&&device.cores>=6)?'high':(device.ram>=4&&device.cores>=4)?'medium':'low';
 let settings={quality:localStorage.getItem('aef_quality')||detected,fps:Number(localStorage.getItem('aef_fps')||60)};if(!QUALITY[settings.quality])settings.quality=detected;if(!FPS.includes(settings.fps))settings.fps=60;let profile=QUALITY[settings.quality];
-let W=innerWidth,H=innerHeight,DPR=1,time=0,lastNow=performance.now(),frameLast=0,rafId=0,transitioning=false,adaptiveScale=1,perfScore=0,perfSamples=0,lastPerfAdjust=0;
-const WORLD={w:2400,h:1600};const SAVE='aethernfall_save_v6';
+let W=innerWidth,H=innerHeight,DPR=1,time=0,lastNow=performance.now(),frameLast=0,rafId=0,transitioning=false,adaptiveScale=1,perfMonitorEnabled=localStorage.getItem('aef_perf_monitor')==='1',perfLastGameFrame=0,perfFrameCount=0,perfRenderTotal=0,perfWindowStart=performance.now(),perfActualFps=0,perfAvgFrameMs=0,perfAvgRenderMs=0;
+const WORLD={w:2400,h:1600};const SAVE='aethernfall_save_v7';
 const zones={
  mistwood:{name:'Туманный лес',badge:'ЛЕС',base:'#0e1a15',ground:'#2f5538',accent:'#83b07a',water:'#2b6872',scout:{x:470,y:420},camp:{x:360,y:500},portal:{x:2100,y:850},quest:{id:'mist',title:'Следы в тумане',steps:['Поговорите с разведчиком','Соберите 3 травы','Победите 4 налётчиков','Перейдите в Каменную долину']},next:'stonevale',resources:['herb','wood']},
  stonevale:{name:'Каменная долина',badge:'РУИНЫ',base:'#292c2c',ground:'#6a6558',accent:'#c1a876',water:'#456167',scout:{x:450,y:430},camp:{x:340,y:520},portal:{x:210,y:820},quest:{id:'stone',title:'Пепел старого мира',steps:['Поговорите с разведчиком','Соберите 2 руды','Победите стража руин','Перейдите в Пепельные поля']},next:'ashfield',resources:['ore','herb']},
@@ -22,7 +22,7 @@ load();
 function toast(t){ui.toast.textContent=t;ui.toast.style.opacity=1;clearTimeout(toast._t);toast._t=setTimeout(()=>ui.toast.style.opacity=0,1900)}
 function effectiveRenderScale(){return clamp(profile.render*adaptiveScale,.62,1.25)}
 function applyGraphics(){profile=QUALITY[settings.quality];DPR=clamp(device.dpr*effectiveRenderScale(),.62,1.35);W=innerWidth;H=innerHeight;canvas.width=Math.max(1,Math.floor(W*DPR));canvas.height=Math.max(1,Math.floor(H*DPR));canvas.style.width=W+'px';canvas.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0);ctx.imageSmoothingEnabled=true;patterns={};for(const [k,img] of Object.entries(textureImages)){if(img.complete)patterns[k]=ctx.createPattern(img,'repeat')}makeAmbient();}
-addEventListener('resize',applyGraphics,{passive:true});
+addEventListener('resize',()=>{applyGraphics();lastNow=performance.now();frameLast=0},{passive:true});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){lastNow=performance.now();frameLast=lastNow}else{lastNow=performance.now();frameLast=0}});
 function loadTextures(){
   const names=['grass','dirt','stone','water','wood','foliage','rune','leather','parchment'];
@@ -55,16 +55,22 @@ function skill(n){if(player.stamina<20){toast('Недостаточно выно
 function nearbyInteraction(){const z=zones[zoneId],portal=dist(player,z.portal)<115,scout=dist(player,z.scout)<105,res=nearest(e=>e.kind==='resource',96);return portal?{type:'portal'}:scout?{type:'scout'}:res?{type:'resource',entity:res}:null}
 function canUsePortal(){const s=questState();return s.step>=3}
 function interact(){if(interactionLock>time||transitioning)return;interactionLock=time+.18;const hit=nearbyInteraction();if(!hit)return;if(hit.type==='portal'){if(!canUsePortal()){toast('Сначала завершите текущую задачу');return}advanceQuest('portal');transitionZone();return}if(hit.type==='scout'){const s=questState();if(s.step===0){advanceQuest('scout');toast(zoneId==='ashfield'?'Хранитель: пламя откликается на вашу силу.':'Разведчик: путь открыт. Продолжайте путь.')}else toast('Разведчик: '+currentObjective());return}const r=hit.entity,key=r.type;player.inv[key]++;if(zoneId==='mistwood'&&key==='herb'&&questState().step===1){questState().herb++;advanceQuest('resource')}if(zoneId==='stonevale'&&key==='ore'&&questState().step===1){questState().ore++;advanceQuest('resource')}if(zoneId==='ashfield'&&key==='wood'&&questState().step===1){questState().wood++;advanceQuest('resource')}toast('Получено: '+({wood:'древесина',ore:'руда',herb:'трава'}[key]));burst(r.x,r.y,'#d6c274',12,105);entities.splice(entities.indexOf(r),1);save()}
-function transitionZone(){if(transitioning)return;transitioning=true;ui.loading.classList.remove('hidden');ui.loadFill.style.width='0%';ui.loadText.textContent='Переход: '+zones[zones[zoneId].next].name;const start=performance.now();function tick(now){const p=Math.min(1,(now-start)/650);ui.loadFill.style.width=(p*100)+'%';if(p<1){requestAnimationFrame(tick);return}zoneId=zones[zoneId].next;resetZone();save();setTimeout(()=>{ui.loading.classList.add('hidden');transitioning=false;toast(zones[zoneId].name)},120)}requestAnimationFrame(tick)}
+function transitionZone(){if(transitioning)return;transitioning=true;ui.loading.classList.remove('hidden');ui.loadFill.style.width='0%';ui.loadText.textContent='Переход: '+zones[zones[zoneId].next].name;const start=performance.now();function tick(now){const p=Math.min(1,(now-start)/650);ui.loadFill.style.width=(p*100)+'%';if(p<1){requestAnimationFrame(tick);return}zoneId=zones[zoneId].next;resetZone();save();setTimeout(()=>{lastNow=performance.now();frameLast=0;ui.loading.classList.add('hidden');transitioning=false;toast(zones[zoneId].name)},120)}requestAnimationFrame(tick)}
 function openModal(title,body){ui.modalTitle.textContent=title;ui.modalBody.innerHTML=body;ui.modal.classList.remove('hidden')}function closeModal(){ui.modal.classList.add('hidden')}
 function openInventory(){openModal('Сумка и экипировка',`<div class="grid"><div class="card"><h3>Оружие</h3><p>${player.equipment.weapon}<br>Урон: <b>${player.damage}</b></p></div><div class="card"><h3>Броня</h3><p>${player.equipment.armor}<br>Защита: <b>24</b></p></div><div class="card"><h3>Ресурсы</h3><p>Древесина: ${player.inv.wood}<br>Руда: ${player.inv.ore}<br>Трава: ${player.inv.herb}</p></div><div class="card"><h3>Валюта</h3><p class="gold">${player.gold} золотых</p></div></div><div class="sectionTitle">КРАФТ</div><button class="btn" id="craftBtn">Закалить меч · 3 древесины + 2 руды</button>`);bindTap($('craftBtn'),craft)}
 function craft(){if(player.inv.wood>=3&&player.inv.ore>=2){player.inv.wood-=3;player.inv.ore-=2;player.damage+=5;player.equipment.weapon='Закалённый меч следопыта';save();closeModal();toast('Оружие улучшено: +5 урона')}else toast('Нужно 3 древесины и 2 руды')}
-function openMenu(){openModal('Настройки',`<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><div class="sectionTitle">КАЧЕСТВО ГРАФИКИ</div><div class="settingRow"><div class="seg" id="qualitySeg">${['low','medium','high','very-high'].map(q=>`<button data-q="${q}" class="${settings.quality===q?'active':''}">${q==='very-high'?'Very High':q[0].toUpperCase()+q.slice(1)}</button>`).join('')}</div><div class="note">Меняет внутреннее разрешение canvas, плотность окружения, лимиты врагов и частиц, детализацию текстур, тени и туман. Применяется сразу.</div></div><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="settingRow"><div class="seg fps" id="fpsSeg">${FPS.map(f=>`<button data-f="${f}" class="${settings.fps===f?'active':''}">${f}</button>`).join('')}</div><div class="note">Лимит управляет игровым рендер-циклом. Фактический FPS не может превышать возможности дисплея и браузера.</div></div><div class="sectionTitle">УСТРОЙСТВО</div><div class="card"><p>${device.ios?'iOS':device.android?'Android':'Mobile'} · ${device.ram} GB RAM* · ${device.cores} CPU cores · DPR ${device.dpr.toFixed(2)}<br>*Если браузер не сообщает RAM, используется консервативная оценка 4 GB.</p></div><div class="sectionTitle">СОХРАНЕНИЕ</div><button class="btn" id="saveBtn">Сохранить прогресс</button>`);document.querySelectorAll('#qualitySeg button').forEach(b=>bindTap(b,()=>{settings.quality=b.dataset.q;localStorage.setItem('aef_quality',settings.quality);applyGraphics();save();openMenu()}));document.querySelectorAll('#fpsSeg button').forEach(b=>bindTap(b,()=>{settings.fps=Number(b.dataset.f);localStorage.setItem('aef_fps',String(settings.fps));frameLast=0;save();openMenu()}));bindTap($('saveBtn'),()=>{save();toast('Прогресс сохранён')})}
+function openMenu(){openModal('Настройки',`<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><div class="sectionTitle">КАЧЕСТВО ГРАФИКИ</div><div class="settingRow"><div class="seg" id="qualitySeg">${['low','medium','high','very-high'].map(q=>`<button data-q="${q}" class="${settings.quality===q?'active':''}">${q==='very-high'?'Very High':q[0].toUpperCase()+q.slice(1)}</button>`).join('')}</div><div class="note">Меняет внутреннее разрешение canvas, плотность окружения, лимиты врагов и частиц, детализацию текстур, тени и туман. Применяется сразу.</div></div><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="settingRow"><div class="seg fps" id="fpsSeg">${FPS.map(f=>`<button data-f="${f}" class="${settings.fps===f?'active':''}">${f}</button>`).join('')}</div><div class="note">Лимит управляет игровым рендер-циклом. Фактический FPS не может превышать возможности дисплея и браузера.</div></div><div class="sectionTitle">МОНИТОР ПРОИЗВОДИТЕЛЬНОСТИ</div><button class="btn" id="perfBtn">${perfMonitorEnabled?'Выключить frame-time monitor':'Включить frame-time monitor'}</button><div class="sectionTitle">УСТРОЙСТВО</div><div class="card"><p>${device.ios?'iOS':device.android?'Android':'Mobile'} · ${device.ram} GB RAM* · ${device.cores} CPU cores · DPR ${device.dpr.toFixed(2)}<br>*Если браузер не сообщает RAM, используется консервативная оценка 4 GB.</p></div><div class="sectionTitle">СОХРАНЕНИЕ</div><button class="btn" id="saveBtn">Сохранить прогресс</button>`);document.querySelectorAll('#qualitySeg button').forEach(b=>bindTap(b,()=>{settings.quality=b.dataset.q;localStorage.setItem('aef_quality',settings.quality);applyGraphics();save();openMenu()}));document.querySelectorAll('#fpsSeg button').forEach(b=>bindTap(b,()=>{settings.fps=Number(b.dataset.f);localStorage.setItem('aef_fps',String(settings.fps));frameLast=0;save();openMenu()}));bindTap($('saveBtn'),()=>{save();toast('Прогресс сохранён')});bindTap($('perfBtn'),()=>{perfMonitorEnabled=!perfMonitorEnabled;localStorage.setItem('aef_perf_monitor',perfMonitorEnabled?'1':'0');refreshPerformanceMonitorVisibility();openMenu()})}
 function bindTap(el,fn){if(!el)return;let fired=false;el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();if(fired)return;fired=true;fn(e);setTimeout(()=>fired=false,90)},{passive:false})}
-const joyEl=$('joystick'),stick=$('stick'),joy={id:null,x:0,y:0},look={ids:new Set(),lastX:0};function moveJoy(e){const r=joyEl.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,max=r.width*.34;let dx=e.clientX-cx,dy=e.clientY-cy,l=Math.hypot(dx,dy);if(l>max){dx=dx/l*max;dy=dy/l*max}joy.x=dx/max;joy.y=dy/max;stick.style.transform=`translate(${dx}px,${dy}px)`}
-joyEl.addEventListener('pointerdown',e=>{e.preventDefault();joy.id=e.pointerId;joyEl.setPointerCapture?.(e.pointerId);moveJoy(e)},{passive:false});joyEl.addEventListener('pointermove',e=>{if(e.pointerId===joy.id){e.preventDefault();moveJoy(e)}},{passive:false});['pointerup','pointercancel','pointerleave'].forEach(ev=>joyEl.addEventListener(ev,e=>{if(e.pointerId===joy.id){joy.id=null;joy.x=joy.y=0;stick.style.transform='translate(0,0)'}},{passive:false}));
-canvas.addEventListener('pointerdown',e=>{if(e.clientX<W*.43)return;look.ids.add(e.pointerId);look.lastX=e.clientX;canvas.setPointerCapture?.(e.pointerId)},{passive:false});canvas.addEventListener('pointermove',e=>{if(!look.ids.has(e.pointerId))return;e.preventDefault();const dx=e.clientX-look.lastX;look.lastX=e.clientX;player.dir+=dx*.008},{passive:false});['pointerup','pointercancel','pointerleave'].forEach(ev=>canvas.addEventListener(ev,e=>look.ids.delete(e.pointerId),{passive:false}));
-document.querySelectorAll('.action').forEach(btn=>{const a=btn.dataset.act;if(a==='block'){btn.addEventListener('pointerdown',e=>{e.preventDefault();player.blocking=true},{passive:false});['pointerup','pointercancel','pointerleave'].forEach(ev=>btn.addEventListener(ev,()=>player.blocking=false,{passive:false}));return}bindTap(btn,()=>{if(a==='attack')attack();else if(a==='dodge')dodge();else if(a==='skill1')skill(1);else if(a==='skill2')skill(2);else if(a==='skill3')skill(3);else if(a==='use')interact()})});bindTap(ui.prompt,interact);bindTap($('inventoryBtn'),openInventory);bindTap($('menuBtn'),openMenu);bindTap($('modalClose'),closeModal);
+const joyEl=$('joystick'),stick=$('stick'),joy={id:null,x:0,y:0};
+function resetJoy(){joy.id=null;joy.x=joy.y=0;if(stick)stick.style.transform='translate(0,0)';}
+function moveJoy(e){const r=joyEl.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,max=Math.min(r.width,r.height)*.36;let dx=e.clientX-cx,dy=e.clientY-cy,l=Math.hypot(dx,dy);if(l>max){dx=dx/l*max;dy=dy/l*max}joy.x=dx/max;joy.y=dy/max;if(stick)stick.style.transform=`translate(${dx}px,${dy}px)`}
+joyEl.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse')return;e.preventDefault();e.stopPropagation();joy.id=e.pointerId;joyEl.setPointerCapture?.(e.pointerId);moveJoy(e)},{passive:false});
+joyEl.addEventListener('pointermove',e=>{if(e.pointerId===joy.id){e.preventDefault();moveJoy(e)}},{passive:false});
+['pointerup','pointercancel'].forEach(ev=>joyEl.addEventListener(ev,e=>{if(e.pointerId===joy.id)resetJoy()},{passive:false}));
+window.addEventListener('pointerup',e=>{if(e.pointerId===joy.id)resetJoy()},{passive:true});
+window.addEventListener('pointercancel',e=>{if(e.pointerId===joy.id)resetJoy()},{passive:true});
+canvas.addEventListener('pointerdown',e=>{if(e.clientX<W*.43)return;look.ids.add(e.pointerId);look.lastX=e.clientX;canvas.setPointerCapture?.(e.pointerId)},{passive:false});canvas.addEventListener('pointermove',e=>{if(!look.ids.has(e.pointerId))return;e.preventDefault();const dx=e.clientX-look.lastX;look.lastX=e.clientX;player.dir+=dx*.008},{passive:false});['pointerup','pointercancel'].forEach(ev=>canvas.addEventListener(ev,e=>look.ids.delete(e.pointerId),{passive:false}));
+document.querySelectorAll('.action').forEach(btn=>{const a=btn.dataset.act;if(a==='block'){btn.addEventListener('pointerdown',e=>{e.preventDefault();player.blocking=true},{passive:false});['pointerup','pointercancel'].forEach(ev=>btn.addEventListener(ev,()=>player.blocking=false,{passive:false}));return}bindTap(btn,()=>{if(a==='attack')attack();else if(a==='dodge')dodge();else if(a==='skill1')skill(1);else if(a==='skill2')skill(2);else if(a==='skill3')skill(3);else if(a==='use')interact()})});bindTap(ui.prompt,interact);bindTap($('inventoryBtn'),openInventory);bindTap($('menuBtn'),openMenu);bindTap($('modalClose'),closeModal);
 ['gesturestart','gesturechange','gestureend'].forEach(ev=>document.addEventListener(ev,e=>e.preventDefault(),{passive:false}));let lastTouchEnd=0;document.addEventListener('touchend',e=>{const now=Date.now();if(now-lastTouchEnd<320)e.preventDefault();lastTouchEnd=now},{passive:false});document.addEventListener('touchmove',e=>{if(e.touches.length>1)e.preventDefault()},{passive:false});
 function update(dt){time+=dt;player.attackCd=Math.max(0,player.attackCd-dt);player.stamina=clamp(player.stamina+24*dt,0,player.maxStamina);const moving=Math.hypot(joy.x,joy.y)>.06;const speed=player.speed*(player.blocking?.58:1);if(moving&&time>=player.dodgeUntil){player.x=clamp(player.x+joy.x*speed*dt,70,WORLD.w-70);player.y=clamp(player.y+joy.y*speed*dt,70,WORLD.h-70);player.dir=Math.atan2(joy.y,joy.x)}for(const e of entities){if(e.hp<=0||e.kind!=='enemy')continue;e.cd=Math.max(0,e.cd-dt);e.hit=Math.max(0,e.hit-dt);const d=dist(player,e);if(d<540){const a=Math.atan2(player.y-e.y,player.x-e.x);if(d>e.r+player.r+8){e.x=clamp(e.x+Math.cos(a)*e.speed*dt,40,WORLD.w-40);e.y=clamp(e.y+Math.sin(a)*e.speed*dt,40,WORLD.h-40)}else if(e.cd<=0){e.cd=e.type==='guardian'?1.05:1.35;if(time>=player.dodgeUntil){const dmg=player.blocking?Math.ceil(e.damage*.26):e.damage;player.hp=Math.max(0,player.hp-dmg);burst(player.x,player.y,'#e06d68',7,80);if(player.hp<=0){player.hp=player.maxHp;player.x=zones[zoneId].camp.x;player.y=zones[zoneId].camp.y;toast('Вы возвращены к лагерю')}}}}}
 for(let i=projectiles.length-1;i>=0;i--){const p=projectiles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;let hit=false;for(const e of entities){if(e.hp>0&&e.kind==='enemy'&&dist(p,e)<e.r+7){hitTarget(e,p.damage);hit=true;break}}if(hit||p.life<=0)projectiles.splice(i,1)}for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.94;p.vy*=.94;p.life-=dt;if(p.life<=0)particles.splice(i,1)}
@@ -81,10 +87,81 @@ function drawEntity(e){const s=screenPos(e.x,e.y);ctx.save();ctx.translate(s.x,s
 function drawPlayer(){const s=screenPos(player.x,player.y);ctx.save();ctx.translate(s.x,s.y);ctx.scale(1,.82);ctx.fillStyle='rgba(0,0,0,.3)';ctx.beginPath();ctx.ellipse(0,18,30,10,0,0,Math.PI*2);ctx.fill();if(time<player.dodgeUntil)ctx.globalAlpha=.72;ctx.fillStyle='#2f505c';ctx.beginPath();ctx.moveTo(-18,14);ctx.lineTo(-14,-13);ctx.lineTo(0,-24);ctx.lineTo(15,-13);ctx.lineTo(18,14);ctx.closePath();ctx.fill();ctx.fillStyle='#e0c7a0';ctx.beginPath();ctx.arc(0,-21,11,0,Math.PI*2);ctx.fill();ctx.fillStyle='#d8dde0';ctx.beginPath();ctx.moveTo(-13,-28);ctx.quadraticCurveTo(0,-47,15,-28);ctx.lineTo(11,-20);ctx.lineTo(-13,-20);ctx.closePath();ctx.fill();ctx.save();ctx.rotate(player.dir);ctx.strokeStyle='#dfbc67';ctx.lineWidth=6;ctx.beginPath();ctx.moveTo(5,-3);ctx.lineTo(38,-11);ctx.stroke();ctx.restore();if(player.blocking){ctx.strokeStyle='#b8d9dc';ctx.lineWidth=4;ctx.beginPath();ctx.arc(0,0,37,-.95,.95);ctx.stroke()}ctx.restore()}
 function drawProjectiles(){for(const p of projectiles){const s=screenPos(p.x,p.y);ctx.save();ctx.translate(s.x,s.y);ctx.fillStyle=p.color;ctx.shadowColor=p.color;ctx.shadowBlur=profile.detail>=2?6:0;ctx.beginPath();ctx.arc(0,0,5,0,Math.PI*2);ctx.fill();ctx.restore()}}
 function drawParticles(){for(const p of particles){const s=screenPos(p.x,p.y);ctx.globalAlpha=Math.max(0,p.life/p.max);ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(s.x,s.y,p.size,0,Math.PI*2);ctx.fill()}ctx.globalAlpha=1}
-function drawWorld(){const z=zones[zoneId];ctx.clearRect(0,0,W,H);drawGround(z);drawAmbient();const drawables=[{y:z.camp.y,fn:()=>drawCamp(z)},{y:z.scout.y,fn:()=>drawScout(z)},{y:z.portal.y,fn:()=>drawPortal(z)},{y:player.y,fn:drawPlayer}];for(const e of entities)if(e.hp>0)drawables.push({y:e.y,fn:()=>e.kind==='resource'?drawResource(e):drawEntity(e)});drawables.sort((a,b)=>a.y-b.y);for(const d of drawables)d.fn();drawProjectiles();drawParticles()}
+
+function drawLandmarks(z){
+  ctx.save();
+  // Major road/path
+  const sx=screenPos(WORLD.w*.5,WORLD.h*.55);
+  ctx.translate(W/2-player.x,H/2-player.y*.82);
+  ctx.globalAlpha=.42;
+  ctx.fillStyle=zoneId==='mistwood'?'#7d7657':zoneId==='stonevale'?'#928875':'#8d6656';
+  ctx.beginPath();
+  ctx.moveTo(-180, WORLD.h*.18);
+  ctx.quadraticCurveTo(WORLD.w*.42, WORLD.h*.46, WORLD.w*.50, WORLD.h*.74);
+  ctx.quadraticCurveTo(WORLD.w*.58, WORLD.h*.98, WORLD.w+180, WORLD.h*.82);
+  ctx.lineTo(WORLD.w+180, WORLD.h*.95);
+  ctx.quadraticCurveTo(WORLD.w*.57, WORLD.h*1.08, WORLD.w*.45, WORLD.h*.80);
+  ctx.quadraticCurveTo(WORLD.w*.34, WORLD.h*.54,-180,WORLD.h*.30);
+  ctx.closePath(); ctx.fill();
+  ctx.globalAlpha=.95;
+  // Zone landmark cluster
+  const lx=zoneId==='mistwood'?1180:zoneId==='stonevale'?1220:1520;
+  const ly=zoneId==='mistwood'?420:zoneId==='stonevale'?520:900;
+  ctx.save();ctx.translate(lx,ly);ctx.scale(1,.82);
+  ctx.fillStyle='rgba(0,0,0,.18)';ctx.beginPath();ctx.ellipse(0,30,150,36,0,0,Math.PI*2);ctx.fill();
+  if(zoneId==='mistwood'){
+    ctx.fillStyle='#5d4a39';for(let i=-1;i<=1;i++){ctx.fillRect(i*58-11,-62,22,110)}
+    ctx.fillStyle='#7b6651';ctx.beginPath();ctx.moveTo(-115,-54);ctx.lineTo(0,-112);ctx.lineTo(115,-54);ctx.closePath();ctx.fill();
+    ctx.fillStyle='#8aac72';ctx.beginPath();ctx.arc(-75,-90,35,0,Math.PI*2);ctx.arc(10,-108,40,0,Math.PI*2);ctx.arc(78,-90,32,0,Math.PI*2);ctx.fill();
+  } else if(zoneId==='stonevale'){
+    ctx.fillStyle='#6f6a60';for(let i=0;i<4;i++){ctx.fillRect(-100+i*55,-80,34,110)}
+    ctx.fillStyle='#827b6c';ctx.beginPath();ctx.moveTo(-118,-80);ctx.lineTo(-102,-125);ctx.lineTo(-66,-100);ctx.lineTo(-42,-142);ctx.lineTo(-2,-105);ctx.lineTo(26,-132);ctx.lineTo(56,-96);ctx.lineTo(105,-118);ctx.lineTo(118,-80);ctx.closePath();ctx.fill();
+  } else {
+    ctx.fillStyle='#543830';ctx.fillRect(-90,-74,180,110);
+    ctx.fillStyle='#7b4b3e';ctx.fillRect(-66,-96,132,22);
+    ctx.fillStyle='#c47f59';ctx.fillRect(-22,-52,44,52);
+    ctx.strokeStyle='#e4a06f';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(-62,-65);ctx.lineTo(-32,-28);ctx.lineTo(0,-65);ctx.lineTo(34,-26);ctx.lineTo(64,-64);ctx.stroke();
+  }
+  ctx.restore();ctx.restore();
+}
+function drawWorld(){const z=zones[zoneId];ctx.clearRect(0,0,W,H);drawGround(z);drawLandmarks(z);drawAmbient();const drawables=[{y:z.camp.y,fn:()=>drawCamp(z)},{y:z.scout.y,fn:()=>drawScout(z)},{y:z.portal.y,fn:()=>drawPortal(z)},{y:player.y,fn:drawPlayer}];for(const e of entities)if(e.hp>0)drawables.push({y:e.y,fn:()=>e.kind==='resource'?drawResource(e):drawEntity(e)});drawables.sort((a,b)=>a.y-b.y);for(const d of drawables)d.fn();drawProjectiles();drawParticles()}
 function drawMap(){const z=zones[zoneId];mctx.clearRect(0,0,240,240);mctx.fillStyle=z.ground;mctx.fillRect(0,0,240,240);mctx.strokeStyle='rgba(255,255,255,.06)';for(let i=0;i<8;i++){mctx.beginPath();mctx.moveTo(i*30,0);mctx.lineTo(i*30,240);mctx.stroke();mctx.beginPath();mctx.moveTo(0,i*30);mctx.lineTo(240,i*30);mctx.stroke()}for(const e of entities){if(e.hp<=0||e.kind==='resource')continue;mctx.fillStyle=e.type==='guardian'?'#d29ae7':'#ca6a6e';mctx.fillRect(e.x/WORLD.w*240,e.y/WORLD.h*240,2.5,2.5)}mctx.fillStyle='#e6c874';mctx.beginPath();mctx.arc(z.scout.x/WORLD.w*240,z.scout.y/WORLD.h*240,3,0,Math.PI*2);mctx.fill();mctx.fillStyle='#79c0d0';mctx.beginPath();mctx.arc(z.portal.x/WORLD.w*240,z.portal.y/WORLD.h*240,3.5,0,Math.PI*2);mctx.fill();mctx.fillStyle='#eef5ef';mctx.beginPath();mctx.arc(player.x/WORLD.w*240,player.y/WORLD.h*240,4,0,Math.PI*2);mctx.fill()}
-function adaptPerformance(frameMs){if(document.hidden)return;const target=1000/settings.fps;const ratio=frameMs/target;perfScore=perfScore*0.92+ratio*0.08;perfSamples++;if(perfSamples<24||performance.now()-lastPerfAdjust<900)return;if(perfScore>1.18){adaptiveScale=clamp(adaptiveScale-0.08,.70,1);lastPerfAdjust=performance.now();applyGraphics()}else if(perfScore<0.78){adaptiveScale=clamp(adaptiveScale+0.04,.82,1);lastPerfAdjust=performance.now();applyGraphics()}}
-function renderFrame(now){rafId=requestAnimationFrame(renderFrame);const interval=1000/settings.fps;if(now-frameLast<interval-0.25)return;const dt=Math.min(.05,Math.max(.001,(now-lastNow)/1000));lastNow=now;frameLast=now;const t0=performance.now();update(dt);drawWorld();drawMap();adaptPerformance(performance.now()-t0)}
+
+function updatePerformanceMonitor(now, renderMs) {
+  const gameFrameGap = perfLastGameFrame ? now - perfLastGameFrame : 0;
+  perfLastGameFrame = now;
+  if (gameFrameGap > 0 && gameFrameGap < 2000) {
+    perfFrameCount++;
+    perfRenderTotal += renderMs;
+  }
+  if (now - perfWindowStart >= 750) {
+    const elapsed = now - perfWindowStart;
+    perfActualFps = perfFrameCount * 1000 / elapsed;
+    perfAvgFrameMs = perfActualFps > 0 ? 1000 / perfActualFps : 0;
+    perfAvgRenderMs = perfFrameCount > 0 ? perfRenderTotal / perfFrameCount : 0;
+    perfFrameCount = 0;
+    perfRenderTotal = 0;
+    perfWindowStart = now;
+  }
+  if (ui.perf && perfMonitorEnabled) {
+    ui.perf.classList.remove('hidden');
+    ui.perfFps.textContent = `${perfActualFps.toFixed(0)} FPS`;
+    ui.perfTarget.textContent = ` target ${settings.fps}`;
+    ui.perfFrame.textContent = `${perfAvgFrameMs.toFixed(1)} ms frame`;
+    ui.perfRender.textContent = ` · ${perfAvgRenderMs.toFixed(1)} ms render`;
+    ui.perfScale.textContent = `Scale ${effectiveRenderScale().toFixed(2)}`;
+    ui.perfDevice.textContent = ` · ${device.ios?'iOS':device.android?'Android':'Mobile'}`;
+  } else if (ui.perf) {
+    ui.perf.classList.add('hidden');
+  }
+}
+
+function refreshPerformanceMonitorVisibility(){
+  if (!ui.perf) return;
+  ui.perf.classList.toggle('hidden', !perfMonitorEnabled);
+}
+
+function renderFrame(now){rafId=requestAnimationFrame(renderFrame);const interval=1000/settings.fps;if(now-frameLast<interval-0.25){updatePerformanceMonitor(now,0);return;}const dt=Math.min(.05,Math.max(.001,(now-lastNow)/1000));lastNow=now;frameLast=now;const t0=performance.now();update(dt);drawWorld();drawMap();updatePerformanceMonitor(now,performance.now()-t0)}
 function hideLoading(){if(ui.loading&&!ui.loading.classList.contains('hidden'))ui.loading.classList.add('hidden')}
 function firstPaint(){applyGraphics();resetZone();update(0);drawWorld();drawMap();lastNow=performance.now();frameLast=0;if(!rafId)rafId=requestAnimationFrame(renderFrame)}
 async function boot(){
@@ -106,5 +183,5 @@ async function boot(){
 // RC07 deliberately removes runtime SW registration to avoid stale-cache startup loops
 // after replacing files on GitHub Pages. Existing workers are retired on first launch.
 if('serviceWorker'in navigator){navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(rs.map(r=>r.unregister()))).catch(()=>{});if('caches'in window)caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('aethernfall-')).map(k=>caches.delete(k)))).catch(()=>{})}
-if(globalThis.__AETHER_TEST__){globalThis.__AETHER_TEST_API__={state:()=>({zoneId,player,settings,quest:questState(),objective:currentObjective(),entities}),resetZone,interact,skill,attack,transitionZone,advanceQuest,renderFrame,applyGraphics,update,nearbyInteraction,zones,player};}else boot();
+refreshPerformanceMonitorVisibility();if(globalThis.__AETHER_TEST__){globalThis.__AETHER_TEST_API__={state:()=>({zoneId,player,settings,quest:questState(),objective:currentObjective(),entities}),resetZone,interact,skill,attack,transitionZone,advanceQuest,renderFrame,applyGraphics,update,nearbyInteraction,zones,player};}else boot();
 })();
