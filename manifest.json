@@ -2,7 +2,7 @@
   "name": "Aethernfall",
   "short_name": "Aethernfall",
   "id": "./",
-  "start_url": "./?v=31",
+  "start_url": "./?v=30",
   "scope": "./",
   "display": "standalone",
   "display_override": [

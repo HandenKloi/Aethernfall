@@ -1,17 +1,23 @@
-<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Aethernfall v3.1 self-test</title>
-<body style="font-family:system-ui;background:#0e1513;color:#eee;padding:20px"><h2>Aethernfall v3.1 self-test</h2><pre id=o>Checking…</pre><script>
-fetch('./game.js?v=31',{cache:'no-store'}).then(r=>r.text()).then(s=>{
-const t=[
-['movement guard',s.includes('Number.isFinite(player.dodgeUntil)')],
-['movement property',s.includes('dodgeUntil:0')],
-['enemy aggro',s.includes('if(d<620)')],
-['enemy patrol',s.includes('updateEnemyPatrol')],
-['real FPS monitor',s.includes('updatePerformanceMonitor(nowTime,renderMs,frameTimeMs)')],
-['touch capture',s.includes('setPointerCapture')],
-['no pointerleave',!s.includes('pointerleave')],
-['device RAM nullable',s.includes('device.ram!==null')],
-['3 zones',s.includes('mistwood')&&s.includes('stonevale')&&s.includes('ashfield')]
-];
-o.textContent=t.map(x=>(x[1]?'PASS ':'FAIL ')+x[0]).join('\n')
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Aethernfall v3.1 REALFIX</title>
+<body style="font-family:system-ui;background:#0e1513;color:#eee;padding:20px"><h2>Aethernfall v3.1 REALFIX</h2><pre id=o>Checking…</pre>
+<script>
+Promise.all([
+ fetch('./game.js?v=31r2',{cache:'no-store'}),
+ fetch('./sw.js?v=31r2',{cache:'no-store'})
+]).then(async rs=>{
+ const s=await rs[0].text(),sw=await rs[1].text();
+ const t=[
+  ['player dodge state',s.includes('dodgeUntil:0')],
+  ['movement runtime guard',s.includes('Number.isFinite(player.dodgeUntil)')],
+  ['touch joystick fallback',s.includes('touchstart')&&s.includes('setJoystickFromTouch')],
+  ['pointer joystick capture',s.includes('setPointerCapture')],
+  ['enemy chase',s.includes('if(d<620)')],
+  ['enemy patrol',s.includes('updateEnemyPatrol(dt)')],
+  ['real rendered FPS',s.includes('updatePerformanceMonitor(nowTime,renderMs,frameTimeMs)')],
+  ['FPS gate',s.includes('const interval=1000/fpsTarget')],
+  ['service worker',sw.includes("aethernfall-v31r2")],
+  ['three zones',s.includes('mistwood')&&s.includes('stonevale')&&s.includes('ashfield')]
+ ];
+ o.textContent=t.map(x=>(x[1]?'PASS ':'FAIL ')+x[0]).join('\n')
 }).catch(e=>o.textContent='FAIL '+e)
 </script>

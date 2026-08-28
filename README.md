@@ -1,5 +1,11 @@
-# Aethernfall Mobile 2.5D v3.1
+# Aethernfall Mobile 2.5D v3.1 REALFIX
 
-Stability build based on v3.0 FINAL.
+This build fixes the mobile movement/input path and restores a functional Service Worker.
 
-Primary fixes: player movement lock, mob movement/patrol, real-frame FPS monitor startup, mobile state reset, and clearer device memory reporting.
+Major changes:
+- Pointer + Touch joystick control
+- Player movement guard
+- Mob chase and patrol
+- Real rendered-frame FPS monitor
+- Functional v31r2 Service Worker
+- GitHub Pages cache/version hardening

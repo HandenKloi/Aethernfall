@@ -1,11 +1,11 @@
 (()=>{'use strict';
-const BUILD_VERSION='3.0.0';
+const BUILD_VERSION='3.1.0';
 const $=id=>document.getElementById(id);const canvas=$('game'),ctx=canvas.getContext('2d',{alpha:false,desynchronized:true});const mcanvas=$('minimap'),mctx=mcanvas.getContext('2d',{alpha:false});
 const ui={hp:$('hpFill'),stamina:$('staminaFill'),xp:$('xpFill'),level:$('levelText'),zone:$('zoneText'),objective:$('objectiveText'),questTitle:$('questTitle'),questProgress:$('questProgress'),toast:$('toast'),modal:$('modal'),modalTitle:$('modalTitle'),modalBody:$('modalBody'),prompt:$('interactPrompt'),promptText:$('interactText'),badge:$('zoneBadge'),loading:$('loadingOverlay'),loadText:$('loadText'),loadFill:$('loadFill'),herb:$('herbCount'),wood:$('woodCount'),ore:$('oreCount'),gold:$('goldCount'),perf:$('perfMonitor'),perfFps:$('perfFps'),perfTarget:$('perfTarget'),perfFrame:$('perfFrame'),perfRender:$('perfRender'),perfScale:$('perfScale'),perfDevice:$('perfDevice'),lootTicker:$('lootTicker'),perfPill:$('perfPill'),perfPillFps:$('perfPillFps'),perfPillMs:$('perfPillMs'),netPill:$('netPill')};
 const touchCap=('ontouchstart'in window)||navigator.maxTouchPoints>0;if(!touchCap){ui.loadText.textContent='Откройте игру на сенсорном устройстве';return}
-const device={ram:Number.isFinite(Number(navigator.deviceMemory))?Number(navigator.deviceMemory):null,cores:Number(navigator.hardwareConcurrency)||4,dpr:Math.min(devicePixelRatio||1,2.5),ios:/iPhone|iPad|iPod/i.test(navigator.userAgent),android:/Android/i.test(navigator.userAgent)};
+const device={ram:Number(navigator.deviceMemory)||4,cores:Number(navigator.hardwareConcurrency)||4,dpr:Math.min(devicePixelRatio||1,2.5),ios:/iPhone|iPad|iPod/i.test(navigator.userAgent),android:/Android/i.test(navigator.userAgent)};
 const QUALITY={low:{render:.68,ambient:18,enemyCap:8,particles:12,textureScale:.44,shadow:.06,fog:.07,detail:0},medium:{render:.80,ambient:28,enemyCap:12,particles:20,textureScale:.60,shadow:.16,fog:.12,detail:1},high:{render:.92,ambient:40,enemyCap:17,particles:30,textureScale:.76,shadow:.26,fog:.17,detail:2},'very-high':{render:1.00,ambient:54,enemyCap:22,particles:42,textureScale:.88,shadow:.36,fog:.21,detail:3}};
-const FPS=[30,40,45,60,90,120];const detected=(device.ram!==null&&device.ram>=8&&device.cores>=8)?'high':(device.ram!==null&&device.ram>=6&&device.cores>=6)?'high':(device.ram!==null&&device.ram>=4&&device.cores>=4)?'medium':(device.cores>=6?'medium':'low');
+const FPS=[30,40,45,60,90,120];const detected=(device.ram>=8&&device.cores>=8)?'high':(device.ram>=6&&device.cores>=6)?'high':(device.ram>=4&&device.cores>=4)?'medium':'low';
 let settings={quality:localStorage.getItem('aef_quality')||detected,fps:Number(localStorage.getItem('aef_fps')||60)};if(!QUALITY[settings.quality])settings.quality=detected;if(!FPS.includes(settings.fps))settings.fps=60;let profile=QUALITY[settings.quality];
 let W=innerWidth,H=innerHeight,DPR=1,time=0,lastNow=performance.now(),rafId=0,transitioning=false,adaptiveScale=1,perfMonitorEnabled=localStorage.getItem('aef_perf_monitor')==='1',perfLastGameFrame=0,perfFrameCount=0,perfRenderTotal=0,perfFrameGapTotal=0,perfWindowStart=performance.now(),perfActualFps=0,perfAvgFrameMs=0,perfAvgRenderMs=0,rafLastNow=0,nextRenderAt=0;let rafCallbackCount=0,rafCallbackWindow=performance.now(),rafCallbackRate=0;
 const WORLD={w:2800,h:1800};const SAVE='aethernfall_save_v30';
@@ -64,7 +64,7 @@ function effectiveRenderScale(){return clamp(profile.render*adaptiveScale,.62,1.
 function resetFrameLimiter(now=performance.now()){lastNow=now;rafLastNow=now;nextRenderAt=now;perfLastGameFrame=0;perfFrameCount=0;perfRenderTotal=0;perfFrameGapTotal=0;perfWindowStart=now;perfActualFps=0;perfAvgFrameMs=0;perfAvgRenderMs=0}
 function applyGraphics(){profile=QUALITY[settings.quality];const dprCap=device.dpr>=3?1.04:device.dpr>=2.5?1.12:1.30;DPR=clamp(device.dpr*effectiveRenderScale(),.62,dprCap);W=innerWidth;H=innerHeight;canvas.width=Math.max(1,Math.floor(W*DPR));canvas.height=Math.max(1,Math.floor(H*DPR));canvas.style.width=W+'px';canvas.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0);ctx.imageSmoothingEnabled=true;patterns={};for(const [k,img] of Object.entries(textureImages)){if(img.complete)patterns[k]=ctx.createPattern(img,'repeat')}makeAmbient();}
 addEventListener('resize',()=>{applyGraphics();resetFrameLimiter()},{passive:true});
-document.addEventListener('visibilitychange',()=>{if(document.hidden){resetFrameLimiter()}else{resetFrameLimiter()}});
+document.addEventListener('visibilitychange',()=>{resetFrameLimiter()});
 function loadTextures(){
   const names=['grass','dirt','stone','water','wood','foliage','rune','leather','parchment'];
   let done=0;
@@ -97,7 +97,7 @@ function advanceQuest(reason){const q=quest(),s=questState();if(q.id==='mist'){i
 function addEnemy(type,x,y){const cap=entities.filter(e=>e.kind==='enemy'&&e.type!=='guardian').length;if(type!=='guardian'&&cap>=profile.enemyCap)return;const e={kind:'enemy',type,x,y,r:18,hp:100,maxHp:100,speed:76,damage:10,cd:0,hit:0,seed:rng(x+y),stun:0};if(type==='raider')Object.assign(e,{r:21,hp:140,maxHp:140,speed:82,damage:12});if(type==='boar')Object.assign(e,{r:19,hp:95,maxHp:95,speed:108,damage:9});if(type==='guardian')Object.assign(e,{r:40,hp:620,maxHp:620,speed:48,damage:22});entities.push(e)}
 function addResource(kind,x,y){entities.push({kind:'resource',type:kind,x,y,r:20,hp:1,maxHp:1,pulse:rng(x*y)*Math.PI*2})}
 function makeAmbient(){ambient=[];for(let i=0;i<profile.ambient;i++)ambient.push({x:60+rng(i+7)*(WORLD.w-120),y:60+rng(i+91)*(WORLD.h-120),kind:rng(i+201),scale:.65+rng(i+44)*1.55,seed:i})}
-function resetZone(){player.dodgeUntil=0;player.dodgeCd=0;joy.x=0;joy.y=0;resetJoy();entities=[];particles=[];projectiles=[];const z=zones[zoneId];player.x=z.camp.x;player.y=z.camp.y;player.dir=0;for(let i=0;i<58;i++){const x=150+rng(i+300+zoneId.length)*(WORLD.w-300),y=150+rng(i+620+zoneId.length*7)*(WORLD.h-300);let type=i%4?'raider':'boar';if(zoneId==='ashfield'&&i%5===0)type='boar';addEnemy(type,x,y)}for(let i=0;i<32;i++){const x=150+rng(i+1200+zoneId.length)*(WORLD.w-300),y=150+rng(i+1700+zoneId.length*3)*(WORLD.h-300),kind=i%3===0?z.resources[0]:z.resources[1];addResource(kind,x,y)}if(zoneId==='stonevale')addEnemy('guardian',1680,720);makeAmbient()}
+function resetZone(){entities=[];particles=[];projectiles=[];const z=zones[zoneId];player.x=z.camp.x;player.y=z.camp.y;player.dir=0;for(let i=0;i<58;i++){const x=150+rng(i+300+zoneId.length)*(WORLD.w-300),y=150+rng(i+620+zoneId.length*7)*(WORLD.h-300);let type=i%4?'raider':'boar';if(zoneId==='ashfield'&&i%5===0)type='boar';addEnemy(type,x,y)}for(let i=0;i<32;i++){const x=150+rng(i+1200+zoneId.length)*(WORLD.w-300),y=150+rng(i+1700+zoneId.length*3)*(WORLD.h-300),kind=i%3===0?z.resources[0]:z.resources[1];addResource(kind,x,y)}if(zoneId==='stonevale')addEnemy('guardian',1680,720);makeAmbient()}
 function burst(x,y,color,count=10,speed=110){const room=Math.max(0,profile.particles-particles.length);count=Math.min(count,room);for(let i=0;i<count;i++){const a=Math.random()*Math.PI*2,v=(.25+Math.random())*speed;particles.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,life:.32+Math.random()*.48,max:.8,size:1.5+Math.random()*3.8,color})}}
 function addFloatingText(text,x,y,color='#fff2bf'){if(floatingTexts.length>=48)floatingTexts.shift();floatingTexts.push({text,x,y,color,life:.85,max:.85})}
 function gainXP(n){player.xp+=n;while(player.xp>=player.xpNeed){player.xp-=player.xpNeed;player.level++;player.xpNeed=Math.round(player.xpNeed*1.24);player.maxHp+=18;player.hp=player.maxHp;player.damage+=3;toast('Новый уровень — '+player.level)}}
@@ -190,11 +190,45 @@ function transitionZone(){if(transitioning)return;transitioning=true;ui.loading.
 function openModal(title,body){ui.modalTitle.textContent=title;ui.modalBody.innerHTML=body;ui.modal.classList.remove('hidden')}function closeModal(){ui.modal.classList.add('hidden')}
 function openInventory(){openModal('Сумка и экипировка',`<div class="grid"><div class="card"><h3>Оружие</h3><p>${player.equipment.weapon}<br>Урон: <b>${player.damage}</b></p></div><div class="card"><h3>Броня</h3><p>${player.equipment.armor}<br>Защита: <b>24</b></p></div><div class="card"><h3>Ресурсы</h3><p>Древесина: ${player.inv.wood}<br>Руда: ${player.inv.ore}<br>Трава: ${player.inv.herb}</p></div><div class="card"><h3>Валюта</h3><p class="gold">${player.gold} золотых</p><p>Знаки: ${player.inv.guardianToken||0}<br>Осколки: ${player.inv.emberShard||0}</p></div></div><div class="sectionTitle">КРАФТ</div><button class="btn" id="craftBtn">Закалить меч · 3 древесины + 2 руды</button><button class="btn" id="potionBtn">Зелье жизни · 3 травы + 1 древесина</button>`);bindTap($('craftBtn'),()=>craft('blade'));bindTap($('potionBtn'),()=>craft('potion'))}
 function craft(recipe='blade'){if(recipe==='blade'&&player.inv.wood>=3&&player.inv.ore>=2){player.inv.wood-=3;player.inv.ore-=2;player.damage+=5;player.equipment.weapon='Закалённый меч следопыта';gainXP(35);save();closeModal();toast('Оружие улучшено: +5 урона')}else if(recipe==='potion'&&player.inv.herb>=3&&player.inv.wood>=1){player.inv.herb-=3;player.inv.wood-=1;player.maxHp+=12;player.hp=player.maxHp;gainXP(20);save();closeModal();toast('Создано зелье жизни · +12 макс. HP')}else toast('Недостаточно ресурсов')}
-function openMenu(){openModal('Настройки · v3.0',`<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><div class="sectionTitle">КАЧЕСТВО ГРАФИКИ</div><div class="settingRow"><div class="seg" id="qualitySeg">${['low','medium','high','very-high'].map(q=>`<button data-q="${q}" class="${settings.quality===q?'active':''}">${q==='very-high'?'Very High':q[0].toUpperCase()+q.slice(1)}</button>`).join('')}</div><div class="note">Меняет внутреннее разрешение canvas, плотность окружения, лимиты врагов и частиц, детализацию текстур, тени и туман. Применяется сразу.</div></div><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="settingRow"><div class="seg fps" id="fpsSeg">${FPS.map(f=>`<button data-f="${f}" class="${settings.fps===f?'active':''}">${f}</button>`).join('')}</div><div class="note">Лимит управляет реальными отрисованными кадрами. Монитор считает только кадры после update + draw.</div></div><div class="sectionTitle">МОНИТОР ПРОИЗВОДИТЕЛЬНОСТИ</div><button class="btn" id="perfBtn">${perfMonitorEnabled?'Выключить frame-time monitor':'Включить frame-time monitor'}</button><div class="sectionTitle">УСТРОЙСТВО</div><div class="card"><p>${device.ios?'iOS':device.android?'Android':'Mobile'} · ${device.ram} GB RAM* · ${device.cores} CPU cores · DPR ${device.dpr.toFixed(2)}<br>Профиль: <b>${detected.toUpperCase()}</b><br>*Если браузер не сообщает RAM, используется консервативная оценка 4 GB.</p></div><div class="sectionTitle">СОХРАНЕНИЕ</div><button class="btn" id="saveBtn">Сохранить прогресс</button>`);document.querySelectorAll('#qualitySeg button').forEach(b=>bindTap(b,()=>{settings.quality=b.dataset.q;localStorage.setItem('aef_quality',settings.quality);applyGraphics();save();openMenu()}));document.querySelectorAll('#fpsSeg button').forEach(b=>bindTap(b,()=>{settings.fps=Number(b.dataset.f);localStorage.setItem('aef_fps',String(settings.fps));resetFrameLimiter();save();openMenu()}));bindTap($('saveBtn'),()=>{save();toast('Прогресс сохранён')});bindTap($('perfBtn'),()=>{perfMonitorEnabled=!perfMonitorEnabled;localStorage.setItem('aef_perf_monitor',perfMonitorEnabled?'1':'0');refreshPerformanceMonitorVisibility();openMenu()})}
+function openMenu(){openModal('Настройки · v3.0',`<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><div class="sectionTitle">КАЧЕСТВО ГРАФИКИ</div><div class="settingRow"><div class="seg" id="qualitySeg">${['low','medium','high','very-high'].map(q=>`<button data-q="${q}" class="${settings.quality===q?'active':''}">${q==='very-high'?'Very High':q[0].toUpperCase()+q.slice(1)}</button>`).join('')}</div><div class="note">Меняет внутреннее разрешение canvas, плотность окружения, лимиты врагов и частиц, детализацию текстур, тени и туман. Применяется сразу.</div></div><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="settingRow"><div class="seg fps" id="fpsSeg">${FPS.map(f=>`<button data-f="${f}" class="${settings.fps===f?'active':''}">${f}</button>`).join('')}</div><div class="note">Лимит управляет реальными отрисованными кадрами. Монитор считает только кадры после update + draw.</div></div><div class="sectionTitle">МОНИТОР ПРОИЗВОДИТЕЛЬНОСТИ</div><button class="btn" id="perfBtn">${perfMonitorEnabled?'Выключить frame-time monitor':'Включить frame-time monitor'}</button><div class="sectionTitle">УСТРОЙСТВО</div><div class="card"><p>${device.ios?'iOS':device.android?'Android':'Mobile'} · RAM: ${device.ram===null?'n/a':device.ram+' GB'} · ${device.cores} CPU cores · DPR ${device.dpr.toFixed(2)}<br>Профиль: <b>${detected.toUpperCase()}</b><br>RAM: n/a означает, что Safari не предоставляет этот показатель.</p></div><div class="sectionTitle">СОХРАНЕНИЕ</div><button class="btn" id="saveBtn">Сохранить прогресс</button>`);document.querySelectorAll('#qualitySeg button').forEach(b=>bindTap(b,()=>{settings.quality=b.dataset.q;localStorage.setItem('aef_quality',settings.quality);applyGraphics();save();openMenu()}));document.querySelectorAll('#fpsSeg button').forEach(b=>bindTap(b,()=>{settings.fps=Number(b.dataset.f);localStorage.setItem('aef_fps',String(settings.fps));resetFrameLimiter();save();openMenu()}));bindTap($('saveBtn'),()=>{save();toast('Прогресс сохранён')});bindTap($('perfBtn'),()=>{perfMonitorEnabled=!perfMonitorEnabled;localStorage.setItem('aef_perf_monitor',perfMonitorEnabled?'1':'0');refreshPerformanceMonitorVisibility();openMenu()})}
 function bindTap(el,fn){if(!el)return;let fired=false;el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();if(fired)return;fired=true;fn(e);setTimeout(()=>fired=false,90)},{passive:false})}
+
+function setJoystickFromTouch(touch){
+ const r=joyEl.getBoundingClientRect();
+ const cx=r.left+r.width/2,cy=r.top+r.height/2;
+ const max=Math.min(r.width,r.height)*.36;
+ let dx=touch.clientX-cx,dy=touch.clientY-cy,l=Math.hypot(dx,dy);
+ if(l>max){dx=dx/l*max;dy=dy/l*max}
+ joy.x=dx/max;joy.y=dy/max;
+ if(Math.hypot(joy.x,joy.y)<.08){joy.x=0;joy.y=0}
+ if(stick)stick.style.transform=`translate(${dx}px,${dy}px)`;
+}
+let touchJoyId=null;
+joyEl.addEventListener('touchstart',e=>{
+ if(touchJoyId!==null||!e.changedTouches.length)return;
+ e.preventDefault();e.stopPropagation();
+ const t=e.changedTouches[0];
+ touchJoyId=t.identifier;
+ setJoystickFromTouch(t);
+},{passive:false});
+joyEl.addEventListener('touchmove',e=>{
+ if(touchJoyId===null)return;
+ for(const t of e.changedTouches){
+  if(t.identifier===touchJoyId){e.preventDefault();e.stopPropagation();setJoystickFromTouch(t);break}
+ }
+},{passive:false});
+function endJoystickTouch(e){
+ if(touchJoyId===null)return;
+ for(const t of e.changedTouches||[]){
+  if(t.identifier===touchJoyId){e.preventDefault();e.stopPropagation();touchJoyId=null;resetJoy();break}
+ }
+}
+joyEl.addEventListener('touchend',endJoystickTouch,{passive:false});
+joyEl.addEventListener('touchcancel',endJoystickTouch,{passive:false});
+
 const joyEl=$('joystick'),stick=$('stick'),joy={id:null,x:0,y:0};
 function resetJoy(){joy.id=null;joy.x=joy.y=0;if(stick)stick.style.transform='translate(0,0)';}
-function moveJoy(e){const r=joyEl.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,max=Math.min(r.width,r.height)*.36;let dx=e.clientX-cx,dy=e.clientY-cy,l=Math.hypot(dx,dy);if(l>max){dx=dx/l*max;dy=dy/l*max}joy.x=dx/max;joy.y=dy/max;const jm=Math.hypot(joy.x,joy.y);if(jm<.08){joy.x=0;joy.y=0}if(stick)stick.style.transform=`translate(${dx}px,${dy}px)`}
+function moveJoy(e){setJoystickFromTouch(e)}
 joyEl.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse')return;e.preventDefault();e.stopPropagation();joy.id=e.pointerId;joyEl.setPointerCapture?.(e.pointerId);moveJoy(e)},{passive:false});
 joyEl.addEventListener('pointermove',e=>{if(e.pointerId===joy.id){e.preventDefault();moveJoy(e)}},{passive:false});
 ['pointerup','pointercancel'].forEach(ev=>joyEl.addEventListener(ev,e=>{if(e.pointerId===joy.id)resetJoy()},{passive:false}));
@@ -206,17 +240,19 @@ document.querySelectorAll('.action').forEach(btn=>{const a=btn.dataset.act;if(a=
 
 function updateEnemyPatrol(dt){
  for(const e of entities){
-  if(e.hp<=0||e.kind!=='enemy')continue;
-  e.patrolT=(e.patrolT||0)+dt;
+  if(e.kind!=='enemy'||e.hp<=0)continue;
+  if(!Number.isFinite(e.patrolT))e.patrolT=0;
   if(!Number.isFinite(e.dir))e.dir=e.seed*6.283185;
-  if(e.patrolT>1.25 && dist(player,e)>=620){
-   e.dir+=(rng(Math.floor(time*2)+Math.floor(e.x)+Math.floor(e.y))-.5)*0.7;
-   e.patrolT=0;
-  }
-  if(dist(player,e)>=620){
-   const patrolSpeed=e.type==='guardian'?10:15;
-   e.x=clamp(e.x+Math.cos(e.dir)*patrolSpeed*dt,40,WORLD.w-40);
-   e.y=clamp(e.y+Math.sin(e.dir)*patrolSpeed*dt,40,WORLD.h-40);
+  const d=dist(player,e);
+  if(d>=620){
+   e.patrolT+=dt;
+   if(e.patrolT>=1.1){
+    e.patrolT=0;
+    e.dir+=(rng(Math.floor(time*3)+Math.floor(e.x)+Math.floor(e.y))-.5)*0.9;
+   }
+   const speed=e.type==='guardian'?12:18;
+   e.x=clamp(e.x+Math.cos(e.dir)*speed*dt,45,WORLD.w-45);
+   e.y=clamp(e.y+Math.sin(e.dir)*speed*dt,45,WORLD.h-45);
   }
  }
 }
@@ -373,30 +409,14 @@ function drawCombatTelegraphs(){
  }
 }
 
-
-function drawV31Atmosphere(){
- const z=zones[zoneId];
- ctx.save();
- const g=ctx.createLinearGradient(0,0,0,H);
- g.addColorStop(0,'rgba(220,225,210,.08)');
- g.addColorStop(.45,'rgba(20,30,24,0)');
- g.addColorStop(1,'rgba(5,9,8,.18)');
- ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
- ctx.globalAlpha=.12;ctx.strokeStyle=z.accent;ctx.lineWidth=13;ctx.lineCap='round';
- ctx.beginPath();ctx.moveTo(-80,H*.80);ctx.quadraticCurveTo(W*.38,H*.57,W+80,H*.45);ctx.stroke();
- ctx.restore();
-}
-
-function drawWorld(){const z=zones[zoneId];ctx.clearRect(0,0,W,H);drawGround(z);drawV31Atmosphere();drawV30Atmosphere();drawLandmarks(z);drawWorldLandmarkOverlay();drawAmbient();const drawables=[{y:z.camp.y,fn:()=>drawCamp(z)},{y:z.scout.y,fn:()=>drawScout(z)},{y:z.portal.y,fn:()=>drawPortal(z)},{y:player.y,fn:drawPlayer}];for(const e of entities)if(e.hp>0&&Math.abs(e.x-player.x)<W+240&&Math.abs(e.y-player.y)<H*1.2)drawables.push({y:e.y,fn:()=>e.kind==='resource'?drawResource(e):drawEntity(e)});drawables.sort((a,b)=>a.y-b.y);for(const d of drawables)d.fn();drawLoot();drawProjectiles();drawParticles();drawFloatingTexts();drawV27Labels()}
+function drawWorld(){const z=zones[zoneId];ctx.clearRect(0,0,W,H);drawGround(z);drawV30Atmosphere();drawLandmarks(z);drawWorldLandmarkOverlay();drawAmbient();const drawables=[{y:z.camp.y,fn:()=>drawCamp(z)},{y:z.scout.y,fn:()=>drawScout(z)},{y:z.portal.y,fn:()=>drawPortal(z)},{y:player.y,fn:drawPlayer}];for(const e of entities)if(e.hp>0&&Math.abs(e.x-player.x)<W+240&&Math.abs(e.y-player.y)<H*1.2)drawables.push({y:e.y,fn:()=>e.kind==='resource'?drawResource(e):drawEntity(e)});drawables.sort((a,b)=>a.y-b.y);for(const d of drawables)d.fn();drawLoot();drawProjectiles();drawParticles();drawFloatingTexts();drawV27Labels()}
 function drawMap(){const z=zones[zoneId];mctx.clearRect(0,0,240,240);mctx.fillStyle=z.ground;mctx.fillRect(0,0,240,240);mctx.strokeStyle='rgba(255,255,255,.06)';for(let i=0;i<8;i++){mctx.beginPath();mctx.moveTo(i*30,0);mctx.lineTo(i*30,240);mctx.stroke();mctx.beginPath();mctx.moveTo(0,i*30);mctx.lineTo(240,i*30);mctx.stroke()}for(const e of entities){if(e.hp<=0||e.kind==='resource')continue;mctx.fillStyle=e.type==='guardian'?'#d29ae7':'#ca6a6e';mctx.fillRect(e.x/WORLD.w*240,e.y/WORLD.h*240,2.5,2.5)}mctx.fillStyle='#e6c874';mctx.beginPath();mctx.arc(z.scout.x/WORLD.w*240,z.scout.y/WORLD.h*240,3,0,Math.PI*2);mctx.fill();mctx.fillStyle='#79c0d0';mctx.beginPath();mctx.arc(z.portal.x/WORLD.w*240,z.portal.y/WORLD.h*240,3.5,0,Math.PI*2);mctx.fill();mctx.fillStyle='#eef5ef';mctx.beginPath();mctx.arc(player.x/WORLD.w*240,player.y/WORLD.h*240,4,0,Math.PI*2);mctx.fill();mctx.fillStyle='rgba(255,225,150,.55)';for(const lm of (z.landmarks||[])){mctx.beginPath();mctx.arc(lm.x/WORLD.w*240,lm.y/WORLD.h*240,2,0,Math.PI*2);mctx.fill()}}
 
 function updatePerformanceMonitor(nowTime,renderMs,frameTimeMs){
- perfFrameCount++;
- perfRenderTotal+=renderMs;
- perfFrameGapTotal+=frameTimeMs;
+ perfFrameCount++;perfRenderTotal+=renderMs;perfFrameGapTotal+=frameTimeMs;
  if(!perfWindowStart)perfWindowStart=nowTime;
  const elapsed=nowTime-perfWindowStart;
- if(elapsed>=700){
+ if(elapsed>=500){
   perfActualFps=perfFrameCount*1000/elapsed;
   perfAvgFrameMs=perfFrameCount?perfFrameGapTotal/perfFrameCount:0;
   perfAvgRenderMs=perfFrameCount?perfRenderTotal/perfFrameCount:0;
@@ -404,7 +424,7 @@ function updatePerformanceMonitor(nowTime,renderMs,frameTimeMs){
  }
  if(ui.perf&&perfMonitorEnabled){
   ui.perf.classList.remove('hidden');
-  ui.perfFps.textContent=perfActualFps>0?`${perfActualFps.toFixed(0)} FPS`:'Measuring…';
+  ui.perfFps.textContent=perfActualFps>0?`${Math.round(perfActualFps)} FPS`:'Measuring…';
   ui.perfTarget.textContent=` target ${settings.fps}`;
   ui.perfFrame.textContent=perfAvgFrameMs>0?`${perfAvgFrameMs.toFixed(1)} ms frame`:'Measuring…';
   ui.perfRender.textContent=perfAvgRenderMs>0?` · ${perfAvgRenderMs.toFixed(1)} ms render`:' · Measuring…';
@@ -413,10 +433,7 @@ function updatePerformanceMonitor(nowTime,renderMs,frameTimeMs){
  }else if(ui.perf){ui.perf.classList.add('hidden')}
  if(ui.perfPill){
   ui.perfPill.classList.toggle('hidden',!perfMonitorEnabled);
-  if(perfMonitorEnabled){
-   ui.perfPillFps.textContent=perfActualFps>0?perfActualFps.toFixed(0):'…';
-   ui.perfPillMs.textContent=perfAvgFrameMs>0?perfAvgFrameMs.toFixed(1):'…';
-  }
+  if(perfMonitorEnabled){ui.perfPillFps.textContent=perfActualFps>0?String(Math.round(perfActualFps)):'…';ui.perfPillMs.textContent=perfAvgFrameMs>0?perfAvgFrameMs.toFixed(1):'…'}
  }
 }
 
@@ -467,8 +484,6 @@ async function boot(){
     try{firstPaint()}catch(_){ }
   }finally{clearTimeout(hardFailSafe);hideLoading()}
 }
-// RC07 deliberately removes runtime SW registration to avoid stale-cache startup loops
-// after replacing files on GitHub Pages. Existing workers are retired on first launch.
-if('serviceWorker'in navigator){navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(rs.map(r=>r.unregister()))).catch(()=>{});if('caches'in window)caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('aethernfall-')).map(k=>caches.delete(k)))).catch(()=>{})}
 refreshPerformanceMonitorVisibility();if(globalThis.__AETHER_TEST__){globalThis.__AETHER_TEST_API__={state:()=>({zoneId,player,settings,quest:questState(),objective:currentObjective(),entities,lootDrops,perf:{fps:perfActualFps,frameMs:perfAvgFrameMs,renderMs:perfAvgRenderMs}}),resetZone,interact,skill,attack,transitionZone,advanceQuest,renderFrame,applyGraphics,update,nearbyInteraction,zones,player,setFps:f=>{settings.fps=Number(f);resetFrameLimiter()},setQuality:q=>{settings.quality=q;applyGraphics()},getPerf:()=>({fps:perfActualFps,frameMs:perfAvgFrameMs,renderMs:perfAvgRenderMs})};}else boot();
+if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js?v=31r2',{scope:'./'}).catch(()=>{})}
 })();

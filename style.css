@@ -23,7 +23,3 @@
 .netPill.offline{color:#df9d91;border-color:rgba(223,157,145,.22)}
 .buildLabel{text-align:center;color:#718179;font-size:10px;opacity:.72;margin-bottom:7px}
 @media(max-width:740px){.perfPill{top:calc(152px + env(safe-area-inset-top))}.netPill{top:calc(92px + env(safe-area-inset-top))}}
-
-.perfPill{font-variant-numeric:tabular-nums}
-.netPill{position:fixed;left:10px;top:calc(98px + env(safe-area-inset-top));z-index:60;padding:5px 8px;border-radius:999px;background:rgba(7,13,12,.72);border:1px solid rgba(255,255,255,.08);font:700 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:#95c996;pointer-events:none}
-.netPill.offline{color:#df9d91;border-color:rgba(223,157,145,.22)}
