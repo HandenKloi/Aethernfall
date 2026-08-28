@@ -1,11 +1,5 @@
-# Aethernfall Mobile 2.5D v3.1 REALFIX
+# Aethernfall Mobile 2.5D v3.1.1 REALFIX2
 
-This build fixes the mobile movement/input path and restores a functional Service Worker.
+Fix-only build from the Gemini-modified v3.1 archive.
 
-Major changes:
-- Pointer + Touch joystick control
-- Player movement guard
-- Mob chase and patrol
-- Real rendered-frame FPS monitor
-- Functional v31r2 Service Worker
-- GitHub Pages cache/version hardening
+Primary target: a clean JavaScript startup path on iOS so the player can move, mobs can move, and FPS telemetry works.

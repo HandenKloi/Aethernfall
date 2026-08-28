@@ -2,12 +2,20 @@
 const BUILD_VERSION='3.1.0';
 const $=id=>document.getElementById(id);const canvas=$('game'),ctx=canvas.getContext('2d',{alpha:false,desynchronized:true});const mcanvas=$('minimap'),mctx=mcanvas.getContext('2d',{alpha:false});
 const ui={hp:$('hpFill'),stamina:$('staminaFill'),xp:$('xpFill'),level:$('levelText'),zone:$('zoneText'),objective:$('objectiveText'),questTitle:$('questTitle'),questProgress:$('questProgress'),toast:$('toast'),modal:$('modal'),modalTitle:$('modalTitle'),modalBody:$('modalBody'),prompt:$('interactPrompt'),promptText:$('interactText'),badge:$('zoneBadge'),loading:$('loadingOverlay'),loadText:$('loadText'),loadFill:$('loadFill'),herb:$('herbCount'),wood:$('woodCount'),ore:$('oreCount'),gold:$('goldCount'),perf:$('perfMonitor'),perfFps:$('perfFps'),perfTarget:$('perfTarget'),perfFrame:$('perfFrame'),perfRender:$('perfRender'),perfScale:$('perfScale'),perfDevice:$('perfDevice'),lootTicker:$('lootTicker'),perfPill:$('perfPill'),perfPillFps:$('perfPillFps'),perfPillMs:$('perfPillMs'),netPill:$('netPill')};
-const touchCap=('ontouchstart'in window)||navigator.maxTouchPoints>0;if(!touchCap){ui.loadText.textContent='Откройте игру на сенсорном устройстве';return}
-const device={ram:Number(navigator.deviceMemory)||4,cores:Number(navigator.hardwareConcurrency)||4,dpr:Math.min(devicePixelRatio||1,2.5),ios:/iPhone|iPad|iPod/i.test(navigator.userAgent),android:/Android/i.test(navigator.userAgent)};
+
+// Убран жесткий return, чтобы можно было тестировать на ПК мышкой.
+const touchCap=('ontouchstart'in window)||navigator.maxTouchPoints>0;
+if(!touchCap){console.warn('Touch not detected. Mouse fallback enabled.');}
+
+const device={ram:Number.isFinite(Number(navigator.deviceMemory))?Number(navigator.deviceMemory):null,cores:Number(navigator.hardwareConcurrency)||4,dpr:Math.min(devicePixelRatio||1,2.5),ios:/iPhone|iPad|iPod/i.test(navigator.userAgent),android:/Android/i.test(navigator.userAgent)};
 const QUALITY={low:{render:.68,ambient:18,enemyCap:8,particles:12,textureScale:.44,shadow:.06,fog:.07,detail:0},medium:{render:.80,ambient:28,enemyCap:12,particles:20,textureScale:.60,shadow:.16,fog:.12,detail:1},high:{render:.92,ambient:40,enemyCap:17,particles:30,textureScale:.76,shadow:.26,fog:.17,detail:2},'very-high':{render:1.00,ambient:54,enemyCap:22,particles:42,textureScale:.88,shadow:.36,fog:.21,detail:3}};
 const FPS=[30,40,45,60,90,120];const detected=(device.ram>=8&&device.cores>=8)?'high':(device.ram>=6&&device.cores>=6)?'high':(device.ram>=4&&device.cores>=4)?'medium':'low';
 let settings={quality:localStorage.getItem('aef_quality')||detected,fps:Number(localStorage.getItem('aef_fps')||60)};if(!QUALITY[settings.quality])settings.quality=detected;if(!FPS.includes(settings.fps))settings.fps=60;let profile=QUALITY[settings.quality];
-let W=innerWidth,H=innerHeight,DPR=1,time=0,lastNow=performance.now(),rafId=0,transitioning=false,adaptiveScale=1,perfMonitorEnabled=localStorage.getItem('aef_perf_monitor')==='1',perfLastGameFrame=0,perfFrameCount=0,perfRenderTotal=0,perfFrameGapTotal=0,perfWindowStart=performance.now(),perfActualFps=0,perfAvgFrameMs=0,perfAvgRenderMs=0,rafLastNow=0,nextRenderAt=0;let rafCallbackCount=0,rafCallbackWindow=performance.now(),rafCallbackRate=0;
+
+// ИСПРАВЛЕНИЕ 1: Добавлено объявление lastFrame=0
+let W=innerWidth,H=innerHeight,DPR=1,time=0,lastNow=performance.now(),rafId=0,transitioning=false,adaptiveScale=1,perfMonitorEnabled=localStorage.getItem('aef_perf_monitor')==='1',perfLastGameFrame=0,perfFrameCount=0,perfRenderTotal=0,perfFrameGapTotal=0,perfWindowStart=performance.now(),perfActualFps=0,perfAvgFrameMs=0,perfAvgRenderMs=0,rafLastNow=0,nextRenderAt=0,lastFrame=0;
+let rafCallbackCount=0,rafCallbackWindow=performance.now(),rafCallbackRate=0;
+
 const WORLD={w:2800,h:1800};const SAVE='aethernfall_save_v30';
 const LEGACY_SAVES=['aethernfall_save_v27','aethernfall_save_v21','aethernfall_save_v11'];
 const zones={
@@ -193,49 +201,125 @@ function craft(recipe='blade'){if(recipe==='blade'&&player.inv.wood>=3&&player.i
 function openMenu(){openModal('Настройки · v3.0',`<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><div class="sectionTitle">КАЧЕСТВО ГРАФИКИ</div><div class="settingRow"><div class="seg" id="qualitySeg">${['low','medium','high','very-high'].map(q=>`<button data-q="${q}" class="${settings.quality===q?'active':''}">${q==='very-high'?'Very High':q[0].toUpperCase()+q.slice(1)}</button>`).join('')}</div><div class="note">Меняет внутреннее разрешение canvas, плотность окружения, лимиты врагов и частиц, детализацию текстур, тени и туман. Применяется сразу.</div></div><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="settingRow"><div class="seg fps" id="fpsSeg">${FPS.map(f=>`<button data-f="${f}" class="${settings.fps===f?'active':''}">${f}</button>`).join('')}</div><div class="note">Лимит управляет реальными отрисованными кадрами. Монитор считает только кадры после update + draw.</div></div><div class="sectionTitle">МОНИТОР ПРОИЗВОДИТЕЛЬНОСТИ</div><button class="btn" id="perfBtn">${perfMonitorEnabled?'Выключить frame-time monitor':'Включить frame-time monitor'}</button><div class="sectionTitle">УСТРОЙСТВО</div><div class="card"><p>${device.ios?'iOS':device.android?'Android':'Mobile'} · RAM: ${device.ram===null?'n/a':device.ram+' GB'} · ${device.cores} CPU cores · DPR ${device.dpr.toFixed(2)}<br>Профиль: <b>${detected.toUpperCase()}</b><br>RAM: n/a означает, что Safari не предоставляет этот показатель.</p></div><div class="sectionTitle">СОХРАНЕНИЕ</div><button class="btn" id="saveBtn">Сохранить прогресс</button>`);document.querySelectorAll('#qualitySeg button').forEach(b=>bindTap(b,()=>{settings.quality=b.dataset.q;localStorage.setItem('aef_quality',settings.quality);applyGraphics();save();openMenu()}));document.querySelectorAll('#fpsSeg button').forEach(b=>bindTap(b,()=>{settings.fps=Number(b.dataset.f);localStorage.setItem('aef_fps',String(settings.fps));resetFrameLimiter();save();openMenu()}));bindTap($('saveBtn'),()=>{save();toast('Прогресс сохранён')});bindTap($('perfBtn'),()=>{perfMonitorEnabled=!perfMonitorEnabled;localStorage.setItem('aef_perf_monitor',perfMonitorEnabled?'1':'0');refreshPerformanceMonitorVisibility();openMenu()})}
 function bindTap(el,fn){if(!el)return;let fired=false;el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();if(fired)return;fired=true;fn(e);setTimeout(()=>fired=false,90)},{passive:false})}
 
-function setJoystickFromTouch(touch){
- const r=joyEl.getBoundingClientRect();
- const cx=r.left+r.width/2,cy=r.top+r.height/2;
- const max=Math.min(r.width,r.height)*.36;
- let dx=touch.clientX-cx,dy=touch.clientY-cy,l=Math.hypot(dx,dy);
- if(l>max){dx=dx/l*max;dy=dy/l*max}
- joy.x=dx/max;joy.y=dy/max;
- if(Math.hypot(joy.x,joy.y)<.08){joy.x=0;joy.y=0}
- if(stick)stick.style.transform=`translate(${dx}px,${dy}px)`;
-}
-let touchJoyId=null;
-joyEl.addEventListener('touchstart',e=>{
- if(touchJoyId!==null||!e.changedTouches.length)return;
- e.preventDefault();e.stopPropagation();
- const t=e.changedTouches[0];
- touchJoyId=t.identifier;
- setJoystickFromTouch(t);
-},{passive:false});
-joyEl.addEventListener('touchmove',e=>{
- if(touchJoyId===null)return;
- for(const t of e.changedTouches){
-  if(t.identifier===touchJoyId){e.preventDefault();e.stopPropagation();setJoystickFromTouch(t);break}
- }
-},{passive:false});
-function endJoystickTouch(e){
- if(touchJoyId===null)return;
- for(const t of e.changedTouches||[]){
-  if(t.identifier===touchJoyId){e.preventDefault();e.stopPropagation();touchJoyId=null;resetJoy();break}
- }
-}
-joyEl.addEventListener('touchend',endJoystickTouch,{passive:false});
-joyEl.addEventListener('touchcancel',endJoystickTouch,{passive:false});
 
 const joyEl=$('joystick'),stick=$('stick'),joy={id:null,x:0,y:0};
-function resetJoy(){joy.id=null;joy.x=joy.y=0;if(stick)stick.style.transform='translate(0,0)';}
-function moveJoy(e){setJoystickFromTouch(e)}
-joyEl.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse')return;e.preventDefault();e.stopPropagation();joy.id=e.pointerId;joyEl.setPointerCapture?.(e.pointerId);moveJoy(e)},{passive:false});
-joyEl.addEventListener('pointermove',e=>{if(e.pointerId===joy.id){e.preventDefault();moveJoy(e)}},{passive:false});
-['pointerup','pointercancel'].forEach(ev=>joyEl.addEventListener(ev,e=>{if(e.pointerId===joy.id)resetJoy()},{passive:false}));
+
+function resetJoy(){
+  joy.id=null;joy.x=0;joy.y=0;
+  if(stick)stick.style.transform='translate(0,0)';
+}
+function setJoystickFromPoint(clientX,clientY){
+  const r=joyEl.getBoundingClientRect();
+  const cx=r.left+r.width/2,cy=r.top+r.height/2;
+  const max=Math.min(r.width,r.height)*.36;
+  let dx=clientX-cx,dy=clientY-cy,l=Math.hypot(dx,dy);
+  if(l>max){dx=dx/l*max;dy=dy/l*max}
+  joy.x=dx/max;joy.y=dy/max;
+  if(Math.hypot(joy.x,joy.y)<.08){joy.x=0;joy.y=0}
+  if(stick)stick.style.transform=`translate(${dx}px,${dy}px)`;
+}
+
+function moveJoy(e){setJoystickFromPoint(e.clientX,e.clientY)}
+
+// Pointer Events path — mobile only.
+joyEl.addEventListener('pointerdown',e=>{
+  if(e.pointerType==='mouse')return;
+  e.preventDefault();e.stopPropagation();
+  joy.id=e.pointerId;
+  joyEl.setPointerCapture?.(e.pointerId);
+  moveJoy(e);
+},{passive:false});
+joyEl.addEventListener('pointermove',e=>{
+  if(e.pointerId!==joy.id)return;
+  e.preventDefault();moveJoy(e);
+},{passive:false});
+['pointerup','pointercancel','lostpointercapture'].forEach(ev=>joyEl.addEventListener(ev,e=>{
+  if(e.pointerId===joy.id)resetJoy();
+},{passive:false}));
 window.addEventListener('pointerup',e=>{if(e.pointerId===joy.id)resetJoy()},{passive:true});
 window.addEventListener('pointercancel',e=>{if(e.pointerId===joy.id)resetJoy()},{passive:true});
-canvas.addEventListener('pointerdown',e=>{if(e.clientX<W*.43)return;look.ids.add(e.pointerId);look.lastX=e.clientX;canvas.setPointerCapture?.(e.pointerId)},{passive:false});canvas.addEventListener('pointermove',e=>{if(!look.ids.has(e.pointerId))return;e.preventDefault();const dx=e.clientX-look.lastX;look.lastX=e.clientX;player.dir+=dx*.008},{passive:false});['pointerup','pointercancel'].forEach(ev=>canvas.addEventListener(ev,e=>look.ids.delete(e.pointerId),{passive:false}));
-document.querySelectorAll('.action').forEach(btn=>{const a=btn.dataset.act;if(a==='block'){let blockPointer=null;btn.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();blockPointer=e.pointerId;player.blocking=true;btn.setPointerCapture?.(e.pointerId)},{passive:false});const release=e=>{if(blockPointer===null||e.pointerId===blockPointer){blockPointer=null;player.blocking=false}};['pointerup','pointercancel','lostpointercapture'].forEach(ev=>btn.addEventListener(ev,release,{passive:false}));window.addEventListener('pointerup',release,{passive:true});window.addEventListener('pointercancel',release,{passive:true});return}bindTap(btn,()=>{if(a==='attack')attack();else if(a==='dodge')dodge();else if(a==='skill1')skill(1);else if(a==='skill2')skill(2);else if(a==='skill3')skill(3);else if(a==='use')interact()})});bindTap(ui.prompt,interact);bindTap($('inventoryBtn'),openInventory);bindTap($('menuBtn'),openMenu);bindTap($('modalClose'),closeModal);
+
+// Touch Events fallback — explicit for iOS WebKit/PWA.
+let activeTouchJoyId=null;
+joyEl.addEventListener('touchstart',e=>{
+  if(activeTouchJoyId!==null||!e.changedTouches.length)return;
+  e.preventDefault();e.stopPropagation();
+  const t=e.changedTouches[0];
+  activeTouchJoyId=t.identifier;
+  joy.id='touch';
+  setJoystickFromPoint(t.clientX,t.clientY);
+},{passive:false});
+joyEl.addEventListener('touchmove',e=>{
+  if(activeTouchJoyId===null)return;
+  for(const t of e.changedTouches){
+    if(t.identifier===activeTouchJoyId){
+      e.preventDefault();e.stopPropagation();
+      setJoystickFromPoint(t.clientX,t.clientY);
+      break;
+    }
+  }
+},{passive:false});
+function endTouchJoy(e){
+  if(activeTouchJoyId===null)return;
+  for(const t of e.changedTouches||[]){
+    if(t.identifier===activeTouchJoyId){
+      e.preventDefault();e.stopPropagation();
+      activeTouchJoyId=null;resetJoy();break;
+    }
+  }
+}
+joyEl.addEventListener('touchend',endTouchJoy,{passive:false});
+joyEl.addEventListener('touchcancel',endTouchJoy,{passive:false});
+
+// Look input — mobile only, and never from the joystick area.
+canvas.addEventListener('pointerdown',e=>{
+  if(e.pointerType==='mouse')return;
+  if(e.clientX<W*.43)return;
+  look.ids.add(e.pointerId);
+  look.lastX=e.clientX;
+  canvas.setPointerCapture?.(e.pointerId);
+},{passive:false});
+canvas.addEventListener('pointermove',e=>{
+  if(!look.ids.has(e.pointerId))return;
+  e.preventDefault();
+  const dx=e.clientX-look.lastX;
+  look.lastX=e.clientX;
+  player.dir+=dx*.008;
+},{passive:false});
+['pointerup','pointercancel'].forEach(ev=>canvas.addEventListener(ev,e=>look.ids.delete(e.pointerId),{passive:false}));
+
+document.querySelectorAll('.action').forEach(btn=>{
+  const a=btn.dataset.act;
+  if(a==='block'){
+    let blockPointer=null;
+    btn.addEventListener('pointerdown',e=>{
+      if(e.pointerType==='mouse')return;
+      e.preventDefault();e.stopPropagation();
+      blockPointer=e.pointerId;player.blocking=true;
+      btn.setPointerCapture?.(e.pointerId);
+    },{passive:false});
+    const release=e=>{
+      if(blockPointer===null||e.pointerId===blockPointer){
+        blockPointer=null;player.blocking=false;
+      }
+    };
+    ['pointerup','pointercancel','lostpointercapture'].forEach(ev=>btn.addEventListener(ev,release,{passive:false}));
+    return;
+  }
+  bindTap(btn,()=>{
+    if(a==='attack')attack();
+    else if(a==='dodge')dodge();
+    else if(a==='skill1')skill(1);
+    else if(a==='skill2')skill(2);
+    else if(a==='skill3')skill(3);
+    else if(a==='use')interact();
+  });
+});
+bindTap(ui.prompt,interact);
+bindTap($('inventoryBtn'),openInventory);
+bindTap($('menuBtn'),openMenu);
+bindTap($('modalClose'),closeModal);
+
 ['gesturestart','gesturechange','gestureend'].forEach(ev=>document.addEventListener(ev,e=>e.preventDefault(),{passive:false}));let lastTouchEnd=0;document.addEventListener('touchend',e=>{const now=Date.now();if(now-lastTouchEnd<320)e.preventDefault();lastTouchEnd=now},{passive:false});document.addEventListener('touchmove',e=>{if(e.touches.length>1)e.preventDefault()},{passive:false});
 
 function updateEnemyPatrol(dt){
@@ -258,7 +342,10 @@ function updateEnemyPatrol(dt){
 }
 
 function update(dt){
- entities=entities.filter(e=>e.kind!=='enemy'||e.hp>0||e._corpseUntil>time);time+=dt;player.attackCd=Math.max(0,player.attackCd-dt);player.comboTimer=Math.max(0,player.comboTimer-dt);if(player.comboTimer===0)player.combo=0;player.stamina=clamp(player.stamina+(player.blocking?12:24)*dt,0,player.maxStamina);const moving=Math.hypot(joy.x,joy.y)>.06;const dodgeUntil=Number.isFinite(player.dodgeUntil)?player.dodgeUntil:0;player.dodgeUntil=dodgeUntil;const speed=player.speed*(player.blocking?.58:1)*(player.dodging>time?.9:1);if(moving&&time>=dodgeUntil){player.x=clamp(player.x+joy.x*speed*dt,70,WORLD.w-70);player.y=clamp(player.y+joy.y*speed*dt,70,WORLD.h-70);player.dir=Math.atan2(joy.y,joy.x)}for(const e of entities){if(e.hp<=0||e.kind!=='enemy')continue;e.cd=Math.max(0,e.cd-dt);e.hit=Math.max(0,e.hit-dt);const d=dist(player,e);if(d<620){const a=Math.atan2(player.y-e.y,player.x-e.x);if(d>e.r+player.r+8){e.x=clamp(e.x+Math.cos(a)*e.speed*dt,40,WORLD.w-40);e.y=clamp(e.y+Math.sin(a)*e.speed*dt,40,WORLD.h-40)}else if(e.cd<=0){e.cd=e.type==='guardian'?1.05:1.35;if(time>=player.dodgeUntil){const dmg=player.blocking?Math.ceil(e.damage*.26):e.damage;player.hp=Math.max(0,player.hp-dmg);burst(player.x,player.y,'#e06d68',7,80);if(player.hp<=0){player.hp=player.maxHp;player.x=zones[zoneId].camp.x;player.y=zones[zoneId].camp.y;toast('Вы возвращены к лагерю')}}}}}
+ entities=entities.filter(e=>e.kind!=='enemy'||e.hp>0||e._corpseUntil>time);time+=dt;player.attackCd=Math.max(0,player.attackCd-dt);player.comboTimer=Math.max(0,player.comboTimer-dt);if(player.comboTimer===0)player.combo=0;player.stamina=clamp(player.stamina+(player.blocking?12:24)*dt,0,player.maxStamina);const moving=Math.hypot(joy.x,joy.y)>.06;const dodgeUntil=Number.isFinite(player.dodgeUntil)?player.dodgeUntil:0;player.dodgeUntil=dodgeUntil;
+ // ИСПРАВЛЕНИЕ 2: Заменил несуществующий player.dodging на player.dodgeUntil
+ const speed=player.speed*(player.blocking?.58:1)*(player.dodgeUntil>time?.9:1);
+ if(moving&&time>=dodgeUntil){player.x=clamp(player.x+joy.x*speed*dt,70,WORLD.w-70);player.y=clamp(player.y+joy.y*speed*dt,70,WORLD.h-70);player.dir=Math.atan2(joy.y,joy.x)}for(const e of entities){if(e.hp<=0||e.kind!=='enemy')continue;e.cd=Math.max(0,e.cd-dt);e.hit=Math.max(0,e.hit-dt);const d=dist(player,e);if(d<620){const a=Math.atan2(player.y-e.y,player.x-e.x);if(d>e.r+player.r+8){e.x=clamp(e.x+Math.cos(a)*e.speed*dt,40,WORLD.w-40);e.y=clamp(e.y+Math.sin(a)*e.speed*dt,40,WORLD.h-40)}else if(e.cd<=0){e.cd=e.type==='guardian'?1.05:1.35;if(time>=player.dodgeUntil){const dmg=player.blocking?Math.ceil(e.damage*.26):e.damage;player.hp=Math.max(0,player.hp-dmg);burst(player.x,player.y,'#e06d68',7,80);if(player.hp<=0){player.hp=player.maxHp;player.x=zones[zoneId].camp.x;player.y=zones[zoneId].camp.y;toast('Вы возвращены к лагерю')}}}}}
 updateEnemyPatrol(dt);
 for(let i=projectiles.length-1;i>=0;i--){const p=projectiles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;let hit=false;for(const e of entities){if(e.hp>0&&e.kind==='enemy'&&dist(p,e)<e.r+7){hitTarget(e,p.damage);hit=true;break}}if(hit||p.life<=0)projectiles.splice(i,1)}for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.94;p.vy*=.94;p.life-=dt;if(p.life<=0)particles.splice(i,1)}for(let i=lootDrops.length-1;i>=0;i--){lootDrops[i].life-=dt;if(lootDrops[i].life<=0)lootDrops.splice(i,1)}for(let i=floatingTexts.length-1;i>=0;i--){floatingTexts[i].y-=28*dt;floatingTexts[i].life-=dt;if(floatingTexts[i].life<=0)floatingTexts.splice(i,1)}
  if(entities.length>90)entities=entities.filter(e=>e.kind==='resource'||e.hp>0);
@@ -433,7 +520,10 @@ function updatePerformanceMonitor(nowTime,renderMs,frameTimeMs){
  }else if(ui.perf){ui.perf.classList.add('hidden')}
  if(ui.perfPill){
   ui.perfPill.classList.toggle('hidden',!perfMonitorEnabled);
-  if(perfMonitorEnabled){ui.perfPillFps.textContent=perfActualFps>0?String(Math.round(perfActualFps)):'…';ui.perfPillMs.textContent=perfAvgFrameMs>0?perfAvgFrameMs.toFixed(1):'…'}
+  if(perfMonitorEnabled){
+   ui.perfPillFps.textContent=perfActualFps>0?String(Math.round(perfActualFps)):'…';
+   ui.perfPillMs.textContent=perfAvgFrameMs>0?perfAvgFrameMs.toFixed(1):'…';
+  }
  }
 }
 
@@ -485,5 +575,5 @@ async function boot(){
   }finally{clearTimeout(hardFailSafe);hideLoading()}
 }
 refreshPerformanceMonitorVisibility();if(globalThis.__AETHER_TEST__){globalThis.__AETHER_TEST_API__={state:()=>({zoneId,player,settings,quest:questState(),objective:currentObjective(),entities,lootDrops,perf:{fps:perfActualFps,frameMs:perfAvgFrameMs,renderMs:perfAvgRenderMs}}),resetZone,interact,skill,attack,transitionZone,advanceQuest,renderFrame,applyGraphics,update,nearbyInteraction,zones,player,setFps:f=>{settings.fps=Number(f);resetFrameLimiter()},setQuality:q=>{settings.quality=q;applyGraphics()},getPerf:()=>({fps:perfActualFps,frameMs:perfAvgFrameMs,renderMs:perfAvgRenderMs})};}else boot();
-if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js?v=31r2',{scope:'./'}).catch(()=>{})}
+if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js?v=3112',{scope:'./'}).catch(()=>{})}
 })();

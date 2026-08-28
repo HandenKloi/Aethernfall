@@ -1,22 +1,19 @@
-<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Aethernfall v3.1 REALFIX</title>
-<body style="font-family:system-ui;background:#0e1513;color:#eee;padding:20px"><h2>Aethernfall v3.1 REALFIX</h2><pre id=o>Checking…</pre>
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Aethernfall v3.1.1 REALFIX2</title>
+<body style="font-family:system-ui;background:#0e1513;color:#eee;padding:20px"><h2>Aethernfall v3.1.1 REALFIX2</h2><pre id=o>Checking…</pre>
 <script>
-Promise.all([
- fetch('./game.js?v=31r2',{cache:'no-store'}),
- fetch('./sw.js?v=31r2',{cache:'no-store'})
-]).then(async rs=>{
- const s=await rs[0].text(),sw=await rs[1].text();
+Promise.all([fetch('./game.js?v=3112',{cache:'no-store'}),fetch('./sw.js?v=3112',{cache:'no-store'})]).then(async rs=>{
+ const j=await rs[0].text(),sw=await rs[1].text();
  const t=[
-  ['player dodge state',s.includes('dodgeUntil:0')],
-  ['movement runtime guard',s.includes('Number.isFinite(player.dodgeUntil)')],
-  ['touch joystick fallback',s.includes('touchstart')&&s.includes('setJoystickFromTouch')],
-  ['pointer joystick capture',s.includes('setPointerCapture')],
-  ['enemy chase',s.includes('if(d<620)')],
-  ['enemy patrol',s.includes('updateEnemyPatrol(dt)')],
-  ['real rendered FPS',s.includes('updatePerformanceMonitor(nowTime,renderMs,frameTimeMs)')],
-  ['FPS gate',s.includes('const interval=1000/fpsTarget')],
-  ['service worker',sw.includes("aethernfall-v31r2")],
-  ['three zones',s.includes('mistwood')&&s.includes('stonevale')&&s.includes('ashfield')]
+ ['lastFrame declaration',/\blastFrame\s*=\s*0\b/.test(j)],
+ ['joy declared before touch registration',j.indexOf("const joyEl=")<j.indexOf("joyEl.addEventListener('touchstart'")],
+ ['touch fallback',j.includes('setJoystickFromPoint')],
+ ['mouse ignored',j.includes("e.pointerType==='mouse'")],
+ ['dodge state',j.includes('dodgeUntil:0')&&j.includes('Number.isFinite(player.dodgeUntil)')],
+ ['mob movement',j.includes('updateEnemyPatrol(dt)')],
+ ['real FPS monitor',j.includes('updatePerformanceMonitor(nowTime,renderMs,frameTimeMs)')],
+ ['FPS limiter',j.includes('const interval=1000/fpsTarget')],
+ ['service worker',sw.includes('aethernfall-v31f2')],
+ ['three zones',j.includes('mistwood')&&j.includes('stonevale')&&j.includes('ashfield')]
  ];
  o.textContent=t.map(x=>(x[1]?'PASS ':'FAIL ')+x[0]).join('\n')
 }).catch(e=>o.textContent='FAIL '+e)
