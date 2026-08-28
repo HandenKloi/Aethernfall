@@ -1,1 +1,13 @@
-{"name":"Aethernfall","short_name":"Aethernfall","start_url":"./","display":"standalone","background_color":"#0e141b","theme_color":"#16202b","icons":[{"src":"assets/icon-192.png","sizes":"192x192","type":"image/png"},{"src":"assets/icon-512.png","sizes":"512x512","type":"image/png"}]}
+{
+  "name":"Aethernfall",
+  "short_name":"Aethernfall",
+  "start_url":"./",
+  "display":"standalone",
+  "orientation":"any",
+  "background_color":"#0b1110",
+  "theme_color":"#0e1716",
+  "icons":[
+    {"src":"assets/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},
+    {"src":"assets/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+  ]
+}
