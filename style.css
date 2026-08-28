@@ -23,3 +23,23 @@
 .netPill.offline{color:#df9d91;border-color:rgba(223,157,145,.22)}
 .buildLabel{text-align:center;color:#718179;font-size:10px;opacity:.72;margin-bottom:7px}
 @media(max-width:740px){.perfPill{top:calc(152px + env(safe-area-inset-top))}.netPill{top:calc(92px + env(safe-area-inset-top))}}
+
+.perfPill{top:calc(150px + env(safe-area-inset-top));z-index:80}
+.netPill{z-index:80}
+.stabilityPill{position:fixed;left:50%;top:calc(110px + env(safe-area-inset-top));transform:translateX(-50%);z-index:81;padding:5px 9px;border-radius:999px;background:rgba(8,15,12,.78);border:1px solid rgba(157,204,157,.18);font:700 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:#a8d6aa;pointer-events:none}.stabilityPill.error{color:#f0a39a;border-color:rgba(240,163,154,.25)}.stabilityPill.ok{color:#a8d6aa}
+
+.perfPill{top:calc(150px + env(safe-area-inset-top));z-index:80}
+.netPill{z-index:80}
+.stabilityPill{position:fixed;left:50%;top:calc(110px + env(safe-area-inset-top));transform:translateX(-50%);z-index:81;padding:5px 9px;border-radius:999px;background:rgba(8,15,12,.78);border:1px solid rgba(157,204,157,.18);font:700 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:#a8d6aa;pointer-events:none}.stabilityPill.error{color:#f0a39a;border-color:rgba(240,163,154,.25)}.stabilityPill.ok{color:#a8d6aa}
+
+.perfPill{top:calc(150px + env(safe-area-inset-top));z-index:80}
+.netPill{z-index:80}
+.stabilityPill{position:fixed;left:50%;top:calc(110px + env(safe-area-inset-top));transform:translateX(-50%);z-index:81;padding:5px 9px;border-radius:999px;background:rgba(8,15,12,.78);border:1px solid rgba(157,204,157,.18);font:700 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:#a8d6aa;pointer-events:none}.stabilityPill.error{color:#f0a39a;border-color:rgba(240,163,154,.25)}.stabilityPill.ok{color:#a8d6aa}
+
+.perfPill{top:calc(150px + env(safe-area-inset-top));z-index:80}
+.netPill{z-index:80}
+.stabilityPill{position:fixed;left:50%;top:calc(110px + env(safe-area-inset-top));transform:translateX(-50%);z-index:81;padding:5px 9px;border-radius:999px;background:rgba(8,15,12,.78);border:1px solid rgba(157,204,157,.18);font:700 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:#a8d6aa;pointer-events:none}.stabilityPill.error{color:#f0a39a;border-color:rgba(240,163,154,.25)}.stabilityPill.ok{color:#a8d6aa}
+
+.perfPill{top:calc(150px + env(safe-area-inset-top));z-index:80}
+.netPill{z-index:80}
+.stabilityPill{position:fixed;left:50%;top:calc(110px + env(safe-area-inset-top));transform:translateX(-50%);z-index:81;padding:5px 9px;border-radius:999px;background:rgba(8,15,12,.78);border:1px solid rgba(157,204,157,.18);font:700 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:#a8d6aa;pointer-events:none}.stabilityPill.error{color:#f0a39a;border-color:rgba(240,163,154,.25)}.stabilityPill.ok{color:#a8d6aa}

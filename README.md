@@ -1,12 +1,7 @@
-# Aethernfall Mobile 2.5D v3.0
+# Aethernfall Mobile 2.5D v3.1
 
-Mobile-only 2.5D Action RPG web/PWA.
+Stability/performance pass over v3.0.
 
-v3.0 includes the consolidated mobile stability/performance work from v2.x plus:
-- real rendered-frame FPS monitor/limiter;
-- legacy save migration;
-- 2.5D atmosphere/visual polish;
-- combat telegraphs;
-- network state indicator;
-- stronger PWA/cache versioning;
-- browser-side self-test.
+Key focus: actual rendered FPS telemetry, stable frame scheduling, renderer recovery, mobile input reliability, conservative high-DPR budgets and PWA cache hardening.
+
+After GitHub Pages deployment, open `selftest.html` for a lightweight browser-side check.
