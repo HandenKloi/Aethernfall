@@ -1,19 +1,9 @@
-# Aethernfall Mobile 2.5D — RC 0.5
+# Aethernfall Mobile 2.5D RC 0.7
 
-## Исправления
-- Использование/переход вынесены в отдельную интерактивную кнопку и дублирующую кнопку действия.
-- Переход в зону имеет отдельный loading overlay и не зависит от случайного выбора ресурса.
-- Игрок больше не переворачивает весь корпус при смене направления: тело остаётся вертикальным, меняется направление оружия.
-- Навыки переведены на pointer events, имеют понятное подтверждение и проверку выносливости.
-- Блок работает через pointerdown/pointerup.
-- Добавлена защита от pinch zoom, gesture zoom и double-tap zoom.
-- Добавлены реально работающие настройки качества Low/Medium/High/Very High.
-- Добавлен выбор 30/40/45/60/90/120 FPS; браузер всё равно ограничивается физической частотой дисплея.
-- Добавлены оригинальные процедурные текстуры PNG без использования чужих игровых ассетов.
-- Service Worker обновлён до v5.
+## Critical PWA startup fix
+RC 0.6 could remain permanently on the loading overlay in iOS standalone mode because boot waited for all texture image requests. RC 0.7 starts gameplay immediately and loads textures in the background. A 1.6-second hard fail-safe always removes the loading overlay.
 
-## Мобильная оптимизация
-Игра определяет тип ОС, доступную браузеру RAM (если API доступен), число CPU cores и DPR. Профиль влияет на внутреннее разрешение Canvas, плотность окружения, лимит врагов и частиц.
+Existing Aethernfall service workers/caches are retired on first launch to prevent stale GitHub Pages files from trapping the web app in an old cache.
 
-## Запуск
-Открывать через HTTPS (например, GitHub Pages). Для обновления на iPhone заменяйте файлы в репозитории и дождитесь обновления Pages.
+## GitHub update
+Replace the project files with this build. Do not keep the old `sw.js` from RC 0.6. If the old iOS Home Screen icon still opens RC 0.6, open the repository URL in Safari once after upload, wait for RC 0.7 to load, then reopen the Home Screen icon.
