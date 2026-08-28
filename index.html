@@ -2,8 +2,8 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<meta name="theme-color" content="#0e1716">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no,maximum-scale=1">
+<meta name="theme-color" content="#0a1110">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Aethernfall">
@@ -14,11 +14,11 @@
 <title>Aethernfall</title>
 </head>
 <body>
-<canvas id="game" aria-label="Aethernfall"></canvas>
+<canvas id="game"></canvas>
 <div id="vignette"></div>
-<div id="qualityBadge" class="glass"></div>
+<div id="qualityBadge" class="hudBadge"></div>
 <header class="hudTop">
-  <section class="heroPanel glass">
+  <section class="heroPanel panel">
     <div class="portrait"><span>A</span></div>
     <div class="heroMeta">
       <div class="heroLine"><b>Ari</b><span id="levelText">Ур. 5</span></div>
@@ -27,7 +27,7 @@
       <div class="bar xp"><span id="xpFill"></span></div>
     </div>
   </section>
-  <section class="zonePanel glass">
+  <section class="zonePanel panel">
     <span class="eyebrow">ТЕРРИТОРИЯ</span>
     <b id="zoneText">Туманный лес</b>
     <span id="objectiveText">Следуйте к древнему святилищу</span>
@@ -37,28 +37,29 @@
     <button id="menuBtn" class="topBtn">Меню</button>
   </div>
 </header>
-<div id="questTracker" class="glass">
+<div id="questTracker" class="panel">
   <span class="eyebrow">ТЕКУЩАЯ ЦЕЛЬ</span>
   <b id="questTitle">Следы в тумане</b>
   <span id="questProgress">Поговорите с разведчиком</span>
 </div>
-<div id="minimapFrame" class="glass"><canvas id="minimap" width="240" height="240"></canvas><span id="zoneBadge">ЛЕС</span></div>
-<div id="interactPrompt" class="hidden"><b>✦</b><span id="interactText">Использовать</span></div>
+<div id="minimapFrame" class="panel"><canvas id="minimap" width="240" height="240"></canvas><span id="zoneBadge">ЛЕС</span></div>
+<button id="interactPrompt" class="hidden"><span class="promptIcon">✦</span><span id="interactText">Использовать</span></button>
 <div id="toast"></div>
-<div id="mobileControls" aria-label="Мобильное управление">
-  <div id="joystick" class="joystick"><div class="joyRing"></div><div id="stick"></div></div>
+<div id="loadingOverlay" class="hidden"><div class="loadingCard panel"><div class="loadingMark">A</div><b id="loadingText">Переход в другую зону</b><div class="loadBar"><span id="loadFill"></span></div></div></div>
+<div id="mobileControls">
+  <div id="joystick" class="joystick" aria-label="Движение"><div class="joyRing"></div><div id="stick"></div></div>
+  <div id="lookHint">Проведите справа, чтобы повернуть камеру</div>
   <div class="actions">
-    <button class="action use" data-act="use" aria-label="Взаимодействовать"><small>СБОР</small><b>✦</b></button>
-    <button class="action skill" data-act="skill1" aria-label="Навык 1"><small>Навык</small><b>Ⅰ</b></button>
-    <button class="action skill" data-act="skill2" aria-label="Навык 2"><small>Навык</small><b>Ⅱ</b></button>
-    <button class="action skill" data-act="skill3" aria-label="Навык 3"><small>Навык</small><b>Ⅲ</b></button>
-    <button class="action block" data-act="block" aria-label="Блок"><small>БЛОК</small><b>◈</b></button>
-    <button class="action dodge" data-act="dodge" aria-label="Уклонение"><small>УКЛОН</small><b>↝</b></button>
-    <button class="action attack" data-act="attack" aria-label="Атака"><small>АТАКА</small><b>⚔</b></button>
+    <button class="action use" data-act="use"><small>ИСПОЛЬЗОВАТЬ</small><b>✦</b></button>
+    <button class="action skill" data-act="skill1"><small>НАВЫК</small><b>Ⅰ</b></button>
+    <button class="action skill" data-act="skill2"><small>НАВЫК</small><b>Ⅱ</b></button>
+    <button class="action skill" data-act="skill3"><small>НАВЫК</small><b>Ⅲ</b></button>
+    <button class="action block" data-act="block"><small>БЛОК</small><b>◈</b></button>
+    <button class="action dodge" data-act="dodge"><small>УКЛОН</small><b>↝</b></button>
+    <button class="action attack" data-act="attack"><small>АТАКА</small><b>⚔</b></button>
   </div>
 </div>
-<div id="modal" class="hidden"><div class="modalCard glass"><div class="modalHead"><div><span class="eyebrow">AETHERFALL</span><b id="modalTitle">Сумка</b></div><button id="modalClose" aria-label="Закрыть">×</button></div><div id="modalBody" class="modalBody"></div></div></div>
-<div id="unsupported" class="hidden"><div class="unsupportedCard glass"><b>Aethernfall требует сенсорное устройство.</b><span>Открой игру на iPhone, iPad или Android.</span></div></div>
-<script src="game.js" defer></script>
+<div id="modal" class="hidden"><div class="modalCard panel"><div class="modalHead"><div><span class="eyebrow">AETHERFALL</span><b id="modalTitle">Меню</b></div><button id="modalClose">×</button></div><div id="modalBody" class="modalBody"></div></div></div>
+<script src="game.js?v=5" defer></script>
 </body>
 </html>
