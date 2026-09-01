@@ -1,0 +1,29 @@
+{
+  "name": "Aethernfall",
+  "short_name": "Aethernfall",
+  "id": "./",
+  "start_url": "./?v=30",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui",
+    "browser"
+  ],
+  "background_color": "#08100f",
+  "theme_color": "#101817",
+  "icons": [
+    {
+      "src": "assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "version": "3.0.0",
+  "description": "Aethernfall Mobile 2.5D Action RPG"
+}
