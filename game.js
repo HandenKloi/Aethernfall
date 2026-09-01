@@ -76,7 +76,7 @@ migrateLegacySave();
 function save(){try{localStorage.setItem(SAVE,JSON.stringify({zoneId,player,settings}))}catch(_){}}
 function load(){try{const s=JSON.parse(localStorage.getItem(SAVE)||'null');if(!s)return;zoneId=zones[s.zoneId]?s.zoneId:zoneId;Object.assign(player,s.player||{});player.inv=Object.assign({wood:0,ore:0,herb:0},player.inv||{});player.equipment=Object.assign({weapon:'Меч следопыта',armor:'Панцирь следопыта'},player.equipment||{});player.quests=Object.assign({mist:{step:0,herb:0,kills:0},stone:{step:0,ore:0,guardian:0},ash:{step:0,wood:0,kills:0}},player.quests||{});for(const k of Object.keys(player.quests))player.quests[k]=Object.assign(k==='mist'?{step:0,herb:0,kills:0}:k==='stone'?{step:0,ore:0,guardian:0}:{step:0,wood:0,kills:0},player.quests[k]||{});settings=Object.assign(settings,s.settings||{});if(!QUALITY[settings.quality])settings.quality=detected;if(!FPS.includes(Number(settings.fps)))settings.fps=60;settings.fps=clamp(Number(settings.fps)||60,30,60)}catch(_){}}
 load();
-function toast(t){ui.toast.textContent=t;ui.toast.style.opacity=1;clearTimeout(toast._t);toast._t=setTimeout(()=>ui.toast.style.opacity=0,1900)}
+function toast(t){if(!ui.toast)return;ui.toast.textContent=t;ui.toast.style.opacity=1;clearTimeout(toast._t);toast._t=setTimeout(()=>{if(ui.toast)ui.toast.style.opacity=0},1900)}
 function effectiveRenderScale(){return clamp(profile.render,.50,1)}
 function resetFrameLimiter(now=performance.now()){lastNow=now;rafLastNow=now;nextRenderAt=now;lastFrame=0;frameAccumulator=0;mapAccumulator=0;perfLastGameFrame=0;perfFrameCount=0;perfRenderTotal=0;perfFrameGapTotal=0;perfWindowStart=now;perfActualFps=0;perfAvgFrameMs=0;perfAvgRenderMs=0;rafCallbackCount=0;rafCallbackWindow=now;rafCallbackRate=0}
 function applyGraphics(){
@@ -95,11 +95,23 @@ function applyGraphics(){
  makeAmbient();
 }
 addEventListener('resize',()=>{applyGraphics();resetFrameLimiter()},{passive:true});
-document.addEventListener('visibilitychange',()=>{player.blocking=false;resetFrameLimiter()});
+document.addEventListener('visibilitychange',()=>{
+  player.blocking=false;
+  if(typeof resetJoy==='function')resetJoy();
+  if(look&&look.ids)look.ids.clear();
+  if(document.hidden){
+    if(rafId){cancelAnimationFrame(rafId);rafId=0;}
+  }else{
+    resetFrameLimiter();
+    if(!rafId)rafId=requestAnimationFrame(renderFrame);
+  }
+});
+addEventListener('pagehide',()=>{player.blocking=false;if(typeof resetJoy==='function')resetJoy();if(look&&look.ids)look.ids.clear();},{passive:true});
+
 function loadTextures(){
   const names=['grass','dirt','stone','water','wood','foliage','rune','leather','parchment'];
   let done=0;
-  const mark=()=>{done++;ui.loadFill.style.width=(15+done/names.length*35)+'%'};
+  const mark=()=>{done++;if(ui.loadFill)ui.loadFill.style.width=(15+done/names.length*35)+'%'};
   return Promise.allSettled(names.map(name=>new Promise(resolve=>{
     const im=new Image();let settled=false;
     const finish=ok=>{if(settled)return;settled=true;clearTimeout(timer);if(ok)textureImages[name]=im;mark();resolve({name,ok});};
@@ -374,8 +386,8 @@ function interact(){
  save();
  return true;
 }
-function transitionZone(){if(transitioning)return;transitioning=true;ui.loading.classList.remove('hidden');ui.loadFill.style.width='0%';ui.loadText.textContent='Переход: '+zones[zones[zoneId].next].name;const start=performance.now();function tick(now){const p=Math.min(1,(now-start)/650);ui.loadFill.style.width=(p*100)+'%';if(p<1){requestAnimationFrame(tick);return}zoneId=zones[zoneId].next;resetZone();save();setTimeout(()=>{resetFrameLimiter();ui.loading.classList.add('hidden');transitioning=false;toast(zones[zoneId].name)},120)}requestAnimationFrame(tick)}
-function openModal(title,body){ui.modalTitle.textContent=title;ui.modalBody.innerHTML=body;ui.modal.classList.remove('hidden')}function closeModal(){ui.modal.classList.add('hidden')}
+function transitionZone(){if(transitioning)return;transitioning=true;if(ui.loading)ui.loading.classList.remove('hidden');if(ui.loadFill)ui.loadFill.style.width='0%';if(ui.loadText)ui.loadText.textContent='Переход: '+zones[zones[zoneId].next].name;const start=performance.now();function tick(now){const p=Math.min(1,(now-start)/650);if(ui.loadFill)ui.loadFill.style.width=(p*100)+'%';if(p<1){requestAnimationFrame(tick);return}zoneId=zones[zoneId].next;resetZone();save();setTimeout(()=>{resetFrameLimiter();if(ui.loading)ui.loading.classList.add('hidden');transitioning=false;toast(zones[zoneId].name)},120)}requestAnimationFrame(tick)}
+function openModal(title,body){if(!ui.modal)return;if(ui.modalTitle)ui.modalTitle.textContent=title;if(ui.modalBody)ui.modalBody.innerHTML=body;ui.modal.classList.remove('hidden')}function closeModal(){if(ui.modal)ui.modal.classList.add('hidden')}
 function openInventory(){openModal('Сумка и экипировка',`<div class="grid"><div class="card"><h3>Оружие</h3><p>${player.equipment.weapon}<br>Урон: <b>${player.damage}</b></p></div><div class="card"><h3>Броня</h3><p>${player.equipment.armor}<br>Защита: <b>24</b></p></div><div class="card"><h3>Ресурсы</h3><p>Древесина: ${player.inv.wood}<br>Руда: ${player.inv.ore}<br>Трава: ${player.inv.herb}</p></div><div class="card"><h3>Валюта</h3><p class="gold">${player.gold} золотых</p><p>Знаки: ${player.inv.guardianToken||0}<br>Осколки: ${player.inv.emberShard||0}</p></div></div><div class="sectionTitle">КРАФТ</div><button class="btn" id="craftBtn">Закалить меч · 3 древесины + 2 руды</button><button class="btn" id="potionBtn">Зелье жизни · 3 травы + 1 древесина</button>`);bindTap($('craftBtn'),()=>craft('blade'));bindTap($('potionBtn'),()=>craft('potion'))}
 function craft(recipe='blade'){if(recipe==='blade'&&player.inv.wood>=3&&player.inv.ore>=2){player.inv.wood-=3;player.inv.ore-=2;player.damage+=5;player.equipment.weapon='Закалённый меч следопыта';gainXP(35);save();closeModal();toast('Оружие улучшено: +5 урона')}else if(recipe==='potion'&&player.inv.herb>=3&&player.inv.wood>=1){player.inv.herb-=3;player.inv.wood-=1;player.maxHp+=12;player.hp=player.maxHp;gainXP(20);save();closeModal();toast('Создано зелье жизни · +12 макс. HP')}else toast('Недостаточно ресурсов')}
 function openMenu(){openModal('Настройки · v3.4',`<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><div class="sectionTitle">КАЧЕСТВО ГРАФИКИ</div><div class="settingRow"><div class="seg" id="qualitySeg">${['low','medium','high','very-high'].map(q=>`<button data-q="${q}" class="${settings.quality===q?'active':''}">${q==='very-high'?'Very High':q[0].toUpperCase()+q.slice(1)}</button>`).join('')}</div><div class="note">Меняет внутреннее разрешение canvas, плотность окружения, лимиты врагов и частиц, детализацию текстур, тени и туман. Применяется сразу.</div></div><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="settingRow"><div class="seg fps" id="fpsSeg">${FPS.map(f=>`<button data-f="${f}" class="${settings.fps===f?'active':''}">${f}</button>`).join('')}</div><div class="note">Лимит управляет реальными отрисованными кадрами. Монитор считает только кадры после update + draw.</div></div><div class="sectionTitle">МОНИТОР ПРОИЗВОДИТЕЛЬНОСТИ</div><button class="btn" id="perfBtn">${perfMonitorEnabled?'Выключить frame-time monitor':'Включить frame-time monitor'}</button><div class="sectionTitle">УСТРОЙСТВО</div><div class="card"><p>${device.ios?'iOS':device.android?'Android':'Mobile'} · RAM: ${device.ram===null?'n/a':device.ram+' GB'} · ${device.cores} CPU cores · DPR ${device.dpr.toFixed(2)}<br>Профиль: <b>${detected.toUpperCase()}</b><br>RAM: n/a означает, что Safari не предоставляет этот показатель.</p></div><div class="sectionTitle">СОХРАНЕНИЕ</div><button class="btn" id="saveBtn">Сохранить прогресс</button>`);document.querySelectorAll('#qualitySeg button').forEach(b=>bindTap(b,()=>{settings.quality=b.dataset.q;localStorage.setItem('aef_quality',settings.quality);applyGraphics();save();openMenu()}));document.querySelectorAll('#fpsSeg button').forEach(b=>bindTap(b,()=>{settings.fps=Number(b.dataset.f);localStorage.setItem('aef_fps',String(settings.fps));resetFrameLimiter();save();openMenu()}));bindTap($('saveBtn'),()=>{save();toast('Прогресс сохранён')});bindTap($('perfBtn'),()=>{perfMonitorEnabled=!perfMonitorEnabled;localStorage.setItem('aef_perf_monitor',perfMonitorEnabled?'1':'0');refreshPerformanceMonitorVisibility();openMenu()})}
@@ -393,8 +405,6 @@ function bindTap(el,fn){
 }
 
 const joyEl=$('joystick'),stick=$('stick'),joy={id:null,x:0,y:0};
-const keys={w:false,a:false,s:false,d:false,up:false,down:false,left:false,right:false,shift:false,space:false,e:false,b:false};
-let mouseAim=false,lastMouseX=0,lastMouseY=0;
 
 function resetJoy(){joy.id=null;joy.x=0;joy.y=0;if(stick)stick.style.transform='translate(0,0)'}
 function setJoystickFromPoint(clientX,clientY){
@@ -406,17 +416,6 @@ function setJoystickFromPoint(clientX,clientY){
  if(stick)stick.style.transform=`translate(${dx}px,${dy}px)`;
 }
 function moveJoy(e){setJoystickFromPoint(e.clientX,e.clientY)}
-function updateKeyboardJoy(){
- if(joy.id!==null)return; // touch joystick has priority
- let kx=0,ky=0;
- if(keys.a||keys.left)kx-=1;
- if(keys.d||keys.right)kx+=1;
- if(keys.w||keys.up)ky-=1;
- if(keys.s||keys.down)ky+=1;
- const mag=Math.hypot(kx,ky);
- if(mag>0.01){joy.x=kx/mag;joy.y=ky/mag}else{joy.x=0;joy.y=0}
-}
-
 if(joyEl){
  joyEl.addEventListener('pointerdown',e=>{
   if(e.button!==undefined&&e.button!==0&&e.pointerType==='mouse')return;
@@ -431,101 +430,31 @@ if(joyEl){
  joyEl.addEventListener('lostpointercapture',endJoy,{passive:true});
 }
 
-// Look / aim input — works for both touch (right side) and mouse
+// Look input — mobile only, and never from the joystick area.
 if(canvas){
  canvas.addEventListener('pointerdown',e=>{
-  if(e.pointerType==='mouse'){
-   if(e.button===0){ // LMB attack or interact
-    if(e.target===canvas){
-     // Aim toward mouse
-     const rect=canvas.getBoundingClientRect();
-     const mx=e.clientX-rect.left,my=e.clientY-rect.top;
-     const worldX=player.x+(mx-W/2);
-     const worldY=player.y+(my-H/2)/0.82;
-     player.dir=Math.atan2(worldY-player.y,worldX-player.x);
-     attack();
-    }
-   }
-   return;
-  }
-  // Touch look only on right half
+  if(e.pointerType==='mouse')return;
   if(e.clientX<W*.43)return;
   look.ids.add(e.pointerId);
   look.lastX=e.clientX;
   canvas.setPointerCapture?.(e.pointerId);
  },{passive:false});
  canvas.addEventListener('pointermove',e=>{
-  if(e.pointerType==='mouse'){
-   // Continuous mouse aim while holding RMB or always relative? Use absolute aim for simplicity on move
-   if(mouseAim||e.buttons&2){
-    const rect=canvas.getBoundingClientRect();
-    const mx=e.clientX-rect.left,my=e.clientY-rect.top;
-    const worldX=player.x+(mx-W/2);
-    const worldY=player.y+(my-H/2)/0.82;
-    player.dir=Math.atan2(worldY-player.y,worldX-player.x);
-   }
-   return;
-  }
   if(!look.ids.has(e.pointerId))return;
   e.preventDefault();
   const dx=e.clientX-look.lastX;
   look.lastX=e.clientX;
   player.dir+=dx*.008;
  },{passive:false});
- ['pointerup','pointercancel'].forEach(ev=>canvas.addEventListener(ev,e=>{
-  look.ids.delete(e.pointerId);
-  if(e.pointerType==='mouse'&&e.button===2)mouseAim=false;
- },{passive:false}));
- // Right mouse for continuous aim
- canvas.addEventListener('contextmenu',e=>e.preventDefault());
- canvas.addEventListener('mousedown',e=>{if(e.button===2){mouseAim=true;e.preventDefault()}});
- canvas.addEventListener('mouseup',e=>{if(e.button===2)mouseAim=false});
+ ['pointerup','pointercancel'].forEach(ev=>canvas.addEventListener(ev,e=>look.ids.delete(e.pointerId),{passive:false}));
 }
-
-// Keyboard controls (desktop)
-addEventListener('keydown',e=>{
- if(e.repeat)return;
- const k=e.key.toLowerCase();
- if(k==='w'||k==='ц')keys.w=true;
- if(k==='a'||k==='ф')keys.a=true;
- if(k==='s'||k==='ы')keys.s=true;
- if(k==='d'||k==='в')keys.d=true;
- if(k==='arrowup')keys.up=true;
- if(k==='arrowdown')keys.down=true;
- if(k==='arrowleft')keys.left=true;
- if(k==='arrowright')keys.right=true;
- if(k==='shift'){keys.shift=true;dodge()}
- if(k===' '||k==='space'){keys.space=true;attack()}
- if(k==='e'||k==='у'){keys.e=true;interact()}
- if(k==='b'||k==='и'){keys.b=true;player.blocking=true}
- if(k==='1')skill(1);
- if(k==='2')skill(2);
- if(k==='3')skill(3);
- if(k==='i'||k==='ш')openInventory();
- if(k==='escape'||k==='m'||k==='ь')openMenu();
- if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright',' ','e','b','1','2','3'].includes(k)||k.startsWith('arrow'))e.preventDefault();
-},{passive:false});
-addEventListener('keyup',e=>{
- const k=e.key.toLowerCase();
- if(k==='w'||k==='ц')keys.w=false;
- if(k==='a'||k==='ф')keys.a=false;
- if(k==='s'||k==='ы')keys.s=false;
- if(k==='d'||k==='в')keys.d=false;
- if(k==='arrowup')keys.up=false;
- if(k==='arrowdown')keys.down=false;
- if(k==='arrowleft')keys.left=false;
- if(k==='arrowright')keys.right=false;
- if(k==='shift')keys.shift=false;
- if(k===' '||k==='space')keys.space=false;
- if(k==='e'||k==='у')keys.e=false;
- if(k==='b'||k==='и'){keys.b=false;player.blocking=false}
-});
 
 document.querySelectorAll('.action').forEach(btn=>{
   const a=btn.dataset.act;
   if(a==='block'){
     let blockPointer=null;
     btn.addEventListener('pointerdown',e=>{
+      if(e.pointerType==='mouse')return;
       e.preventDefault();e.stopPropagation();
       blockPointer=e.pointerId;player.blocking=true;
       btn.setPointerCapture?.(e.pointerId);
@@ -575,10 +504,9 @@ function updateEnemyPatrol(dt){
 
 function update(dt){
  for(let i=entities.length-1;i>=0;i--){const e=entities[i];if(e.kind==='enemy'&&e.hp<=0&&e._corpseUntil<=time)entities.splice(i,1)}time+=dt;player.attackCd=Math.max(0,player.attackCd-dt);player.comboTimer=Math.max(0,player.comboTimer-dt);if(player.comboTimer===0)player.combo=0;player.stamina=clamp(player.stamina+(player.blocking?12:24)*dt,0,player.maxStamina);
- updateKeyboardJoy();
  const moving=Math.hypot(joy.x,joy.y)>.06;const dodgeUntil=Number.isFinite(player.dodgeUntil)?player.dodgeUntil:0;player.dodgeUntil=dodgeUntil;
  const speed=player.speed*(player.blocking?.58:1)*(player.dodgeUntil>time?.9:1);
- if(moving&&time>=dodgeUntil){player.x=clamp(player.x+joy.x*speed*dt,70,WORLD.w-70);player.y=clamp(player.y+joy.y*speed*dt,70,WORLD.h-70);if(joy.id!==null)player.dir=Math.atan2(joy.y,joy.x);else if(!mouseAim&&Math.hypot(joy.x,joy.y)>0.1)player.dir=Math.atan2(joy.y,joy.x)}for(const e of entities){if(e.hp<=0||e.kind!=='enemy')continue;e.cd=Math.max(0,e.cd-dt);e.hit=Math.max(0,e.hit-dt);const d=dist(player,e);if(d<620){const a=Math.atan2(player.y-e.y,player.x-e.x);if(d>e.r+player.r+8){e.x=clamp(e.x+Math.cos(a)*e.speed*dt,40,WORLD.w-40);e.y=clamp(e.y+Math.sin(a)*e.speed*dt,40,WORLD.h-40)}else if(e.cd<=0){e.cd=e.type==='guardian'?1.05:1.35;if(time>=player.dodgeUntil){const dmg=player.blocking?Math.ceil(e.damage*.26):e.damage;player.hp=Math.max(0,player.hp-dmg);burst(player.x,player.y,'#e06d68',7,80);if(player.hp<=0){player.hp=player.maxHp;player.x=zones[zoneId].camp.x;player.y=zones[zoneId].camp.y;toast('Вы возвращены к лагерю')}}}}}
+ if(moving&&time>=dodgeUntil){player.x=clamp(player.x+joy.x*speed*dt,70,WORLD.w-70);player.y=clamp(player.y+joy.y*speed*dt,70,WORLD.h-70);player.dir=Math.atan2(joy.y,joy.x)}for(const e of entities){if(e.hp<=0||e.kind!=='enemy')continue;e.cd=Math.max(0,e.cd-dt);e.hit=Math.max(0,e.hit-dt);const d=dist(player,e);if(d<620){const a=Math.atan2(player.y-e.y,player.x-e.x);if(d>e.r+player.r+8){e.x=clamp(e.x+Math.cos(a)*e.speed*dt,40,WORLD.w-40);e.y=clamp(e.y+Math.sin(a)*e.speed*dt,40,WORLD.h-40)}else if(e.cd<=0){e.cd=e.type==='guardian'?1.05:1.35;if(time>=player.dodgeUntil){const dmg=player.blocking?Math.ceil(e.damage*.26):e.damage;player.hp=Math.max(0,player.hp-dmg);burst(player.x,player.y,'#e06d68',7,80);if(player.hp<=0){player.hp=player.maxHp;player.x=zones[zoneId].camp.x;player.y=zones[zoneId].camp.y;toast('Вы возвращены к лагерю')}}}}}
 updateEnemyPatrol(dt);
 for(let i=projectiles.length-1;i>=0;i--){const p=projectiles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;let hit=false;for(const e of entities){if(e.hp>0&&e.kind==='enemy'&&dist(p,e)<e.r+7){hitTarget(e,p.damage);hit=true;break}}if(hit||p.life<=0)projectiles.splice(i,1)}for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.94;p.vy*=.94;p.life-=dt;if(p.life<=0)particles.splice(i,1)}for(let i=lootDrops.length-1;i>=0;i--){lootDrops[i].life-=dt;if(lootDrops[i].life<=0)lootDrops.splice(i,1)}for(let i=floatingTexts.length-1;i>=0;i--){floatingTexts[i].y-=28*dt;floatingTexts[i].life-=dt;if(floatingTexts[i].life<=0)floatingTexts.splice(i,1)}
  if(entities.length>90)entities=entities.filter(e=>e.kind==='resource'||e.hp>0);
@@ -891,20 +819,21 @@ function renderFrame(nowTime){
  const renderMs=performance.now()-t0;
  updatePerformanceMonitor(nowTime,renderMs,frameTimeMs);
 }
-function hideLoading(){if(ui.loading&&!ui.loading.classList.contains('hidden'))ui.loading.classList.add('hidden')}
+function hideLoading(){if(ui.loading&&ui.loading.classList&&!ui.loading.classList.contains('hidden'))ui.loading.classList.add('hidden')}
 function firstPaint(){updateNetworkStatus();applyGraphics();resetZone();update(0);updateUI();drawWorld();drawMap();resetFrameLimiter();if(!rafId)rafId=requestAnimationFrame(renderFrame)}
-let didFirstPaint=false;
+let didFirstPaint=false,_booted=false;
 async function boot(){
-  ui.loadFill.style.width='5%';
+  if(_booted)return;_booted=true;
+  if(ui.loadFill)ui.loadFill.style.width='5%';
   // Never block the playable build on texture/network decoding. This is especially
   // important for iOS standalone web apps where an image request may remain pending.
   const hardFailSafe=setTimeout(()=>{if(!didFirstPaint){firstPaint();didFirstPaint=true}hideLoading()},1600);
   try{
     if(!didFirstPaint){firstPaint();didFirstPaint=true}
-    ui.loadFill.style.width='15%';
+    if(ui.loadFill)ui.loadFill.style.width='15%';
     setTimeout(hideLoading,220);
     await loadTextures();
-    applyGraphics();drawWorld();drawMap();ui.loadFill.style.width='100%';
+    applyGraphics();drawWorld();drawMap();if(ui.loadFill)ui.loadFill.style.width='100%';
   }catch(err){
     console.error('Aethernfall boot recovery',err);
     try{if(!didFirstPaint){firstPaint();didFirstPaint=true}}catch(_){ }
