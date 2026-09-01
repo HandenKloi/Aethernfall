@@ -1,5 +1,5 @@
-# Aethernfall Mobile 2.5D v3.1.1 REALFIX2
+# Aethernfall Mobile 2.5D v3.2 REALFIX
 
-Fix-only build from the Gemini-modified v3.1 archive.
+Mobile web/PWA build. Upload the archive contents to GitHub Pages preserving `assets/` and the root files.
 
-Primary target: a clean JavaScript startup path on iOS so the player can move, mobs can move, and FPS telemetry works.
+Primary test device: iPhone 14 Pro Max.

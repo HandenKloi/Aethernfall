@@ -17,6 +17,7 @@ let W=innerWidth,H=innerHeight,DPR=1,time=0,lastNow=performance.now(),rafId=0,tr
 const drawables=[];
 const drawCampMarker={y:0,type:'camp'},drawScoutMarker={y:0,type:'scout'},drawPortalMarker={y:0,type:'portal'},drawPlayerMarker={y:0,type:'player'};
 const uiCache={};
+let atmosphereCache=null;
 let rafCallbackCount=0,rafCallbackWindow=performance.now(),rafCallbackRate=0;
 
 const WORLD={w:2800,h:1800};const SAVE='aethernfall_save_v30';
@@ -74,6 +75,7 @@ function toast(t){ui.toast.textContent=t;ui.toast.style.opacity=1;clearTimeout(t
 function effectiveRenderScale(){return clamp(profile.render,.50,1)}
 function resetFrameLimiter(now=performance.now()){lastNow=now;rafLastNow=now;nextRenderAt=now;lastFrame=0;frameAccumulator=0;mapAccumulator=0;perfLastGameFrame=0;perfFrameCount=0;perfRenderTotal=0;perfFrameGapTotal=0;perfWindowStart=now;perfActualFps=0;perfAvgFrameMs=0;perfAvgRenderMs=0;rafCallbackCount=0;rafCallbackWindow=now;rafCallbackRate=0}
 function applyGraphics(){
+ atmosphereCache=null;
  profile=QUALITY[settings.quality]||QUALITY.medium;
  const deviceDpr=Math.min(device.dpr||1,2.5);
  // User-selected quality controls render scale. No FPS/thermal adaptive resolution.
@@ -88,7 +90,7 @@ function applyGraphics(){
  makeAmbient();
 }
 addEventListener('resize',()=>{applyGraphics();resetFrameLimiter()},{passive:true});
-document.addEventListener('visibilitychange',()=>{resetFrameLimiter()});
+document.addEventListener('visibilitychange',()=>{player.blocking=false;resetFrameLimiter()});
 function loadTextures(){
   const names=['grass','dirt','stone','water','wood','foliage','rune','leather','parchment'];
   let done=0;
@@ -121,7 +123,7 @@ function advanceQuest(reason){const q=quest(),s=questState();if(q.id==='mist'){i
 function addEnemy(type,x,y){const cap=entities.filter(e=>e.kind==='enemy'&&e.type!=='guardian').length;if(type!=='guardian'&&cap>=profile.enemyCap)return;const e={kind:'enemy',type,x,y,r:18,hp:100,maxHp:100,speed:76,damage:10,cd:0,hit:0,seed:rng(x+y),stun:0};if(type==='raider')Object.assign(e,{r:21,hp:140,maxHp:140,speed:82,damage:12});if(type==='boar')Object.assign(e,{r:19,hp:95,maxHp:95,speed:108,damage:9});if(type==='guardian')Object.assign(e,{r:40,hp:620,maxHp:620,speed:48,damage:22});entities.push(e)}
 function addResource(kind,x,y){entities.push({kind:'resource',type:kind,x,y,r:20,hp:1,maxHp:1,pulse:rng(x*y)*Math.PI*2})}
 function makeAmbient(){ambient=[];for(let i=0;i<profile.ambient;i++)ambient.push({x:60+rng(i+7)*(WORLD.w-120),y:60+rng(i+91)*(WORLD.h-120),kind:rng(i+201),scale:.65+rng(i+44)*1.55,seed:i})}
-function resetZone(){entities=[];particles=[];projectiles=[];const z=zones[zoneId];player.x=z.camp.x;player.y=z.camp.y;player.dir=0;for(let i=0;i<58;i++){const x=150+rng(i+300+zoneId.length)*(WORLD.w-300),y=150+rng(i+620+zoneId.length*7)*(WORLD.h-300);let type=i%4?'raider':'boar';if(zoneId==='ashfield'&&i%5===0)type='boar';addEnemy(type,x,y)}for(let i=0;i<32;i++){const x=150+rng(i+1200+zoneId.length)*(WORLD.w-300),y=150+rng(i+1700+zoneId.length*3)*(WORLD.h-300),kind=i%3===0?z.resources[0]:z.resources[1];addResource(kind,x,y)}if(zoneId==='stonevale')addEnemy('guardian',1680,720);makeAmbient()}
+function resetZone(){entities=[];particles=[];projectiles=[];lootDrops=[];floatingTexts=[];interactionLock=0;const z=zones[zoneId];player.x=z.camp.x;player.y=z.camp.y;player.dir=0;for(let i=0;i<58;i++){const x=150+rng(i+300+zoneId.length)*(WORLD.w-300),y=150+rng(i+620+zoneId.length*7)*(WORLD.h-300);let type=i%4?'raider':'boar';if(zoneId==='ashfield'&&i%5===0)type='boar';addEnemy(type,x,y)}for(let i=0;i<32;i++){const x=150+rng(i+1200+zoneId.length)*(WORLD.w-300),y=150+rng(i+1700+zoneId.length*3)*(WORLD.h-300),kind=i%3===0?z.resources[0]:z.resources[1];addResource(kind,x,y)}if(zoneId==='stonevale')addEnemy('guardian',1680,720);makeAmbient()}
 function burst(x,y,color,count=10,speed=110){const room=Math.max(0,profile.particles-particles.length);count=Math.min(count,room);for(let i=0;i<count;i++){const a=Math.random()*Math.PI*2,v=(.25+Math.random())*speed;particles.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,life:.32+Math.random()*.48,max:.8,size:1.5+Math.random()*3.8,color})}}
 function addFloatingText(text,x,y,color='#fff2bf'){if(floatingTexts.length>=48)floatingTexts.shift();floatingTexts.push({text,x,y,color,life:.85,max:.85})}
 function gainXP(n){player.xp+=n;while(player.xp>=player.xpNeed){player.xp-=player.xpNeed;player.level++;player.xpNeed=Math.round(player.xpNeed*1.24);player.maxHp+=18;player.hp=player.maxHp;player.damage+=3;toast('Новый уровень — '+player.level)}}
@@ -154,29 +156,54 @@ function kill(e){
  burst(e.x,e.y,e.type==='guardian'?'#ceb1ea':'#e27677',24,155);
  save()
 }
-function hitTarget(e,dmg){if(e.hp<=0)return;e.hp-=dmg;e.hit=.16;burst(e.x,e.y,'#efcfa8',9,118);if(e.hp<=0)kill(e)}
+function hitTarget(e,dmg){
+ if(!e||e.hp<=0)return false;
+ if(!Number.isFinite(dmg)||dmg<=0)return false;
+ if(!Number.isFinite(e.hp))e.hp=Number.isFinite(e.maxHp)&&e.maxHp>0?e.maxHp:1;
+ e.hp=Math.max(0,e.hp-dmg);
+ e.hit=.16;
+ burst(e.x,e.y,'#efcfa8',9,118);
+ if(e.hp<=0)kill(e);
+ return true;
+}
 function nearest(filter,max=120){let best=null,bd=max;for(const e of entities)if(e.hp>0&&filter(e)){const d=dist(player,e);if(d<bd){bd=d;best=e}}return best}
-function attack(){if(player.attackCd>0||transitioning)return;player.attackCd=.42;player.combo=player.comboTimer>0?Math.min(3,player.combo+1):1;player.comboTimer=.9;const target=nearest(e=>e.kind==='enemy',155);if(target)player.dir=Math.atan2(target.y-player.y,target.x-player.x);const a=player.dir;let hits=0;for(const e of entities){if(e.hp<=0||e.kind!=='enemy')continue;const d=dist(player,e),ea=Math.atan2(e.y-player.y,e.x-player.x);if(d<104+e.r&&Math.abs(angleDiff(ea,a))<1.05){const crit=Math.random()<.12;const amount=player.damage*(crit?1.5:1)*(1+(.10*Math.max(0,player.combo-1)));hitTarget(e,Math.round(amount));addFloatingText(crit?'КРИТ!':String(Math.round(amount)),e.x,e.y-e.r-18,crit?'#ffe08a':'#f4d3a3');hits++}}burst(player.x+Math.cos(a)*36,player.y+Math.sin(a)*36,'#e4bf69',hits?12+player.combo*2:5,95)}
+function attack(){
+ if(player.attackCd>0||transitioning)return;
+ player.attackCd=.42;
+ player.combo=player.comboTimer>0?Math.min(3,player.combo+1):1;
+ player.comboTimer=.9;
+ let target=null,bestDist=Infinity;
+ for(const e of entities){
+  if(e.hp<=0||e.kind!=='enemy')continue;
+  const d=dist(player,e),hitRange=104+e.r+1;
+  if(d<hitRange&&d<bestDist){bestDist=d;target=e}
+ }
+ if(target)player.dir=Math.atan2(target.y-player.y,target.x-player.x);
+ const a=player.dir;let hits=0;
+ for(const e of entities){
+  if(e.hp<=0||e.kind!=='enemy')continue;
+  const d=dist(player,e),hitRange=104+e.r+1;
+  if(d>=hitRange)continue;
+  const ea=Math.atan2(e.y-player.y,e.x-player.x);
+  if(Math.abs(angleDiff(ea,a))>=1.05)continue;
+  const crit=Math.random()<.12;
+  const amount=Math.round(player.damage*(crit?1.5:1)*(1+.10*Math.max(0,player.combo-1)));
+  if(!hitTarget(e,amount))continue;
+  addFloatingText(crit?'КРИТ!':String(amount),e.x,e.y-e.r-18,crit?'#ffe08a':'#f4d3a3');hits++;
+ }
+ burst(player.x+Math.cos(a)*36,player.y+Math.sin(a)*36,'#e4bf69',hits?12+player.combo*2:5,95);
+}
 function dodge(){if(player.dodgeCd>time||player.stamina<24||transitioning)return;player.stamina-=24;player.dodgeCd=time+.78;player.dodgeUntil=time+.28;const mx=joy.x,my=joy.y,mag=Math.hypot(mx,my)||1;player.x=clamp(player.x+(mx/mag)*125,70,WORLD.w-70);player.y=clamp(player.y+(my/mag)*125,70,WORLD.h-70);burst(player.x,player.y,'#91c6cc',16,145);toast('Уклонение')}
 function skill(n){if(player.stamina<20){toast('Недостаточно выносливости');return}player.stamina-=20;const a=player.dir;if(n===1){let hits=0;for(const e of entities){if(e.hp<=0||e.kind!=='enemy')continue;const d=dist(player,e),ea=Math.atan2(e.y-player.y,e.x-player.x);if(d<165&&Math.abs(angleDiff(ea,a))<1.3){hitTarget(e,Math.round(player.damage*1.85));hits++}}burst(player.x,player.y,'#8fc4e3',26,160);toast(hits?`Разрез ветра: ${hits} попад.`:'Разрез ветра — мимо')}else if(n===2){for(let i=0;i<3;i++){const aa=a+(i-1)*.15;projectiles.push({x:player.x+Math.cos(a)*24,y:player.y+Math.sin(a)*24,vx:Math.cos(aa)*480,vy:Math.sin(aa)*480,damage:Math.round(player.damage*.9),life:.82,color:'#bfe9ee'})}toast('Тройной импульс')}else{const before=player.hp;player.hp=Math.min(player.maxHp,player.hp+70);burst(player.x,player.y,'#86c99b',20,100);toast(before===player.maxHp?'Второе дыхание готово':'Восстановлено здоровье')}}
 function nearbyInteraction(){
- const z=zones[zoneId];
- const candidates=[];
+ const z=zones[zoneId],candidates=[];
  const priority={loot:0,scout:1,resource:2,portal:3};
- const add=(type,entity,x,y,radius)=>{
-  const d=Math.hypot(player.x-x,player.y-y);
-  if(d<radius)candidates.push({type,entity,d});
- };
- // Locked portals do not steal focus from loot/NPC/resource.
+ const add=(type,entity,x,y,radius)=>{const d=Math.hypot(player.x-x,player.y-y);if(d<radius)candidates.push({type,entity,d})};
  if(canUsePortal())add('portal',null,z.portal.x,z.portal.y,135);
  add('scout',z.scout,z.scout.x,z.scout.y,120);
- for(const e of entities){
-  if(e.kind==='resource'&&e.hp>0)add('resource',e,e.x,e.y,105);
- }
- for(const l of lootDrops){
-  if(l.life>0)add('loot',l,l.x,l.y,105);
- }
- candidates.sort((a,b)=>a.d-b.d || priority[a.type]-priority[b.type]);
+ for(const e of entities)if(e.kind==='resource'&&e.hp>0)add('resource',e,e.x,e.y,105);
+ for(const l of lootDrops)if(l.life>0)add('loot',l,l.x,l.y,105);
+ candidates.sort((a,b)=>{const dd=a.d-b.d;return Math.abs(dd)<6?priority[a.type]-priority[b.type]:dd});
  return candidates[0]||null;
 }
 
@@ -197,41 +224,45 @@ function updateUI(){
 }
 
 function interact(){
- if(interactionLock>time||transitioning)return;
+ if(interactionLock>time||transitioning)return false;
  interactionLock=time+.16;
  const hit=nearbyInteraction();
- if(!hit)return;
+ if(!hit)return false;
  if(hit.type==='portal'){
-  if(!canUsePortal()){toast('Сначала завершите текущую задачу');return}
-  advanceQuest('portal');transitionZone();return;
+  if(!canUsePortal()){toast('Сначала завершите текущую задачу');return false}
+  advanceQuest('portal');transitionZone();return true;
  }
  if(hit.type==='scout'){
   const s=questState();
-  if(s.step===0){advanceQuest('scout');openNpcDialog();}
-  else toast('Цель: '+currentObjective());
-  return;
+  if(s.step===0)advanceQuest('scout');
+  openNpcDialog();
+  return true;
  }
  if(hit.type==='loot'){
   const l=hit.entity;
+  if(!l||l.life<=0)return false;
   if(l.id==='coin')player.gold+=l.count;
-  else if(['guardianToken','emberShard'].includes(l.id)){player.inv[l.id]=(player.inv[l.id]||0)+l.count}
-  else {player.inv[l.id]=(player.inv[l.id]||0)+l.count} 
-  if(l.id==='guardianToken'){player.equipment.armor='Пластинчатая броня стража';player.maxHp+=25;player.hp=Math.min(player.maxHp,player.hp+25)}
+  else player.inv[l.id]=(player.inv[l.id]||0)+l.count;
+  if(l.id==='guardianToken'){
+   player.equipment.armor='Пластинчатая броня стража';player.maxHp+=25;player.hp=Math.min(player.maxHp,player.hp+25);
+  }
   const text=l.id==='coin'?`Золото +${l.count}`:`Получено: ${l.label} ×${l.count}`;
   toast(text);
   if(ui.lootTicker){ui.lootTicker.textContent=text;ui.lootTicker.classList.add('show');clearTimeout(ui.lootTicker._t);ui.lootTicker._t=setTimeout(()=>ui.lootTicker.classList.remove('show'),1500)}
-  lootDrops.splice(lootDrops.indexOf(l),1);
-  updateUI();save();return;
+  const idx=lootDrops.indexOf(l);if(idx>=0)lootDrops.splice(idx,1);
+  updateUI();save();return true;
  }
- const r=hit.entity,key=r.type;
- player.inv[key]++;
+ if(hit.type!=='resource')return false;
+ const r=hit.entity;if(!r||r.kind!=='resource'||r.hp<=0)return false;
+ const key=r.type;if(key!=='wood'&&key!=='ore'&&key!=='herb')return false;
+ player.inv[key]=(player.inv[key]||0)+1;
  if(zoneId==='mistwood'&&key==='herb'&&questState().step===1){questState().herb++;advanceQuest('resource')}
  if(zoneId==='stonevale'&&key==='ore'&&questState().step===1){questState().ore++;advanceQuest('resource')}
  if(zoneId==='ashfield'&&key==='wood'&&questState().step===1){questState().wood++;advanceQuest('resource')}
- toast('Получено: '+({wood:'древесина',ore:'руда',herb:'трава'}[key]));
+ toast('Получено: '+({wood:'древесина',ore:'руда',herb:'трава'}[key]||key));
  burst(r.x,r.y,'#d6c274',12,105);
- entities.splice(entities.indexOf(r),1);
- updateUI();save()
+ const idx=entities.indexOf(r);if(idx>=0)entities.splice(idx,1);
+ updateUI();save();return true;
 }
 function transitionZone(){if(transitioning)return;transitioning=true;ui.loading.classList.remove('hidden');ui.loadFill.style.width='0%';ui.loadText.textContent='Переход: '+zones[zones[zoneId].next].name;const start=performance.now();function tick(now){const p=Math.min(1,(now-start)/650);ui.loadFill.style.width=(p*100)+'%';if(p<1){requestAnimationFrame(tick);return}zoneId=zones[zoneId].next;resetZone();save();setTimeout(()=>{resetFrameLimiter();ui.loading.classList.add('hidden');transitioning=false;toast(zones[zoneId].name)},120)}requestAnimationFrame(tick)}
 function openModal(title,body){ui.modalTitle.textContent=title;ui.modalBody.innerHTML=body;ui.modal.classList.remove('hidden')}function closeModal(){ui.modal.classList.add('hidden')}
@@ -246,11 +277,10 @@ function bindTap(el,fn){
   if(fired)return;
   fired=true;
   try{fn(e)}catch(err){console.error('Aethernfall input handler',err)}
-  requestAnimationFrame(()=>{fired=false});
+  finally{setTimeout(()=>{fired=false},90)}
  };
  el.addEventListener('pointerdown',handler,{passive:false});
 }
-
 
 const joyEl=$('joystick'),stick=$('stick'),joy={id:null,x:0,y:0};
 
@@ -348,7 +378,7 @@ function updateEnemyPatrol(dt){
 }
 
 function update(dt){
- entities=entities.filter(e=>e.kind!=='enemy'||e.hp>0||e._corpseUntil>time);time+=dt;player.attackCd=Math.max(0,player.attackCd-dt);player.comboTimer=Math.max(0,player.comboTimer-dt);if(player.comboTimer===0)player.combo=0;player.stamina=clamp(player.stamina+(player.blocking?12:24)*dt,0,player.maxStamina);const moving=Math.hypot(joy.x,joy.y)>.06;const dodgeUntil=Number.isFinite(player.dodgeUntil)?player.dodgeUntil:0;player.dodgeUntil=dodgeUntil;
+ for(let i=entities.length-1;i>=0;i--){const e=entities[i];if(e.kind==='enemy'&&e.hp<=0&&e._corpseUntil<=time)entities.splice(i,1)}time+=dt;player.attackCd=Math.max(0,player.attackCd-dt);player.comboTimer=Math.max(0,player.comboTimer-dt);if(player.comboTimer===0)player.combo=0;player.stamina=clamp(player.stamina+(player.blocking?12:24)*dt,0,player.maxStamina);const moving=Math.hypot(joy.x,joy.y)>.06;const dodgeUntil=Number.isFinite(player.dodgeUntil)?player.dodgeUntil:0;player.dodgeUntil=dodgeUntil;
  // ИСПРАВЛЕНИЕ 2: Заменил несуществующий player.dodging на player.dodgeUntil
  const speed=player.speed*(player.blocking?.58:1)*(player.dodgeUntil>time?.9:1);
  if(moving&&time>=dodgeUntil){player.x=clamp(player.x+joy.x*speed*dt,70,WORLD.w-70);player.y=clamp(player.y+joy.y*speed*dt,70,WORLD.h-70);player.dir=Math.atan2(joy.y,joy.x)}for(const e of entities){if(e.hp<=0||e.kind!=='enemy')continue;e.cd=Math.max(0,e.cd-dt);e.hit=Math.max(0,e.hit-dt);const d=dist(player,e);if(d<620){const a=Math.atan2(player.y-e.y,player.x-e.x);if(d>e.r+player.r+8){e.x=clamp(e.x+Math.cos(a)*e.speed*dt,40,WORLD.w-40);e.y=clamp(e.y+Math.sin(a)*e.speed*dt,40,WORLD.h-40)}else if(e.cd<=0){e.cd=e.type==='guardian'?1.05:1.35;if(time>=player.dodgeUntil){const dmg=player.blocking?Math.ceil(e.damage*.26):e.damage;player.hp=Math.max(0,player.hp-dmg);burst(player.x,player.y,'#e06d68',7,80);if(player.hp<=0){player.hp=player.maxHp;player.x=zones[zoneId].camp.x;player.y=zones[zoneId].camp.y;toast('Вы возвращены к лагерю')}}}}}
@@ -468,31 +498,19 @@ function drawV27Labels(){
 
 
 function drawV30Atmosphere(){
- const z=zones[zoneId];
- ctx.save();
- const horizon=H*.18+(player.y%180)*.015;
- const grad=ctx.createLinearGradient(0,0,0,H);
- grad.addColorStop(0,'rgba(223,224,205,.06)');
- grad.addColorStop(.38,'rgba(20,28,23,0)');
- grad.addColorStop(1,'rgba(7,11,9,.16)');
- ctx.fillStyle=grad;ctx.fillRect(0,0,W,H);
-
- ctx.globalAlpha=.12;
- ctx.strokeStyle=z.accent;ctx.lineWidth=12;ctx.lineCap='round';
- ctx.beginPath();ctx.moveTo(-60,H*.80);ctx.quadraticCurveTo(W*.36,H*.58,W+60,H*.46);ctx.stroke();
- ctx.globalAlpha=.08;ctx.lineWidth=42;ctx.strokeStyle='#0b100d';
- ctx.beginPath();ctx.moveTo(-100,H*.88);ctx.quadraticCurveTo(W*.40,H*.68,W+100,H*.55);ctx.stroke();
-
- ctx.globalAlpha=.18;
- for(let i=0;i<18;i++){
-   const x=((i*173+Math.floor(player.x*.15))% (W+120))-60;
-   const y=((i*97+Math.floor(player.y*.06))%(H+90))-40;
-   ctx.fillStyle=i%3===0?'#d7c991':'#93a383';
-   ctx.beginPath();ctx.ellipse(x,y,1.5,8+(i%4)*3,0,0,Math.PI*2);ctx.fill();
+ const z=zones[zoneId],key=`${zoneId}|${W}|${H}`;
+ if(!atmosphereCache||atmosphereCache.key!==key){
+  const grad=ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0,'rgba(223,224,205,.06)');grad.addColorStop(.38,'rgba(20,28,23,0)');grad.addColorStop(1,'rgba(7,11,9,.16)');
+  atmosphereCache={key,grad};
  }
+ ctx.save();ctx.fillStyle=atmosphereCache.grad;ctx.fillRect(0,0,W,H);
+ ctx.globalAlpha=.12;ctx.strokeStyle=z.accent;ctx.lineWidth=12;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(-60,H*.80);ctx.quadraticCurveTo(W*.36,H*.58,W+60,H*.46);ctx.stroke();
+ ctx.globalAlpha=.08;ctx.lineWidth=42;ctx.strokeStyle='#0b100d';ctx.beginPath();ctx.moveTo(-100,H*.88);ctx.quadraticCurveTo(W*.40,H*.68,W+100,H*.55);ctx.stroke();
+ ctx.globalAlpha=.18;
+ for(let i=0;i<18;i++){const x=((i*173+Math.floor(player.x*.15))%(W+120))-60;const y=((i*97+Math.floor(player.y*.06))%(H+90))-40;ctx.fillStyle=i%3===0?'#d7c991':'#93a383';ctx.beginPath();ctx.ellipse(x,y,1.5,8+(i%4)*3,0,0,Math.PI*2);ctx.fill()}
  ctx.restore();
 }
-
 
 function drawCombatTelegraphs(){
  for(const e of entities){
@@ -520,7 +538,7 @@ function drawWorld(){
   else if(d.kind==='resource')drawResource(d);
   else drawEntity(d);
  }
- drawLoot();drawProjectiles();drawParticles();drawFloatingTexts();drawV27Labels();
+ drawCombatTelegraphs();drawLoot();drawProjectiles();drawParticles();drawFloatingTexts();drawV27Labels();
 }
 
 function refreshPerformanceMonitorVisibility(){
@@ -561,22 +579,23 @@ function renderFrame(nowTime){
 }
 function hideLoading(){if(ui.loading&&!ui.loading.classList.contains('hidden'))ui.loading.classList.add('hidden')}
 function firstPaint(){updateNetworkStatus();applyGraphics();resetZone();update(0);updateUI();drawWorld();drawMap();resetFrameLimiter();if(!rafId)rafId=requestAnimationFrame(renderFrame)}
+let didFirstPaint=false;
 async function boot(){
   ui.loadFill.style.width='5%';
   // Never block the playable build on texture/network decoding. This is especially
   // important for iOS standalone web apps where an image request may remain pending.
-  const hardFailSafe=setTimeout(()=>{firstPaint();hideLoading()},1600);
+  const hardFailSafe=setTimeout(()=>{if(!didFirstPaint){firstPaint();didFirstPaint=true}hideLoading()},1600);
   try{
-    firstPaint();
+    if(!didFirstPaint){firstPaint();didFirstPaint=true}
     ui.loadFill.style.width='15%';
     setTimeout(hideLoading,220);
     await loadTextures();
     applyGraphics();drawWorld();drawMap();ui.loadFill.style.width='100%';
   }catch(err){
     console.error('Aethernfall boot recovery',err);
-    try{firstPaint()}catch(_){ }
+    try{if(!didFirstPaint){firstPaint();didFirstPaint=true}}catch(_){ }
   }finally{clearTimeout(hardFailSafe);hideLoading()}
 }
 refreshPerformanceMonitorVisibility();if(globalThis.__AETHER_TEST__){globalThis.__AETHER_TEST_API__={state:()=>({zoneId,player,settings,quest:questState(),objective:currentObjective(),entities,lootDrops,perf:{fps:perfActualFps,frameMs:perfAvgFrameMs,renderMs:perfAvgRenderMs}}),resetZone,interact,skill,attack,transitionZone,advanceQuest,renderFrame,applyGraphics,update,nearbyInteraction,zones,player,setFps:f=>{settings.fps=Number(f);resetFrameLimiter()},setQuality:q=>{settings.quality=q;applyGraphics()},getPerf:()=>({fps:perfActualFps,frameMs:perfAvgFrameMs,renderMs:perfAvgRenderMs})};}else boot();
-if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js?v=3200',{scope:'./'}).catch(()=>{})}
+if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js?v=3300',{scope:'./'}).catch(()=>{})}
 })();
