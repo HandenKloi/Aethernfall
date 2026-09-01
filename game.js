@@ -113,8 +113,8 @@ function questHint(){
  if(q.id==='mist'&&s.step===2)return `Налётчики: ${s.kills}/4`;
  if(q.id==='stone'&&s.step===1)return `Руда: ${s.ore}/2`;
  if(q.id==='stone'&&s.step===2)return `Страж: ${s.guardian}/1`;
- if(q.id==='ashfield'&&s.step===1)return `Древесина: ${s.wood}/4`;
- if(q.id==='ashfield'&&s.step===2)return `Враги: ${s.kills}/6`;
+ if(q.id==='ash'&&s.step===1)return `Древесина: ${s.wood}/4`;
+ if(q.id==='ash'&&s.step===2)return `Враги: ${s.kills}/6`;
  return q.steps[Math.min(s.step,q.steps.length-1)];
 }
 
@@ -264,7 +264,7 @@ function canUsePortal(){const s=questState();return s.step>=3}
 function updateUI(){
  const hp=Math.round(player.hp),st=Math.round(player.stamina),xp=Math.round(player.xp),lvl=player.level,z=zones[zoneId],objective=currentObjective();
  const values={hp,st,xp,lvl,zone:z.name,objective,title:z.quest.title,herb:player.inv.herb,wood:player.inv.wood,ore:player.inv.ore,gold:player.gold,badge:z.badge};
- const set=(el,key,value,transform=v=>v)=>{if(!el)return;const next=transform(value);if(uiCache[key]===next)return;uiCache[key]=next;el[key==='hp'?'style': 'textContent'];if(key==='hp'||key==='st'||key==='xp')el.style.width=next;else el.textContent=next};
+ const set=(el,key,value,transform=v=>v)=>{if(!el)return;const next=transform(value);if(uiCache[key]===next)return;uiCache[key]=next;if(key==='hp'||key==='st'||key==='xp')el.style.width=next;else el.textContent=next};
  set(ui.hp,'hp',hp,v=>`${clamp(v/player.maxHp*100,0,100)}%`);
  set(ui.stamina,'st',st,v=>`${clamp(v/player.maxStamina*100,0,100)}%`);
  set(ui.xp,'xp',xp,v=>`${clamp(v/player.xpNeed*100,0,100)}%`);
@@ -660,7 +660,7 @@ function drawV30Atmosphere(){
 
 function drawCombatTelegraphs(){
  for(const e of entities){
-   if(e.kind!=='enemy'||e.hp<=0||e.attackCd<=0||e.attackCd>0.35)continue;
+   if(e.kind!=='enemy'||e.hp<=0||e.cd<=0||e.cd>0.35)continue;
    const s=screenPos(e.x,e.y);
    ctx.save();ctx.strokeStyle='rgba(232,111,96,.62)';ctx.lineWidth=3;
    ctx.beginPath();ctx.arc(s.x,s.y,28,0,Math.PI*2);ctx.stroke();
