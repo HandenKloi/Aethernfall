@@ -1,6 +1,11 @@
 (()=>{'use strict';
 const BUILD_VERSION='3.4.0';
-const $=id=>document.getElementById(id);const canvas=$('game'),ctx=canvas.getContext('2d',{alpha:false,desynchronized:true});const mcanvas=$('minimap'),mctx=mcanvas.getContext('2d',{alpha:false});
+const $=id=>document.getElementById(id);
+const canvas=$('game');
+if(!canvas){console.error('Aethernfall: #game canvas not found');return;}
+const ctx=canvas.getContext('2d',{alpha:false,desynchronized:true});
+const mcanvas=$('minimap');
+const mctx=mcanvas?mcanvas.getContext('2d',{alpha:false}):null;
 const ui={hp:$('hpFill'),stamina:$('staminaFill'),xp:$('xpFill'),level:$('levelText'),zone:$('zoneText'),objective:$('objectiveText'),questTitle:$('questTitle'),questProgress:$('questProgress'),toast:$('toast'),modal:$('modal'),modalTitle:$('modalTitle'),modalBody:$('modalBody'),prompt:$('interactPrompt'),promptText:$('interactText'),badge:$('zoneBadge'),loading:$('loadingOverlay'),loadText:$('loadText'),loadFill:$('loadFill'),herb:$('herbCount'),wood:$('woodCount'),ore:$('oreCount'),gold:$('goldCount'),perf:$('perfMonitor'),perfFps:$('perfFps'),perfTarget:$('perfTarget'),perfFrame:$('perfFrame'),perfRender:$('perfRender'),perfScale:$('perfScale'),perfDevice:$('perfDevice'),lootTicker:$('lootTicker'),perfPill:$('perfPill'),perfPillFps:$('perfPillFps'),perfPillMs:$('perfPillMs'),netPill:$('netPill')};
 
 // Убран жесткий return, чтобы можно было тестировать на ПК мышкой.
@@ -118,7 +123,7 @@ function questHint(){
  return q.steps[Math.min(s.step,q.steps.length-1)];
 }
 
-function currentObjective(){const q=quest(),s=questState(),step=q.steps[Math.min(s.step,q.steps.length-1)];if(q.id==='mist'&&s.step===1)return `Соберите траву: ${s.herb}/3`;if(q.id==='mist'&&s.step===2)return `Победите налётчиков: ${s.kills}/4`;if(q.id==='stone'&&s.step===1)return `Соберите руду: ${s.ore}/2`;if(q.id==='ash'&&s.step===1)return `Соберите древесину: ${s.wood}/4`;if(q.id==='ash'&&s.step===2)return `Победите врагов: ${s.kills}/6`;return step}
+function currentObjective(){const q=quest(),s=questState(),step=q.steps[Math.min(s.step,q.steps.length-1)];if(q.id==='mist'&&s.step===1)return `Соберите траву: ${s.herb}/3`;if(q.id==='mist'&&s.step===2)return `Победите налётчиков: ${s.kills}/4`;if(q.id==='stone'&&s.step===1)return `Соберите руду: ${s.ore}/2`;if(q.id==='stone'&&s.step===2)return `Победите стража: ${s.guardian}/1`;if(q.id==='ash'&&s.step===1)return `Соберите древесину: ${s.wood}/4`;if(q.id==='ash'&&s.step===2)return `Победите врагов: ${s.kills}/6`;return step}
 function advanceQuest(reason){const q=quest(),s=questState();if(q.id==='mist'){if(s.step===0&&reason==='scout')s.step=1;else if(s.step===1&&s.herb>=3)s.step=2;else if(s.step===2&&s.kills>=4)s.step=3;else if(s.step===3&&reason==='portal')s.step=0}else if(q.id==='stone'){if(s.step===0&&reason==='scout')s.step=1;else if(s.step===1&&s.ore>=2)s.step=2;else if(s.step===2&&s.guardian>=1)s.step=3;else if(s.step===3&&reason==='portal')s.step=0}else if(q.id==='ash'){if(s.step===0&&reason==='scout')s.step=1;else if(s.step===1&&s.wood>=4)s.step=2;else if(s.step===2&&s.kills>=6)s.step=3;else if(s.step===3&&reason==='portal')s.step=0}save()}
 function addEnemy(type,x,y){const cap=entities.filter(e=>e.kind==='enemy'&&e.type!=='guardian').length;if(type!=='guardian'&&cap>=profile.enemyCap)return;const e={kind:'enemy',type,x,y,r:18,hp:100,maxHp:100,speed:76,damage:10,cd:0,hit:0,seed:rng(x+y),stun:0};if(type==='raider')Object.assign(e,{r:21,hp:140,maxHp:140,speed:82,damage:12});if(type==='boar')Object.assign(e,{r:19,hp:95,maxHp:95,speed:108,damage:9});if(type==='guardian')Object.assign(e,{r:40,hp:620,maxHp:620,speed:48,damage:22});entities.push(e)}
 function addResource(kind,x,y){entities.push({kind:'resource',type:kind,x,y,r:20,hp:1,maxHp:1,pulse:rng(x*y)*Math.PI*2})}
@@ -388,9 +393,12 @@ function bindTap(el,fn){
 }
 
 const joyEl=$('joystick'),stick=$('stick'),joy={id:null,x:0,y:0};
+const keys={w:false,a:false,s:false,d:false,up:false,down:false,left:false,right:false,shift:false,space:false,e:false,b:false};
+let mouseAim=false,lastMouseX=0,lastMouseY=0;
 
 function resetJoy(){joy.id=null;joy.x=0;joy.y=0;if(stick)stick.style.transform='translate(0,0)'}
 function setJoystickFromPoint(clientX,clientY){
+ if(!joyEl)return;
  const r=joyEl.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,max=Math.max(1,Math.min(r.width,r.height)*.36);
  let dx=clientX-cx,dy=clientY-cy,l=Math.hypot(dx,dy);
  if(l>max){dx=dx/l*max;dy=dy/l*max}
@@ -398,6 +406,17 @@ function setJoystickFromPoint(clientX,clientY){
  if(stick)stick.style.transform=`translate(${dx}px,${dy}px)`;
 }
 function moveJoy(e){setJoystickFromPoint(e.clientX,e.clientY)}
+function updateKeyboardJoy(){
+ if(joy.id!==null)return; // touch joystick has priority
+ let kx=0,ky=0;
+ if(keys.a||keys.left)kx-=1;
+ if(keys.d||keys.right)kx+=1;
+ if(keys.w||keys.up)ky-=1;
+ if(keys.s||keys.down)ky+=1;
+ const mag=Math.hypot(kx,ky);
+ if(mag>0.01){joy.x=kx/mag;joy.y=ky/mag}else{joy.x=0;joy.y=0}
+}
+
 if(joyEl){
  joyEl.addEventListener('pointerdown',e=>{
   if(e.button!==undefined&&e.button!==0&&e.pointerType==='mouse')return;
@@ -412,29 +431,101 @@ if(joyEl){
  joyEl.addEventListener('lostpointercapture',endJoy,{passive:true});
 }
 
-// Look input — mobile only, and never from the joystick area.
-canvas.addEventListener('pointerdown',e=>{
-  if(e.pointerType==='mouse')return;
+// Look / aim input — works for both touch (right side) and mouse
+if(canvas){
+ canvas.addEventListener('pointerdown',e=>{
+  if(e.pointerType==='mouse'){
+   if(e.button===0){ // LMB attack or interact
+    if(e.target===canvas){
+     // Aim toward mouse
+     const rect=canvas.getBoundingClientRect();
+     const mx=e.clientX-rect.left,my=e.clientY-rect.top;
+     const worldX=player.x+(mx-W/2);
+     const worldY=player.y+(my-H/2)/0.82;
+     player.dir=Math.atan2(worldY-player.y,worldX-player.x);
+     attack();
+    }
+   }
+   return;
+  }
+  // Touch look only on right half
   if(e.clientX<W*.43)return;
   look.ids.add(e.pointerId);
   look.lastX=e.clientX;
   canvas.setPointerCapture?.(e.pointerId);
-},{passive:false});
-canvas.addEventListener('pointermove',e=>{
+ },{passive:false});
+ canvas.addEventListener('pointermove',e=>{
+  if(e.pointerType==='mouse'){
+   // Continuous mouse aim while holding RMB or always relative? Use absolute aim for simplicity on move
+   if(mouseAim||e.buttons&2){
+    const rect=canvas.getBoundingClientRect();
+    const mx=e.clientX-rect.left,my=e.clientY-rect.top;
+    const worldX=player.x+(mx-W/2);
+    const worldY=player.y+(my-H/2)/0.82;
+    player.dir=Math.atan2(worldY-player.y,worldX-player.x);
+   }
+   return;
+  }
   if(!look.ids.has(e.pointerId))return;
   e.preventDefault();
   const dx=e.clientX-look.lastX;
   look.lastX=e.clientX;
   player.dir+=dx*.008;
+ },{passive:false});
+ ['pointerup','pointercancel'].forEach(ev=>canvas.addEventListener(ev,e=>{
+  look.ids.delete(e.pointerId);
+  if(e.pointerType==='mouse'&&e.button===2)mouseAim=false;
+ },{passive:false}));
+ // Right mouse for continuous aim
+ canvas.addEventListener('contextmenu',e=>e.preventDefault());
+ canvas.addEventListener('mousedown',e=>{if(e.button===2){mouseAim=true;e.preventDefault()}});
+ canvas.addEventListener('mouseup',e=>{if(e.button===2)mouseAim=false});
+}
+
+// Keyboard controls (desktop)
+addEventListener('keydown',e=>{
+ if(e.repeat)return;
+ const k=e.key.toLowerCase();
+ if(k==='w'||k==='ц')keys.w=true;
+ if(k==='a'||k==='ф')keys.a=true;
+ if(k==='s'||k==='ы')keys.s=true;
+ if(k==='d'||k==='в')keys.d=true;
+ if(k==='arrowup')keys.up=true;
+ if(k==='arrowdown')keys.down=true;
+ if(k==='arrowleft')keys.left=true;
+ if(k==='arrowright')keys.right=true;
+ if(k==='shift'){keys.shift=true;dodge()}
+ if(k===' '||k==='space'){keys.space=true;attack()}
+ if(k==='e'||k==='у'){keys.e=true;interact()}
+ if(k==='b'||k==='и'){keys.b=true;player.blocking=true}
+ if(k==='1')skill(1);
+ if(k==='2')skill(2);
+ if(k==='3')skill(3);
+ if(k==='i'||k==='ш')openInventory();
+ if(k==='escape'||k==='m'||k==='ь')openMenu();
+ if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright',' ','e','b','1','2','3'].includes(k)||k.startsWith('arrow'))e.preventDefault();
 },{passive:false});
-['pointerup','pointercancel'].forEach(ev=>canvas.addEventListener(ev,e=>look.ids.delete(e.pointerId),{passive:false}));
+addEventListener('keyup',e=>{
+ const k=e.key.toLowerCase();
+ if(k==='w'||k==='ц')keys.w=false;
+ if(k==='a'||k==='ф')keys.a=false;
+ if(k==='s'||k==='ы')keys.s=false;
+ if(k==='d'||k==='в')keys.d=false;
+ if(k==='arrowup')keys.up=false;
+ if(k==='arrowdown')keys.down=false;
+ if(k==='arrowleft')keys.left=false;
+ if(k==='arrowright')keys.right=false;
+ if(k==='shift')keys.shift=false;
+ if(k===' '||k==='space')keys.space=false;
+ if(k==='e'||k==='у')keys.e=false;
+ if(k==='b'||k==='и'){keys.b=false;player.blocking=false}
+});
 
 document.querySelectorAll('.action').forEach(btn=>{
   const a=btn.dataset.act;
   if(a==='block'){
     let blockPointer=null;
     btn.addEventListener('pointerdown',e=>{
-      if(e.pointerType==='mouse')return;
       e.preventDefault();e.stopPropagation();
       blockPointer=e.pointerId;player.blocking=true;
       btn.setPointerCapture?.(e.pointerId);
@@ -483,10 +574,11 @@ function updateEnemyPatrol(dt){
 }
 
 function update(dt){
- for(let i=entities.length-1;i>=0;i--){const e=entities[i];if(e.kind==='enemy'&&e.hp<=0&&e._corpseUntil<=time)entities.splice(i,1)}time+=dt;player.attackCd=Math.max(0,player.attackCd-dt);player.comboTimer=Math.max(0,player.comboTimer-dt);if(player.comboTimer===0)player.combo=0;player.stamina=clamp(player.stamina+(player.blocking?12:24)*dt,0,player.maxStamina);const moving=Math.hypot(joy.x,joy.y)>.06;const dodgeUntil=Number.isFinite(player.dodgeUntil)?player.dodgeUntil:0;player.dodgeUntil=dodgeUntil;
- // ИСПРАВЛЕНИЕ 2: Заменил несуществующий player.dodging на player.dodgeUntil
+ for(let i=entities.length-1;i>=0;i--){const e=entities[i];if(e.kind==='enemy'&&e.hp<=0&&e._corpseUntil<=time)entities.splice(i,1)}time+=dt;player.attackCd=Math.max(0,player.attackCd-dt);player.comboTimer=Math.max(0,player.comboTimer-dt);if(player.comboTimer===0)player.combo=0;player.stamina=clamp(player.stamina+(player.blocking?12:24)*dt,0,player.maxStamina);
+ updateKeyboardJoy();
+ const moving=Math.hypot(joy.x,joy.y)>.06;const dodgeUntil=Number.isFinite(player.dodgeUntil)?player.dodgeUntil:0;player.dodgeUntil=dodgeUntil;
  const speed=player.speed*(player.blocking?.58:1)*(player.dodgeUntil>time?.9:1);
- if(moving&&time>=dodgeUntil){player.x=clamp(player.x+joy.x*speed*dt,70,WORLD.w-70);player.y=clamp(player.y+joy.y*speed*dt,70,WORLD.h-70);player.dir=Math.atan2(joy.y,joy.x)}for(const e of entities){if(e.hp<=0||e.kind!=='enemy')continue;e.cd=Math.max(0,e.cd-dt);e.hit=Math.max(0,e.hit-dt);const d=dist(player,e);if(d<620){const a=Math.atan2(player.y-e.y,player.x-e.x);if(d>e.r+player.r+8){e.x=clamp(e.x+Math.cos(a)*e.speed*dt,40,WORLD.w-40);e.y=clamp(e.y+Math.sin(a)*e.speed*dt,40,WORLD.h-40)}else if(e.cd<=0){e.cd=e.type==='guardian'?1.05:1.35;if(time>=player.dodgeUntil){const dmg=player.blocking?Math.ceil(e.damage*.26):e.damage;player.hp=Math.max(0,player.hp-dmg);burst(player.x,player.y,'#e06d68',7,80);if(player.hp<=0){player.hp=player.maxHp;player.x=zones[zoneId].camp.x;player.y=zones[zoneId].camp.y;toast('Вы возвращены к лагерю')}}}}}
+ if(moving&&time>=dodgeUntil){player.x=clamp(player.x+joy.x*speed*dt,70,WORLD.w-70);player.y=clamp(player.y+joy.y*speed*dt,70,WORLD.h-70);if(joy.id!==null)player.dir=Math.atan2(joy.y,joy.x);else if(!mouseAim&&Math.hypot(joy.x,joy.y)>0.1)player.dir=Math.atan2(joy.y,joy.x)}for(const e of entities){if(e.hp<=0||e.kind!=='enemy')continue;e.cd=Math.max(0,e.cd-dt);e.hit=Math.max(0,e.hit-dt);const d=dist(player,e);if(d<620){const a=Math.atan2(player.y-e.y,player.x-e.x);if(d>e.r+player.r+8){e.x=clamp(e.x+Math.cos(a)*e.speed*dt,40,WORLD.w-40);e.y=clamp(e.y+Math.sin(a)*e.speed*dt,40,WORLD.h-40)}else if(e.cd<=0){e.cd=e.type==='guardian'?1.05:1.35;if(time>=player.dodgeUntil){const dmg=player.blocking?Math.ceil(e.damage*.26):e.damage;player.hp=Math.max(0,player.hp-dmg);burst(player.x,player.y,'#e06d68',7,80);if(player.hp<=0){player.hp=player.maxHp;player.x=zones[zoneId].camp.x;player.y=zones[zoneId].camp.y;toast('Вы возвращены к лагерю')}}}}}
 updateEnemyPatrol(dt);
 for(let i=projectiles.length-1;i>=0;i--){const p=projectiles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;let hit=false;for(const e of entities){if(e.hp>0&&e.kind==='enemy'&&dist(p,e)<e.r+7){hitTarget(e,p.damage);hit=true;break}}if(hit||p.life<=0)projectiles.splice(i,1)}for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.94;p.vy*=.94;p.life-=dt;if(p.life<=0)particles.splice(i,1)}for(let i=lootDrops.length-1;i>=0;i--){lootDrops[i].life-=dt;if(lootDrops[i].life<=0)lootDrops.splice(i,1)}for(let i=floatingTexts.length-1;i>=0;i--){floatingTexts[i].y-=28*dt;floatingTexts[i].life-=dt;if(floatingTexts[i].life<=0)floatingTexts.splice(i,1)}
  if(entities.length>90)entities=entities.filter(e=>e.kind==='resource'||e.hp>0);
