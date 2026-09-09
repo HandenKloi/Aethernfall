@@ -1,76 +1,195 @@
-/* Aethernfall 3.4.0 — shared raster atlases; all rectangles use source pixels. */
+/* Aethernfall 3.5.0 — shared raster atlases; all rectangles use source pixels. */
 (() => {
   'use strict';
+
   const sheets = {
-    characters: {src:'./assets/art/characters.webp', width:1536, height:1024},
-    objects: {src:'./assets/art/objects.webp', width:1448, height:1086},
-    terrain: {src:'./assets/art/terrain.webp', width:1254, height:1254}
+    characters: {
+      src: './assets/art/characters.webp',
+      width: 1536,
+      height: 1024
+    },
+    objects: {
+      src: './assets/art/objects.webp',
+      width: 1448,
+      height: 1086
+    },
+    terrain: {
+      src: './assets/art/terrain.webp',
+      width: 1254,
+      height: 1254
+    }
   };
   const sprites = {
-    hero: ['characters',121,8,271,494], heroBack:['characters',621,12,274,491],
-    scout:['characters',1127,10,279,488], raider:['characters',126,510,267,506],
-    boar:['characters',534,561,440,425], guardian:['characters',1032,498,478,518],
-    pine:['objects',69,10,241,350], oak:['objects',370,20,344,333],
-    rock:['objects',751,98,316,250], house:['objects',1121,14,299,339],
-    ruins:['objects',57,361,278,360], shrine:['objects',398,372,293,349],
-    herb:['objects',738,394,323,305], wood:['objects',1113,437,310,257],
-    ore:['objects',54,761,281,291], sword:['objects',397,731,293,329],
-    armor:['objects',757,733,300,330], potion:['objects',1172,740,204,303]
+    hero: ['characters', 121, 8, 271, 494],
+    heroBack: ['characters', 621, 12, 274, 491],
+    scout: ['characters', 1127, 10, 279, 488],
+    raider: ['characters', 126, 510, 267, 506],
+    boar: ['characters', 534, 561, 440, 425],
+    guardian: ['characters', 1032, 498, 478, 518],
+    pine: ['objects', 69, 10, 241, 350],
+    oak: ['objects', 370, 20, 344, 333],
+    rock: ['objects', 751, 98, 316, 250],
+    house: ['objects', 1121, 14, 299, 339],
+    ruins: ['objects', 57, 361, 278, 360],
+    shrine: ['objects', 398, 372, 293, 349],
+    herb: ['objects', 738, 394, 323, 305],
+    wood: ['objects', 1113, 437, 310, 257],
+    ore: ['objects', 54, 761, 281, 291],
+    sword: ['objects', 397, 731, 293, 329],
+    armor: ['objects', 757, 733, 300, 330],
+    potion: ['objects', 1172, 740, 204, 303]
   };
-  const images = {}, surfaces = {};
+  const images = {},
+    surfaces = {};
   let loading;
   function makeSurfaces(image) {
     // Mirrored repetitions share edge pixels, avoiding hard terrain tile seams.
-    ['grass','stone','dirt','water'].forEach((name,index) => {
+    ['grass', 'stone', 'dirt', 'water'].forEach((name, index) => {
       const tile = document.createElement('canvas');
       tile.width = tile.height = 384;
       const c = tile.getContext('2d');
-      for(let y=0;y<2;y++) for(let x=0;x<2;x++) {
-        c.save(); c.translate(x?384:0,y?384:0); c.scale(x?-1:1,y?-1:1);
-        c.drawImage(image,(index%2)*627,Math.floor(index/2)*627,627,627,0,0,192,192);
+      for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) {
+        c.save();
+        c.translate(x ? 384 : 0, y ? 384 : 0);
+        c.scale(x ? -1 : 1, y ? -1 : 1);
+        c.drawImage(image, index % 2 * 627, Math.floor(index / 2) * 627, 627, 627, 0, 0, 192, 192);
         c.restore();
       }
       surfaces[name] = tile;
     });
   }
-  function load(changed=()=>{}) {
-    if(loading)return loading;
-    loading = Promise.all(Object.entries(sheets).map(([name,sheet]) => new Promise(resolve => {
+  function load(changed = () => {}) {
+    if (loading) return loading;
+    loading = Promise.all(Object.entries(sheets).map(([name, sheet]) => new Promise(resolve => {
       const image = new Image();
       let settled = false;
-      const finish = () => { if(!settled){settled=true;clearTimeout(timer);resolve();} };
-      const timer = setTimeout(finish,2500);
+      const finish = () => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve();
+        }
+      };
+      const timer = setTimeout(finish, 2500);
       image.decoding = 'async';
       image.onload = () => {
         try {
-          if(image.naturalWidth!==sheet.width||image.naturalHeight!==sheet.height)throw Error('Atlas size: '+name);
-          images[name]=image;
-          if(name==='terrain')makeSurfaces(image);
+          if (image.naturalWidth !== sheet.width || image.naturalHeight !== sheet.height) throw Error('Atlas size: ' + name);
+          images[name] = image;
+          if (name === 'terrain') makeSurfaces(image);
           changed();
-        } catch(error) { console.warn('Aethernfall art',error); }
-        image.onload=image.onerror=null; finish();
+        } catch (error) {
+          console.warn('Aethernfall art', error);
+        }
+        image.onload = image.onerror = null;
+        finish();
       };
-      image.onerror = () => { image.onload=image.onerror=null;finish(); };
-      image.src = new URL(sheet.src,document.baseURI).href;
+      image.onerror = () => {
+        image.onload = image.onerror = null;
+        finish();
+      };
+      image.src = new URL(sheet.src, document.baseURI).href;
     })));
     return loading;
   }
-  function draw(ctx,name,x,y,height,flip=false) {
-    const rect=sprites[name];
-    if(!rect||!images[rect[0]])return false;
-    const width=height*rect[3]/rect[4];
-    ctx.save();ctx.translate(x,y);if(flip)ctx.scale(-1,1);
-    ctx.drawImage(images[rect[0]],rect[1],rect[2],rect[3],rect[4],-width/2,-height,width,height);
-    ctx.restore();return true;
+  function draw(ctx, name, x, y, height, flip = false) {
+    const rect = sprites[name];
+    if (!rect || !images[rect[0]]) return false;
+    const width = height * rect[3] / rect[4];
+    ctx.save();
+    ctx.translate(x, y);
+    if (flip) ctx.scale(-1, 1);
+    ctx.drawImage(images[rect[0]], rect[1], rect[2], rect[3], rect[4], -width / 2, -height, width, height);
+    ctx.restore();
+    return true;
   }
   function patterns(ctx) {
-    const result={};for(const [name,tile] of Object.entries(surfaces))result[name]=ctx.createPattern(tile,'repeat');
+    const result = {};
+    for (const [name, tile] of Object.entries(surfaces)) result[name] = ctx.createPattern(tile, 'repeat');
     return result;
   }
+  function weapon(ctx, x, y, height, angle) {
+    const r = sprites.sword;
+    if (!images[r[0]]) return false;
+    const width = height * r[3] / r[4];
+    // The source sword points down-left; anchor at the grip, not the tile edge.
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle - 2.28);
+    ctx.drawImage(images[r[0]], r[1], r[2], r[3], r[4], -width * .82, -height * .17, width, height);
+    ctx.restore();
+    return true;
+  }
+  // A small cutout rig reuses atlas pixels: two legs, torso, head and arms.
+  // Angles stay small at the joins; no image decoding or canvases per frame.
+  function actor(ctx, name, x, y, height, t, walk, action, progress, flip = false, death = 0) {
+    const r = sprites[name];
+    if (!r || !images[r[0]]) return false;
+    const width = height * r[3] / r[4],
+      stride = Math.sin(t * 10) * walk;
+    const pulse = Math.sin(Math.PI * Math.min(1, progress));
+    let arm = stride * .12 + Math.sin(t * 1.8) * .015;
+    const lean = bodyLean(action, progress);
+    if (action === 'attack' || action === 'cast') {
+      arm = -pulse * .26;
+    }
+    if (action === 'gather') {
+      arm = pulse * .14;
+    }
+    if (action === 'drink') {
+      arm = -pulse * .3;
+    }
+    if (action === 'block') {
+      arm = -.2;
+    }
+    ctx.save();
+    ctx.translate(x, y);
+    if (flip) ctx.scale(-1, 1);
+    ctx.rotate(lean + death * 1.35);
+    ctx.scale(1, 1 + Math.sin(t * 2) * .009);
+    const part = (u, v, w, h, angle = 0, px = u + w / 2, py = v) => {
+      ctx.save();
+      ctx.translate((px - .5) * width, (py - 1) * height);
+      ctx.rotate(angle);
+      ctx.drawImage(images[r[0]], r[1] + u * r[3], r[2] + v * r[4], w * r[3], h * r[4], (u - px) * width, (v - py) * height, w * width + .3, h * height + .3);
+      ctx.restore();
+    };
+    if (name === 'boar') {
+      part(0, .72, .5, .28, stride * .12);
+      part(.5, .72, .5, .28, -stride * .12);
+      part(0, 0, 1, .72);
+    } else {
+      part(0, .72, .5, .28, stride * .15);
+      part(.5, .72, .5, .28, -stride * .15);
+      part(.23, .28, .54, .44);
+      part(0, 0, 1, .28, Math.sin(t * 1.5) * .012, .5, .28);
+      part(0, .28, .23, .44, arm, .22, .30);
+      part(.77, .28, .23, .44, -arm, .78, .30);
+    }
+    ctx.restore();
+    return true;
+  }
   function icon(name) {
-    const r=sprites[name];if(!r)return '';
-    const sheet=sheets[r[0]];
+    const r = sprites[name];
+    if (!r) return '';
+    const sheet = sheets[r[0]];
     return `<svg class="assetIcon" aria-hidden="true" viewBox="${r.slice(1).join(' ')}"><image href="${sheet.src}" width="${sheet.width}" height="${sheet.height}"/></svg>`;
   }
-  window.AetherArt={load,draw,patterns,icon,has:name=>!!images[sprites[name]?.[0]],get terrainReady(){return !!surfaces.grass}};
+  function bodyLean(action, progress) {
+    const amount = action === 'attack' || action === 'cast' ? .08 : action === 'gather' ? .14 : action === 'hit' ? -.12 : action === 'dodge' ? -.65 : 0;
+    return Math.sin(Math.PI * Math.min(1, progress)) * amount;
+  }
+  window.AetherArt = {
+    bodyLean,
+    load,
+    draw,
+    actor,
+    weapon,
+    patterns,
+    icon,
+    has: name => !!images[sprites[name]?.[0]],
+    get terrainReady() {
+      return !!surfaces.grass;
+    }
+  };
 })();

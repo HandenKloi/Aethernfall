@@ -761,7 +761,7 @@ html,body {
   touch-action:pan-y;
 }
 .modalBody button {
-  touch-action:manipulation;
+  touch-action:pan-y;
 }
 .card p,.dialogue p {
   font-size:14px;
@@ -900,6 +900,12 @@ button:focus-visible {
 .shopList .card p { font-size: 14px; }
 .devicePresets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .action.use.available { border-color: #e4c76f; background: radial-gradient(circle at 35% 25%, #626341, #24372e); }
+.action.supply { width:56px; height:56px; right:140px; bottom:206px; background:#23463d; }
+.action.supply span { font-size:9px; }
+.action.supply:disabled { opacity:.5; }
+.shopList .card { animation:cardAppear .16s ease-out; }
+@keyframes cardAppear { from { opacity:.6; transform:translateY(4px); } to { opacity:1; transform:none; } }
+@media(prefers-reduced-motion:reduce) { .shopList .card { animation:none; } }
 .assetIcon { display: block; width: 64px; height: 64px; margin-bottom: 8px; overflow: hidden; }
 .shopList .assetIcon { float: right; width: 76px; height: 76px; margin: 0 0 8px 12px; }
 .shopList .card .btn { clear: both; }

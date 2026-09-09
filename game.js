@@ -1,9 +1,72 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '3.4.0';
+  const BUILD_VERSION = '3.5.0';
   const art = window.AetherArt;
-  const itemArt = id => art ? art.icon({healing:'potion',dawnBlade:'sword',wardenArmor:'armor',guardianToken:'armor',emberShard:'ore'}[id] || id) : '';
+  const GEAR = {
+    starterBlade: {
+      slot: 'weapon',
+      name: 'Меч следопыта',
+      damage: 0,
+      icon: 'sword'
+    },
+    dawnBlade: {
+      slot: 'weapon',
+      name: 'Клинок рассвета',
+      damage: 15,
+      icon: 'sword'
+    },
+    starterArmor: {
+      slot: 'armor',
+      name: 'Панцирь следопыта',
+      health: 0,
+      icon: 'armor'
+    },
+    wardenArmor: {
+      slot: 'armor',
+      name: 'Доспех хранителя',
+      health: 40,
+      icon: 'armor'
+    },
+    guardianArmor: {
+      slot: 'armor',
+      name: 'Пластинчатая броня стража',
+      health: 25,
+      icon: 'armor'
+    }
+  };
+  const SUPPLIES = {
+    potion: {
+      name: 'Зелье лечения',
+      hp: 100,
+      stamina: 0,
+      note: 'До 100 здоровья. Не повышает максимум.'
+    },
+    tonic: {
+      name: 'Тоник выносливости',
+      hp: 0,
+      stamina: 60,
+      note: 'До 60 выносливости. Не повышает максимум.'
+    }
+  };
+  const motions = new WeakMap();
+  function animate(actor, action, duration = .45) {
+    motions.set(actor, {
+      action,
+      start: time,
+      duration,
+      x: actor.x,
+      y: actor.y
+    });
+  }
+  const itemArt = id => art ? art.icon({
+    healing: 'potion',
+    tonic: 'potion',
+    dawnBlade: 'sword',
+    wardenArmor: 'armor',
+    guardianToken: 'armor',
+    emberShard: 'ore'
+  }[id] || id) : '';
   const $ = id => document.getElementById(id);
   const canvas = $('game'),
     ctx = canvas.getContext('2d', {
@@ -29,6 +92,8 @@
     modalBody: $('modalBody'),
     actionUse: $('actionUse'),
     actionLabel: $('actionLabel'),
+    supplyLabel: $('supplyLabel'),
+    supplyBtn: $('supplyBtn'),
     badge: $('zoneBadge'),
     loading: $('loadingOverlay'),
     loadText: $('loadText'),
@@ -261,6 +326,15 @@
       armor: 'Панцирь следопыта'
     },
     shopOwned: {},
+    loadout: {
+      weapon: 'starterBlade',
+      armor: 'starterArmor',
+      quick: 'potion'
+    },
+    supplies: {
+      potion: 0,
+      tonic: 0
+    },
     quests: {
       mist: {
         step: 0,
@@ -391,6 +465,7 @@
     if (started && !rafId) if (!globalThis.__AETHER_TEST__) rafId = requestAnimationFrame(renderFrame);
   }
   function resizeViewport() {
+    if ((window.visualViewport?.scale || 1) > 1.01) return;
     resetInput();
     applyGraphics();
     resetFrameLimiter();
@@ -542,7 +617,7 @@
     if (saveBlocked) return false;
     const data = {
       ...saveEnvelope,
-      schemaVersion: 1,
+      schemaVersion: 2,
       version: BUILD_VERSION,
       zoneId,
       player: {
@@ -570,7 +645,7 @@
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw Error('Invalid save');
       saveEnvelope = parsed;
-      if (Number(parsed.schemaVersion) > 1) saveBlocked = true;
+      if (Number(parsed.schemaVersion) > 2) saveBlocked = true;
       const saved = object(parsed.player);
       zoneId = Object.hasOwn(zones, parsed.zoneId) ? parsed.zoneId : zoneId;
       for (const [key, value] of Object.entries(defaults)) if (typeof value === 'number') player[key] = finite(saved[key], value);
@@ -589,6 +664,7 @@
       for (const id of ['dawnBlade', 'wardenArmor']) {
         if (object(saved.shopOwned)[id] === true) player.shopOwned[id] = true;
       }
+      restoreEquipment(saved);
       for (const [key, fields] of Object.entries(defaults.quests)) for (const field of Object.keys(fields)) player.quests[key][field] = Math.floor(finite(object(object(saved.quests)[key])[field], 0, 0, field === 'step' ? 3 : 1e9));
       const config = object(parsed.settings);
       if (Object.hasOwn(QUALITY, config.quality)) settings.quality = config.quality;
@@ -602,6 +678,96 @@
     }
   }
   load();
+  function ownsGear(id) {
+    return id === 'starterBlade' || id === 'starterArmor' || player.shopOwned[id] === true || id === 'guardianArmor' && player.inv.guardianToken > 0;
+  }
+  function restoreEquipment(saved) {
+    const previous = object(saved.loadout);
+    const weapon = player.shopOwned.dawnBlade ? 'dawnBlade' : 'starterBlade';
+    const armor = player.equipment.armor === GEAR.guardianArmor.name && player.inv.guardianToken > 0 ? 'guardianArmor' : player.shopOwned.wardenArmor ? 'wardenArmor' : 'starterArmor';
+    player.loadout = {
+      weapon,
+      armor,
+      quick: 'potion'
+    };
+    for (const slot of ['weapon', 'armor']) if (Object.hasOwn(GEAR, previous[slot]) && GEAR[previous[slot]].slot === slot && ownsGear(previous[slot])) player.loadout[slot] = previous[slot];
+    if (previous.quick === '' || Object.hasOwn(SUPPLIES, previous.quick)) player.loadout.quick = previous.quick;
+    player.supplies = {};
+    for (const id of Object.keys(SUPPLIES)) player.supplies[id] = Math.floor(finite(object(saved.supplies)[id], 0, 0, 9999));
+    for (const slot of ['weapon', 'armor']) if (player.loadout[slot] !== 'starterBlade' && player.loadout[slot] !== 'starterArmor') player.equipment[slot] = GEAR[player.loadout[slot]].name;
+    player.damage = Math.max(1 + (GEAR[player.loadout.weapon].damage || 0), player.damage);
+    player.maxHp = Math.max(1 + (GEAR[player.loadout.armor].health || 0), player.maxHp);
+  }
+  function switchGear(id) {
+    const next = GEAR[id],
+      old = GEAR[player.loadout[next.slot]];
+    player.damage += (next.damage || 0) - (old.damage || 0);
+    player.maxHp += (next.health || 0) - (old.health || 0);
+    player.hp = Math.min(player.hp, player.maxHp);
+    player.loadout[next.slot] = id;
+    player.equipment[next.slot] = next.name;
+  }
+  function equipmentTransaction(change) {
+    const before = JSON.parse(JSON.stringify(player));
+    change();
+    if (!save()) {
+      Object.assign(player, before);
+      toast('Изменение отменено: сохранение недоступно');
+      return false;
+    }
+    updateUI();
+    return true;
+  }
+  function equipItem(id) {
+    if (ui.modal.classList.contains('hidden') || !Object.hasOwn(GEAR, id) || !ownsGear(id)) return false;
+    if (!equipmentTransaction(() => switchGear(id))) return false;
+    openEquipment();
+    toast('Надето: ' + GEAR[id].name);
+    return true;
+  }
+  function selectSupply(id) {
+    if (ui.modal.classList.contains('hidden') || id !== '' && !Object.hasOwn(SUPPLIES, id)) return false;
+    if (!equipmentTransaction(() => player.loadout.quick = id)) return false;
+    openEquipment();
+    return true;
+  }
+  function useSupply() {
+    if (isPaused()) return false;
+    const id = player.loadout.quick,
+      supply = SUPPLIES[id];
+    if (!supply || !(player.supplies[id] > 0)) {
+      toast('Нет расходника: выберите его в экипировке');
+      return false;
+    }
+    if (supply.hp && player.hp >= player.maxHp || supply.stamina && player.stamina >= player.maxStamina) {
+      toast('Восстановление не требуется');
+      return false;
+    }
+    if (!equipmentTransaction(() => {
+      player.supplies[id]--;
+      player.hp = Math.min(player.maxHp, player.hp + supply.hp);
+      player.stamina = Math.min(player.maxStamina, player.stamina + supply.stamina);
+    })) return false;
+    animate(player, 'drink', .65);
+    burst(player.x, player.y, '#92dcc3', 12, 65);
+    toast(supply.name);
+    return true;
+  }
+  function openEquipment() {
+    const gearCards = Object.entries(GEAR).map(([id, item]) => {
+      const owned = ownsGear(id),
+        worn = player.loadout[item.slot] === id;
+      const baseDamage = player.damage - (GEAR[player.loadout.weapon].damage || 0);
+      const baseHp = player.maxHp - (GEAR[player.loadout.armor].health || 0);
+      const stats = item.slot === 'weapon' ? `Урон с оружием: ${baseDamage + (item.damage || 0)} · бонус +${item.damage || 0}<br>Комбо: до +20% · крит: 12%, ×1,5` : `Макс. здоровье: ${baseHp + (item.health || 0)} · бонус +${item.health || 0}<br>Блок снижает входящий урон на 74% (с округлением)`;
+      return `<article class="card">${itemArt(item.icon)}<h3>${item.name}</h3><p>${stats}</p><button class="btn" id="equip-${id}" ${!owned || worn ? 'disabled' : ''}>${worn ? 'Надето' : owned ? 'Надеть' : 'Не получено'}</button></article>`;
+    }).join('');
+    openModal('Экипировка персонажа', `<p class="note">Усиления от уровня и закалки сохраняются при смене оружия. Бонус брони действует, пока она надета.</p><div class="shopList">${gearCards}</div><div class="sectionTitle">БЫСТРЫЙ РАСХОДНИК</div><div class="shopList">${Object.entries(SUPPLIES).map(([id, s]) => `<article class="card">${itemArt('potion')}<h3>${s.name} · ${player.supplies[id]} шт.</h3><p>${s.note}<br>Расход: 1 шт. за применение. Используется кнопкой «Зелье» во время игры.</p><button class="btn" id="supply-${id}" ${player.loadout.quick === id ? 'disabled' : ''}>${player.loadout.quick === id ? 'В быстром слоте' : 'В быстрый слот'}</button></article>`).join('')}</div><button class="btn" id="supply-clear">Освободить быстрый слот</button><button class="btn" id="equipmentBack">Вернуться в сумку</button>`);
+    for (const id of Object.keys(GEAR)) bindTap($('equip-' + id), () => equipItem(id));
+    for (const id of Object.keys(SUPPLIES)) bindTap($('supply-' + id), () => selectSupply(id));
+    bindTap($('supply-clear'), () => selectSupply(''));
+    bindTap($('equipmentBack'), openInventory);
+  }
   function toast(t) {
     if (!ui.toast) return;
     setText(ui.toast, t);
@@ -624,8 +790,9 @@
   }
   function applyGraphics() {
     profile = QUALITY[settings.quality] || QUALITY.medium;
-    W = Math.round(window.visualViewport?.width || innerWidth);
-    H = Math.round(window.visualViewport?.height || innerHeight);
+    const viewportScale = window.visualViewport?.scale || 1;
+    W = Math.round((window.visualViewport?.width || innerWidth) * viewportScale);
+    H = Math.round((window.visualViewport?.height || innerHeight) * viewportScale);
     const dprCap = {
       low: 1,
       medium: 1.25,
@@ -644,7 +811,7 @@
     for (const [k, img] of Object.entries(textureImages)) {
       if (img.complete) patterns[k] = ctx.createPattern(img, 'repeat');
     }
-    if(art)Object.assign(patterns,art.patterns(ctx));
+    if (art) Object.assign(patterns, art.patterns(ctx));
     makeAmbient();
     if (particles.length > profile.particles) particles.length = profile.particles;
     atmosphereGradient = null;
@@ -932,12 +1099,14 @@
     if (!Number.isFinite(e.hp)) e.hp = 0;
     e.hp -= dmg;
     e.hit = .16;
+    animate(e, 'hit', .2);
     burst(e.x, e.y, '#efcfa8', 9, 118);
     if (e.hp <= 0) kill(e);
   }
   function attack() {
     if (player.attackCd > 0 || isPaused()) return;
     player.attackCd = .42;
+    animate(player, 'attack', .42);
     player.combo = player.comboTimer > 0 ? Math.min(3, player.combo + 1) : 1;
     player.comboTimer = .9;
     let target = null,
@@ -975,6 +1144,7 @@
     player.stamina -= 24;
     player.dodgeCd = time + .78;
     player.dodgeUntil = time + .28;
+    animate(player, 'dodge', .28);
     const moving = Math.hypot(joy.x, joy.y) > .08;
     const mx = moving ? joy.x : Math.cos(player.dir),
       my = moving ? joy.y : Math.sin(player.dir),
@@ -991,6 +1161,7 @@
       return;
     }
     player.stamina -= 20;
+    animate(player, n === 3 ? 'drink' : 'cast', .55);
     const a = player.dir;
     if (n === 1) {
       let hits = 0;
@@ -1073,6 +1244,7 @@
     interactionLock = time + .16;
     const hit = nearbyInteraction();
     if (!hit) return;
+    animate(player, 'gather', .5);
     if (hit.type === 'portal') {
       if (!canUsePortal()) {
         toast('Сначала завершите текущую задачу');
@@ -1092,9 +1264,9 @@
       if (!l) return;
       if (l.id === 'coin') player.gold += l.count;else player.inv[l.id] = (player.inv[l.id] || 0) + l.count;
       if (l.id === 'guardianToken') {
-        player.equipment.armor = 'Пластинчатая броня стража';
-        player.maxHp += 25;
-        player.hp = Math.min(player.maxHp, player.hp + 25);
+        const oldMax = player.maxHp;
+        switchGear('guardianArmor');
+        player.hp = Math.min(player.maxHp, player.hp + Math.max(0, player.maxHp - oldMax));
       }
       const text = l.id === 'coin' ? `Золото +${l.count}` : `Получено: ${l.label} ×${l.count}`;
       toast(text);
@@ -1180,12 +1352,15 @@
     updateUI();
   }
   function openInventory() {
-    openModal('Сумка и экипировка', `<button class="btn shopEntry" id="shopEntry">Магазин · ${player.gold} золотых</button><div class="grid"><div class="card">${itemArt('sword')}<h3>Оружие</h3><p>${escapeHTML(player.equipment.weapon)}<br>Урон: <b>${player.damage}</b></p></div><div class="card">${itemArt('armor')}<h3>Броня</h3><p>${escapeHTML(player.equipment.armor)}<br>Макс. здоровье: <b>${player.maxHp}</b></p></div><div class="card"><h3>Ресурсы</h3><p>Древесина: ${player.inv.wood}<br>Руда: ${player.inv.ore}<br>Трава: ${player.inv.herb}</p></div><div class="card"><h3>Валюта</h3><p class="gold">${player.gold} золотых</p><p>Знаки: ${player.inv.guardianToken || 0}<br>Осколки: ${player.inv.emberShard || 0}</p></div></div><div class="sectionTitle">КРАФТ</div><button class="btn" id="craftBtn">Закалить меч · 3 древесины + 2 руды</button><button class="btn" id="potionBtn">Зелье жизни · 3 травы + 1 древесина</button>`);
+    openModal('Сумка и экипировка', `<button class="btn" id="equipmentEntry">Экипировка и расходники</button><button class="btn shopEntry" id="shopEntry">Магазин · ${player.gold} золотых</button><div class="grid"><div class="card">${itemArt('sword')}<h3>Оружие</h3><p>${escapeHTML(player.equipment.weapon)}<br>Урон: <b>${player.damage}</b></p></div><div class="card">${itemArt('armor')}<h3>Броня</h3><p>${escapeHTML(player.equipment.armor)}<br>Макс. здоровье: <b>${player.maxHp}</b></p></div><div class="card"><h3>Ресурсы</h3><p>Древесина: ${player.inv.wood}<br>Руда: ${player.inv.ore}<br>Трава: ${player.inv.herb}</p></div><div class="card"><h3>Валюта</h3><p class="gold">${player.gold} золотых</p><p>Знаки: ${player.inv.guardianToken || 0}<br>Осколки: ${player.inv.emberShard || 0}</p></div></div><div class="card"><h3>Свойства материалов</h3><p>Древесина и руда: закалка, +5 урона за 3 древесины и 2 руды.<br>Трава: изготовление зелий.<br>Знак стража: открывает броню стража (+25 макс. здоровья при ношении).<br>Осколок: коллекционный трофей, боевого бонуса нет.</p></div><div class="sectionTitle">КРАФТ</div><button class="btn" id="brewBtn">Зелье лечения в сумку · 3 травы + 1 древесина · +100 HP при применении</button><button class="btn" id="craftBtn">Закалить меч · 3 древесины + 2 руды</button><button class="btn" id="potionBtn">Эликсир жизни · +12 макс. HP навсегда, полное лечение · 3 травы + 1 древесина</button>`);
     $('craftBtn').disabled = player.inv.wood < 3 || player.inv.ore < 2;
     $('potionBtn').disabled = player.inv.herb < 3 || player.inv.wood < 1;
     bindTap($('craftBtn'), () => craft('blade'));
     bindTap($('potionBtn'), () => craft('potion'));
     bindTap($('shopEntry'), openShop);
+    bindTap($('equipmentEntry'), openEquipment);
+    $('brewBtn').disabled = player.inv.herb < 3 || player.inv.wood < 1;
+    bindTap($('brewBtn'), brewSupply);
   }
   const SHOP_ITEMS = [{
     id: 'herb',
@@ -1209,8 +1384,20 @@
     resource: 'ore',
     count: 2
   }, {
+    id: 'potion',
+    name: 'Зелье лечения',
+    note: 'В сумку: до 100 здоровья при применении. Расход 1 шт.',
+    price: 35,
+    supply: 'potion'
+  }, {
+    id: 'tonic',
+    name: 'Тоник выносливости',
+    note: 'В сумку: до 60 выносливости при применении. Расход 1 шт.',
+    price: 30,
+    supply: 'tonic'
+  }, {
     id: 'healing',
-    name: 'Лечебный настой',
+    name: 'Лечение у торговца',
     note: 'Сразу восстанавливает до 100 здоровья.',
     price: 35,
     heal: 100
@@ -1223,7 +1410,7 @@
   }, {
     id: 'wardenArmor',
     name: 'Доспех хранителя',
-    note: 'Экипируется сразу: +40 к максимальному и текущему здоровью. Один раз.',
+    note: 'Бонус при ношении: +40 макс. здоровья относительно базовой брони. Экипируется сразу. Один раз.',
     price: 450,
     health: 40
   }];
@@ -1231,13 +1418,14 @@
     purchaseReadyAt = 0;
   function unavailableItem(item) {
     if (player.shopOwned[item.id]) return 'Уже куплено';
+    if (item.supply && player.supplies[item.supply] >= 9999) return 'Сумка полна';
     if (item.heal && player.hp >= player.maxHp) return 'Здоровье полное';
     if (player.gold < item.price) return 'Не хватает ' + (item.price - player.gold) + ' золота';
     return '';
   }
   function openShop() {
     openModal('Магазин', `<div class="shopWallet">Золото: <b>${player.gold}</b></div>
-      <p class="note">Предметы и снаряжение применяются сразу. Покупки сохраняются вместе с прогрессом.</p>
+      <p class="note">Снаряжение надевается сразу; его можно сменить в экипировке. Зелья и тоники поступают в сумку. Лечение у торговца применяется сразу.</p>
       <div class="shopList">${SHOP_ITEMS.map(item => `<article class="card">${itemArt(item.id)}<h3>${item.name}</h3><p>${item.note}</p><button class="btn" id="buy-${item.id}" ${unavailableItem(item) ? 'disabled' : ''}>${unavailableItem(item) || 'Купить · ' + item.price + ' золота'}</button></article>`).join('')}</div>
       <button class="btn" id="shopBack">Вернуться в сумку</button>`);
     shopOpen = true;
@@ -1266,21 +1454,27 @@
       },
       shopOwned: {
         ...player.shopOwned
+      },
+      loadout: {
+        ...player.loadout
+      },
+      supplies: {
+        ...player.supplies
       }
     };
     player.gold -= item.price;
     if (item.resource) player.inv[item.resource] += item.count;
+    if (item.supply) player.supplies[item.supply]++;
     if (item.heal) player.hp = Math.min(player.maxHp, player.hp + item.heal);
     if (item.damage) {
-      player.damage += item.damage;
-      player.equipment.weapon = item.name;
       player.shopOwned[id] = true;
+      switchGear(id);
     }
     if (item.health) {
-      player.maxHp += item.health;
-      player.hp += item.health;
-      player.equipment.armor = item.name;
+      const oldMax = player.maxHp;
       player.shopOwned[id] = true;
+      switchGear(id);
+      player.hp = Math.min(player.maxHp, player.hp + Math.max(0, player.maxHp - oldMax));
     }
     if (!save()) {
       Object.assign(player, before);
@@ -1316,13 +1510,18 @@
     openMenu();
   }
   function craft(recipe = 'blade') {
+    const before = JSON.parse(JSON.stringify(player));
     if (recipe === 'blade' && player.inv.wood >= 3 && player.inv.ore >= 2) {
       player.inv.wood -= 3;
       player.inv.ore -= 2;
       player.damage += 5;
-      player.equipment.weapon = 'Закалённый меч следопыта';
+      if (player.loadout.weapon === 'starterBlade') player.equipment.weapon = 'Закалённый меч следопыта';
       gainXP(35);
-      save();
+      if (!save()) {
+        Object.assign(player, before);
+        toast('Крафт отменён: сохранение недоступно');
+        return;
+      }
       closeModal();
       toast('Оружие улучшено: +5 урона');
     } else if (recipe === 'potion' && player.inv.herb >= 3 && player.inv.wood >= 1) {
@@ -1331,10 +1530,25 @@
       player.maxHp += 12;
       player.hp = player.maxHp;
       gainXP(20);
-      save();
+      if (!save()) {
+        Object.assign(player, before);
+        toast('Крафт отменён: сохранение недоступно');
+        return;
+      }
       closeModal();
       toast('Создано зелье жизни · +12 макс. HP');
     } else toast('Недостаточно ресурсов');
+  }
+  function brewSupply() {
+    if (ui.modal.classList.contains('hidden') || player.inv.herb < 3 || player.inv.wood < 1 || player.supplies.potion >= 9999) return false;
+    if (!equipmentTransaction(() => {
+      player.inv.herb -= 3;
+      player.inv.wood--;
+      player.supplies.potion++;
+    })) return false;
+    openInventory();
+    toast('Зелье лечения добавлено в сумку');
+    return true;
   }
   function openMenu() {
     openModal('Настройки · v' + BUILD_VERSION, `<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><div class="sectionTitle">КАЧЕСТВО ГРАФИКИ</div><div class="settingRow"><div class="seg" id="qualitySeg">${['low', 'medium', 'high', 'very-high'].map(q => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}">${q === 'very-high' ? 'Very High' : q[0].toUpperCase() + q.slice(1)}</button>`).join('')}</div><div class="note">Меняет внутреннее разрешение canvas, плотность окружения и лимит частиц, детализацию текстур, тени и туман. Применяется сразу.</div></div><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="settingRow"><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div><div class="note">Лимит управляет реальными отрисованными кадрами. Монитор считает только кадры после update + draw.</div></div><div class="sectionTitle">МОНИТОР ПРОИЗВОДИТЕЛЬНОСТИ</div><button class="btn" id="perfBtn">${perfMonitorEnabled ? 'Выключить frame-time monitor' : 'Включить frame-time monitor'}</button>${devicePanel()}<div class="sectionTitle">СОХРАНЕНИЕ</div><button class="btn" id="saveBtn">Сохранить прогресс</button>`);
@@ -1494,7 +1708,7 @@
       return;
     }
     bindTap(btn, () => {
-      if (a === 'attack') attack();else if (a === 'dodge') dodge();else if (a === 'skill1') skill(1);else if (a === 'skill2') skill(2);else if (a === 'skill3') skill(3);else if (a === 'use') interact();
+      if (a === 'supply') useSupply();else if (a === 'attack') attack();else if (a === 'dodge') dodge();else if (a === 'skill1') skill(1);else if (a === 'skill2') skill(2);else if (a === 'skill3') skill(3);else if (a === 'use') interact();
     });
   });
   bindTap($('inventoryBtn'), openInventory);
@@ -1503,6 +1717,62 @@
   ['gesturestart', 'gesturechange', 'gestureend'].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), {
     passive: false
   }));
+  // Safari can still zoom a viewport that declares user-scalable=no.
+  // Block pinch at capture phase, including inside a scrollable modal.
+  document.addEventListener('touchmove', e => {
+    if (e.touches.length > 1 && e.cancelable) e.preventDefault();
+  }, {
+    passive: false,
+    capture: true
+  });
+  document.addEventListener('dblclick', e => e.preventDefault(), {
+    passive: false,
+    capture: true
+  });
+  let tapStart = null,
+    previousTap = null;
+  document.addEventListener('touchstart', e => {
+    const t = e.touches[0];
+    tapStart = e.touches.length === 1 ? {
+      x: t.clientX,
+      y: t.clientY
+    } : null;
+    if (e.touches.length > 1) previousTap = null;
+  }, {
+    passive: true,
+    capture: true
+  });
+  document.addEventListener('touchend', e => {
+    const t = e.changedTouches[0],
+      now = performance.now();
+    if (!tapStart || e.touches.length || !t || Math.hypot(t.clientX - tapStart.x, t.clientY - tapStart.y) > 12) {
+      tapStart = null;
+      previousTap = null;
+      return;
+    }
+    if (previousTap && now - previousTap.time < 350 && Math.hypot(t.clientX - previousTap.x, t.clientY - previousTap.y) < 24 && e.cancelable) {
+      e.preventDefault();
+      // Preserve the second legitimate button tap when suppressing its native click.
+      const button = e.target.closest?.('button');
+      if (button && !button.disabled && !button.classList.contains('action')) button.click();
+    }
+    previousTap = {
+      x: t.clientX,
+      y: t.clientY,
+      time: now
+    };
+    tapStart = null;
+  }, {
+    passive: false,
+    capture: true
+  });
+  document.addEventListener('touchcancel', () => {
+    tapStart = null;
+    previousTap = null;
+  }, {
+    passive: true,
+    capture: true
+  });
   function updateEnemyPatrol(dt) {
     for (const e of entities) {
       if (e.kind !== 'enemy' || e.hp <= 0) continue;
@@ -1557,12 +1827,15 @@
           e.y = clamp(e.y + Math.sin(a) * e.speed * dt, 40, WORLD.h - 40);
         } else if (e.cd <= 0) {
           e.cd = e.type === 'guardian' ? 1.05 : 1.35;
+          animate(e, 'attack', .4);
           if (time >= player.dodgeUntil) {
             const dmg = player.blocking ? Math.ceil(e.damage * .26) : e.damage;
             player.hp = Math.max(0, player.hp - dmg);
+            animate(player, player.blocking ? 'block' : 'hit', .24);
             addFloatingText('−' + dmg, player.x, player.y - 52, '#ff9690');
             burst(player.x, player.y, '#e06d68', 7, 80);
             if (player.hp <= 0) {
+              animate(player, 'death', .75);
               player.hp = player.maxHp;
               player.x = zones[zoneId].camp.x;
               player.y = zones[zoneId].camp.y;
@@ -1627,6 +1900,9 @@
     setText(ui.wood, player.inv.wood);
     setText(ui.ore, player.inv.ore);
     setText(ui.gold, player.gold);
+    const supplyId = player.loadout.quick;
+    setText(ui.supplyLabel, (supplyId === 'tonic' ? 'ТОНИК' : supplyId ? 'ЗЕЛЬЕ' : 'ПУСТО') + ' · ' + (player.supplies[supplyId] || 0));
+    ui.supplyBtn.disabled = !player.supplies[supplyId];
     const hit = nearbyInteraction();
     ui.actionUse.classList.toggle('available', !!hit);
     setText(ui.actionLabel, hit ? {
@@ -1642,9 +1918,13 @@
   function shadowColor(alpha) {
     return `rgba(0,0,0,${Math.max(.02, alpha * (.25 + profile.shadow * 1.45)).toFixed(3)})`;
   }
-  function groundShadow(x,y,width) {
-    ctx.save();ctx.fillStyle=shadowColor(.3);ctx.beginPath();
-    ctx.ellipse(x,y,width,width*.28,0,0,Math.PI*2);ctx.fill();ctx.restore();
+  function groundShadow(x, y, width) {
+    ctx.save();
+    ctx.fillStyle = shadowColor(.3);
+    ctx.beginPath();
+    ctx.ellipse(x, y, width, width * .28, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
   function screenPos(x, y) {
     return {
@@ -1708,14 +1988,18 @@
     }
   }
   function drawAmbientItem(a) {
-    if(art?.has('pine')){
-      const p=screenPos(a.x,a.y),tree=zoneId==='mistwood';
-      const name=tree?(a.kind<.5?'pine':'oak'):zoneId==='stonevale'?'rock':a.kind<.3?'ruins':'rock';
+    if (art?.has('pine')) {
+      const p = screenPos(a.x, a.y),
+        tree = zoneId === 'mistwood';
+      const name = tree ? a.kind < .5 ? 'pine' : 'oak' : zoneId === 'stonevale' ? 'rock' : a.kind < .3 ? 'ruins' : 'rock';
       ctx.save();
-      if(tree&&Math.abs(a.x-player.x)<85&&a.y>player.y&&a.y-player.y<190)ctx.globalAlpha=.3;
-      groundShadow(p.x,p.y+12,(tree?30:24)*a.scale);
-      art.draw(ctx,name,p.x,p.y+16,(tree?118:50)*a.scale);
-      ctx.restore();return;
+      if (tree && Math.abs(a.x - player.x) < 85 && a.y > player.y && a.y - player.y < 190) ctx.globalAlpha = .3;
+      groundShadow(p.x, p.y + 12, (tree ? 30 : 24) * a.scale);
+      ctx.translate(p.x, p.y + 16);
+      if (tree) ctx.rotate(Math.sin(time * 1.2 + a.x * .01) * .012);
+      art.draw(ctx, name, 0, 0, (tree ? 118 : 50) * a.scale);
+      ctx.restore();
+      return;
     }
     const s = screenPos(a.x, a.y);
     ctx.save();
@@ -1793,9 +2077,11 @@
     ctx.restore();
   }
   function drawCamp(z) {
-    if(art?.has('house')){
-      const p=screenPos(z.camp.x,z.camp.y);groundShadow(p.x,p.y+14,55);
-      art.draw(ctx,'house',p.x,p.y+20,130);return;
+    if (art?.has('house')) {
+      const p = screenPos(z.camp.x, z.camp.y);
+      groundShadow(p.x, p.y + 14, 55);
+      art.draw(ctx, 'house', p.x, p.y + 20, 130);
+      return;
     }
     const s = screenPos(z.camp.x, z.camp.y);
     ctx.save();
@@ -1842,9 +2128,11 @@
     ctx.restore();
   }
   function drawScout(z) {
-    if(art?.has('scout')){
-      const p=screenPos(z.scout.x,z.scout.y);groundShadow(p.x,p.y+14,22);
-      art.draw(ctx,'scout',p.x,p.y+17,82);return;
+    if (art?.has('scout')) {
+      const p = screenPos(z.scout.x, z.scout.y);
+      groundShadow(p.x, p.y + 14, 22);
+      art.actor(ctx, 'scout', p.x, p.y + 17, 82, time, 0, dist(player, z.scout) < 130 ? 'gather' : 'idle', (Math.sin(time * 1.5) + 1) / 2);
+      return;
     }
     const s = screenPos(z.scout.x, z.scout.y);
     ctx.save();
@@ -1908,9 +2196,11 @@
     ctx.restore();
   }
   function drawResource(e) {
-    if(art?.has(e.type)){
-      const p=screenPos(e.x,e.y);groundShadow(p.x,p.y+12,17);
-      art.draw(ctx,e.type,p.x,p.y+16,e.type==='herb'?36:40);return;
+    if (art?.has(e.type)) {
+      const p = screenPos(e.x, e.y);
+      groundShadow(p.x, p.y + 12, 17);
+      art.draw(ctx, e.type, p.x, p.y + 16, e.type === 'herb' ? 36 : 40);
+      return;
     }
     const s = screenPos(e.x, e.y);
     ctx.save();
@@ -1952,14 +2242,25 @@
     ctx.restore();
   }
   function drawEntity(e) {
-    if(art?.has(e.type)){
-      const p=screenPos(e.x,e.y),height=e.type==='guardian'?122:e.type==='boar'?54:80;
-      groundShadow(p.x,p.y+14,e.r*1.15);
-      ctx.save();ctx.globalAlpha=e.hp<=0?clamp((e._corpseUntil-time)/.75,0,1)*.5:e.hit>0?.65:1;
-      const bob=e.hp>0&&dist(player,e)>e.r+player.r+8?Math.sin(time*7+e.seed*6)*1.2:0;
-      art.draw(ctx,e.type,p.x,p.y+17+bob,height,player.x<e.x);
+    if (art?.has(e.type)) {
+      const p = screenPos(e.x, e.y),
+        height = e.type === 'guardian' ? 122 : e.type === 'boar' ? 54 : 80;
+      groundShadow(p.x, p.y + 14, e.r * 1.15);
+      ctx.save();
+      ctx.globalAlpha = e.hp <= 0 ? clamp((e._corpseUntil - time) / .75, 0, 1) * .5 : e.hit > 0 ? .65 : 1;
+      const bob = e.hp > 0 && dist(player, e) > e.r + player.r + 8 ? Math.sin(time * 7 + e.seed * 6) * 1.2 : 0;
+      const motion = motions.get(e),
+        progress = motion ? clamp((time - motion.start) / motion.duration, 0, 1) : 1;
+      const death = e.hp <= 0 ? clamp(1 - (e._corpseUntil - time) / .75, 0, 1) : 0;
+      art.actor(ctx, e.type, p.x, p.y + 17 + bob, height, time + e.seed * 6, e.hp > 0 && dist(player, e) > e.r + player.r + 8 ? 1 : 0, progress < 1 ? motion.action : 'idle', progress, player.x < e.x, death);
       ctx.restore();
-      if(e.hp>0){const width=e.r*2.1;ctx.fillStyle='#111b19';ctx.fillRect(p.x-width/2,p.y-height+10,width,5);ctx.fillStyle=e.type==='guardian'?'#d5b077':'#dc7772';ctx.fillRect(p.x-width/2,p.y-height+10,width*clamp(e.hp/e.maxHp,0,1),5);}
+      if (e.hp > 0) {
+        const width = e.r * 2.1;
+        ctx.fillStyle = '#111b19';
+        ctx.fillRect(p.x - width / 2, p.y - height + 10, width, 5);
+        ctx.fillStyle = e.type === 'guardian' ? '#d5b077' : '#dc7772';
+        ctx.fillRect(p.x - width / 2, p.y - height + 10, width * clamp(e.hp / e.maxHp, 0, 1), 5);
+      }
       return;
     }
     const s = screenPos(e.x, e.y);
@@ -2002,17 +2303,57 @@
     ctx.restore();
   }
   function drawPlayer() {
-    if(art?.has('hero')){
-      const p=screenPos(player.x,player.y),moving=Math.hypot(joy.x,joy.y)>.08;
-      groundShadow(p.x,p.y+15,24);
-      ctx.save();if(time<player.dodgeUntil)ctx.globalAlpha=.68;
-      art.draw(ctx,Math.sin(player.dir)<-.3?'heroBack':'hero',p.x,p.y+18+(moving?Math.sin(time*12)*1.6:0),88,Math.cos(player.dir)<0);
+    if (art?.has('hero')) {
+      const p = screenPos(player.x, player.y),
+        moving = Math.hypot(joy.x, joy.y) > .08;
+      const motion = motions.get(player),
+        progress = motion ? clamp((time - motion.start) / motion.duration, 0, 1) : 1;
+      const action = progress < 1 ? motion.action : player.blocking ? 'block' : 'idle';
+      if (action === 'dodge') {
+        const start = screenPos(motion.x, motion.y),
+          ease = 1 - Math.pow(1 - progress, 3);
+        p.x = start.x + (p.x - start.x) * ease;
+        p.y = start.y + (p.y - start.y) * ease;
+      }
+      if (action === 'death') {
+        const fallen = screenPos(motion.x, motion.y);
+        ctx.save();
+        ctx.globalAlpha = 1 - progress;
+        art.actor(ctx, 'hero', fallen.x, fallen.y + 18, 88, time, 0, 'idle', 1, false, progress);
+        ctx.restore();
+      }
+      groundShadow(p.x, p.y + 15, 24);
+      ctx.save();
+      if (time < player.dodgeUntil) ctx.globalAlpha = .68;
+      if (action === 'death') ctx.globalAlpha = progress;
+      art.actor(ctx, Math.sin(player.dir) < -.3 ? 'heroBack' : 'hero', p.x, p.y + 18 + (moving ? Math.sin(time * 12) * 1.6 : 0), 88, time, moving ? 1 : 0, action, progress, Math.cos(player.dir) < 0);
+      const lean = art.bodyLean(action, progress),
+        facing = Math.cos(player.dir) < 0 ? -1 : 1;
+      if (player.loadout.armor !== 'starterArmor') {
+        ctx.save();
+        ctx.translate(p.x, p.y + 18);
+        ctx.scale(facing, 1);
+        ctx.rotate(lean);
+        art.draw(ctx, 'armor', 0, -40, 24);
+        ctx.restore();
+      }
       ctx.restore();
-      // Directional weapon remains a separate layer for aiming and attack feedback.
-      ctx.save();ctx.translate(p.x,p.y-4);ctx.rotate(player.dir);
-      ctx.strokeStyle='#e8d4a0';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(9,0);ctx.lineTo(36,0);ctx.stroke();
-      if(player.blocking){ctx.strokeStyle='#acd5df';ctx.lineWidth=3;ctx.beginPath();ctx.arc(0,0,36,-.95,.95);ctx.stroke();}
-      ctx.restore();return;
+      const swing = action === 'attack' || action === 'cast' ? Math.sin(progress * Math.PI) * 1.8 * (player.combo % 2 ? -1 : 1) : 0;
+      const handX = p.x + facing * (12 * Math.cos(lean) + 36 * Math.sin(lean)),
+        handY = p.y + 18 + 12 * Math.sin(lean) - 36 * Math.cos(lean);
+      if (action === 'drink') art.draw(ctx, 'potion', handX, handY - Math.sin(progress * Math.PI) * 20, 23);else art.weapon(ctx, handX, handY, player.loadout.weapon === 'dawnBlade' ? 48 : 40, player.dir + swing);
+      ctx.save();
+      ctx.translate(p.x, p.y - 4);
+      ctx.rotate(player.dir);
+      if (player.blocking) {
+        ctx.strokeStyle = '#acd5df';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, 36, -.95, .95);
+        ctx.stroke();
+      }
+      ctx.restore();
+      return;
     }
     const s = screenPos(player.x, player.y);
     ctx.save();
@@ -2114,7 +2455,7 @@
     ctx.beginPath();
     ctx.ellipse(0, 30, 150, 36, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (art?.draw(ctx,zoneId==='mistwood'?'house':zoneId==='stonevale'?'ruins':'shrine',0,30,180)) {
+    if (art?.draw(ctx, zoneId === 'mistwood' ? 'house' : zoneId === 'stonevale' ? 'ruins' : 'shrine', 0, 30, 180)) {
       // The existing landmark position is retained.
     } else if (zoneId === 'mistwood') {
       ctx.fillStyle = '#5d4a39';
@@ -2170,7 +2511,7 @@
       ctx.stroke();
     }
     ctx.restore();
-    if (zoneId === 'mistwood' && patterns.water && visible(1940,620,200)) {
+    if (zoneId === 'mistwood' && patterns.water && visible(1940, 620, 200)) {
       const wx = {
           x: 1780,
           y: 620 * .82
@@ -2182,8 +2523,20 @@
       ctx.save();
       ctx.globalAlpha = art?.terrainReady ? .8 : .28;
       ctx.fillStyle = patterns.water;
-      ctx.beginPath();ctx.ellipse((wx.x+ww.x)/2,wx.y,160,44,0,0,Math.PI*2);ctx.fill();
-      ctx.strokeStyle='rgba(157,205,185,.3)';ctx.lineWidth=3;ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse((wx.x + ww.x) / 2, wx.y, 160, 44, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(157,205,185,.3)';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      for (let i = 0; i < 3; i++) {
+        const phase = (time * .25 + i / 3) % 1;
+        ctx.globalAlpha = (1 - phase) * .3;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.ellipse(1940 + (i - 1) * 70, wx.y + (i % 2 ? 12 : -9), 8 + phase * 25, 3 + phase * 7, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
       ctx.restore();
     }
     ctx.restore();
@@ -2191,8 +2544,15 @@
   function drawLoot() {
     for (const l of lootDrops) {
       if (!visible(l.x, l.y, 35)) continue;
-      const asset={guardianToken:'armor',emberShard:'ore'}[l.id]||l.id;
-      if(art?.has(asset)){const p=screenPos(l.x,l.y);art.draw(ctx,asset,p.x,p.y+3+Math.sin(time*4+l.x)*2,25);continue;}
+      const asset = {
+        guardianToken: 'armor',
+        emberShard: 'ore'
+      }[l.id] || l.id;
+      if (art?.has(asset)) {
+        const p = screenPos(l.x, l.y);
+        art.draw(ctx, asset, p.x, p.y + 3 + Math.sin(time * 4 + l.x) * 2, 25);
+        continue;
+      }
       const s = screenPos(l.x, l.y);
       ctx.save();
       ctx.translate(s.x, s.y + Math.sin(time * 4 + l.x) * 3);
@@ -2216,7 +2576,11 @@
     for (const [x, y, k] of list) {
       const s = screenPos(x, y);
       if (s.x < -140 || s.x > W + 140 || s.y < -140 || s.y > H + 140) continue;
-      if(art?.has('house')){groundShadow(s.x,s.y+15,45);art.draw(ctx,k==='SHRINE'||k==='BOSS'?'shrine':k==='RUIN'||k==='MINE'?'ruins':'house',s.x,s.y+20,140);continue;}
+      if (art?.has('house')) {
+        groundShadow(s.x, s.y + 15, 45);
+        art.draw(ctx, k === 'SHRINE' || k === 'BOSS' ? 'shrine' : k === 'RUIN' || k === 'MINE' ? 'ruins' : 'house', s.x, s.y + 20, 140);
+        continue;
+      }
       ctx.save();
       ctx.translate(s.x, s.y);
       ctx.fillStyle = 'rgba(0,0,0,.18)';
@@ -2527,7 +2891,7 @@
       firstPaint();
       ui.loadFill.style.width = '15%';
       setTimeout(hideLoading, 220);
-      await Promise.all([loadTextures(),art?.load(()=>applyGraphics())]);
+      await Promise.all([loadTextures(), art?.load(() => applyGraphics())]);
       applyGraphics();
       drawWorld();
       drawMap();
@@ -2583,6 +2947,11 @@
       openMenu,
       openShop,
       buyItem,
+      openEquipment,
+      equipItem,
+      selectSupply,
+      useSupply,
+      brewSupply,
       applyPreset,
       suspend,
       resume,
