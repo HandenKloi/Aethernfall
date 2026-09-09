@@ -1,53 +1,32 @@
-const CACHE_NAME='aethernfall-v34';
-const CORE=['./','./index.html','./style.css?v=3400','./game.js?v=3400','./manifest.json?v=3400'];
+'use strict';
 
-self.addEventListener('install',event=>{
- event.waitUntil(
-  caches.open(CACHE_NAME)
-   .then(cache=>cache.addAll(CORE).catch(()=>{}))
-   .then(()=>self.skipWaiting())
- );
+const VERSION = '3.2.0';
+// Scope isolates caches of different GitHub Pages repositories on the same origin.
+const PREFIX = 'aethernfall:' + self.registration.scope + ':';
+const CACHE_NAME = PREFIX + VERSION;
+const CORE = ['./', './index.html', './style.css?v=' + VERSION, './game.js?v=' + VERSION, './manifest.json?v=' + VERSION, './assets/icon-192.png', './assets/icon-512.png', ...['grass', 'dirt', 'stone', 'water', 'wood', 'foliage', 'rune'].map(n => './assets/textures/' + n + '.png')];
+self.addEventListener('install', event => {
+  // Reject a partial installation; the previous worker stays usable.
+  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(CORE.map(url => new Request(new URL(url, self.registration.scope), {
+    cache: 'reload'
+  })))));
 });
-
-self.addEventListener('activate',event=>{
- event.waitUntil(
-  caches.keys()
-   .then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k))))
-   .then(()=>self.clients.claim())
- );
+self.addEventListener('message', event => {
+  if (event.data?.type === 'ACTIVATE') event.waitUntil(self.skipWaiting());
 });
-
-self.addEventListener('fetch',event=>{
- const req=event.request;
- if(req.method!=='GET')return;
-
- const url=new URL(req.url);
- const isApp=url.pathname.endsWith('/')||
-  /\/(index\.html|game\.js|style\.css|manifest\.json)$/.test(url.pathname);
-
- if(isApp){
-  event.respondWith(
-   fetch(req,{cache:'no-store'}).then(res=>{
-    if(!res.ok)throw new Error(`HTTP ${res.status}`);
-    const copy=res.clone();
-    caches.open(CACHE_NAME).then(c=>c.put(req,copy));
-    return res;
-   }).catch(()=>caches.match(req).then(r=>r||caches.match('./index.html')))
-  );
-  return;
- }
-
- if(/\.(png|jpg|jpeg|webp|svg|ico)$/i.test(url.pathname)){
-  event.respondWith(
-   caches.match(req).then(hit=>{
-    if(hit)return hit;
-    return fetch(req).then(res=>{
-     if(!res.ok)throw new Error(`HTTP ${res.status}`);
-     const copy=res.clone();
-     caches.open(CACHE_NAME).then(c=>c.put(req,copy));
-     return res;
-    }).catch(()=>caches.match(req));
-   })
-  );
- }
+self.addEventListener('activate', event => {
+  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith(PREFIX) && k !== CACHE_NAME).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+});
+self.addEventListener('fetch', event => {
+  const req = event.request,
+    url = new URL(req.url),
+    scope = new URL(self.registration.scope);
+  if (req.method !== 'GET' || url.origin !== scope.origin || !url.pathname.startsWith(scope.pathname)) return;
+  const relative = url.pathname.slice(scope.pathname.length);
+  if (req.mode === 'navigate' && (relative === '' || relative === 'index.html')) {
+    // Serve one fully installed release, even when the network is unreliable.
+    event.respondWith(caches.open(CACHE_NAME).then(async cache => (await cache.match(new URL('./index.html', scope).href)) || fetch(req)));
+  } else if (CORE.some(path => new URL(path, scope).href === url.href)) {
+    event.respondWith(caches.open(CACHE_NAME).then(async cache => (await cache.match(req)) || fetch(req)));
+  }
 });

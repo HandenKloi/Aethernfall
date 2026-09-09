@@ -1,22 +1,22 @@
-<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Aethernfall v3.2 REALFIX</title>
-<body style="font-family:system-ui;background:#0e1513;color:#eee;padding:20px"><h2>Aethernfall v3.2 REALFIX</h2><pre id=o>Checking…</pre>
-<script>
-Promise.all([fetch('./game.js?v=3200',{cache:'no-store'}),fetch('./sw.js?v=3200',{cache:'no-store'})]).then(async rs=>{
- const j=await rs[0].text(),sw=await rs[1].text();
- const t=[
- ['lastFrame declaration',/\blastFrame\s*=\s*0\b/.test(j)],
- ['joy declared before touch registration',j.indexOf("const joyEl=")<j.indexOf("joyEl.addEventListener('touchstart'")],
- ['pointer joystick',j.includes("joyEl.addEventListener('pointerdown'")],
- ['no touch joystick fallback',!j.includes("joyEl.addEventListener('touchstart'")],
- ['mouse guard is scoped',j.includes("e.pointerType==='mouse'")],
- ['dodge state',j.includes('dodgeUntil:0')&&j.includes('Number.isFinite(player.dodgeUntil)')],
- ['mob movement',j.includes('updateEnemyPatrol(dt)')],
- ['real FPS monitor',j.includes('updatePerformanceMonitor(nowTime,renderMs,frameTimeMs)')],
- ['FPS limiter',j.includes('const interval=1000/fpsTarget')],
- ['no dynamic resolution',!j.includes('dprCap')&&!j.includes('adaptiveScale,')],
- ['service worker',sw.includes('aethernfall-v32')],
- ['three zones',j.includes('mistwood')&&j.includes('stonevale')&&j.includes('ashfield')]
- ];
- o.textContent=t.map(x=>(x[1]?'PASS ':'FAIL ')+x[0]).join('\n')
-}).catch(e=>o.textContent='FAIL '+e)
-</script>
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Aethernfall 3.2.0 — self-test</title>
+<style>body{background:#0e1915;color:#e0e8df;font:15px/1.5 system-ui;margin:20px}button{min-height:48px;padding:8px 18px;background:#345747;color:#fff;border:1px solid #d5bd79;border-radius:10px}pre{white-space:pre-wrap}.pass{color:#b4dda5}.fail{color:#ffb6af}iframe{width:430px;height:932px;position:absolute;left:-10000px;border:0}</style></head>
+<body><h1>Aethernfall 3.2.0</h1><p>Поведенческие тесты выполняются в отдельном кадре с хранилищем в памяти. Игровые сохранения не изменяются. Это не измерение FPS устройства и не проверка установки PWA.</p><button id="run">Запустить проверки</button><pre id="results">Готово к запуску.</pre><iframe id="fixture" title="Изолированная тестовая игра"></iframe>
+<script src="tests/suite.js"></script><script>
+const button=document.getElementById('run'),output=document.getElementById('results'),frame=document.getElementById('fixture');
+button.addEventListener('click',async()=>{
+ button.disabled=true;output.textContent='Проверка…';
+ try{
+  const response=await fetch('./index.html',{cache:'no-store'});if(!response.ok)throw Error('index.html: '+response.status);
+  const html=await response.text();
+  const ready=new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Тестовая игра не загрузилась')),10000);frame.onload=()=>{clearTimeout(timer);resolve()}});
+  frame.srcdoc=html.replace('<head>','<head><base href="'+new URL('./',location.href).href+'"><script>window.__AETHER_TEST__=true;<\/script>');
+  await ready;
+  const api=frame.contentWindow.__AETHER_TEST_API__;if(!api)throw Error('Игра не предоставила тестовый API');
+  const results=runAetherTests(api,frame.contentDocument);
+  api.suspend();
+  output.className=results.every(r=>r.pass)?'pass':'fail';
+  output.textContent=results.map(r=>(r.pass?'PASS ':'FAIL ')+r.name+(r.error?' — '+r.error:'')).join('\n')+'\n\n'+results.filter(r=>r.pass).length+'/'+results.length+' PASS';
+ }catch(error){output.className='fail';output.textContent='FAIL '+error.message}finally{button.disabled=false}
+});
+</script></body></html>

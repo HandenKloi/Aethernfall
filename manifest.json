@@ -2,7 +2,7 @@
   "name": "Aethernfall",
   "short_name": "Aethernfall",
   "id": "./",
-  "start_url": "./?v=30",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "display_override": [
@@ -24,6 +24,8 @@
       "type": "image/png"
     }
   ],
-  "version": "3.0.0",
-  "description": "Aethernfall Mobile 2.5D Action RPG"
+  "version": "3.2.0",
+  "description": "Aethernfall Mobile 2.5D Action RPG",
+  "orientation": "any",
+  "lang": "ru"
 }

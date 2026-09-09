@@ -1,0 +1,200 @@
+{
+  "version": "3.2.0",
+  "files": [
+    {
+      "path": ".nojekyll",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "bytes": 13521,
+      "sha256": "4918795fbf0f05c72e2f396c7559c952fa6c0dfc3ae996d3d3bdd12b68c8ce12"
+    },
+    {
+      "path": "README.md",
+      "bytes": 7752,
+      "sha256": "ad4a4207f5995fa4582bb9db9fe43a2bc16d7b2d42ecc9e7fc7bf6920f7b02f5"
+    },
+    {
+      "path": "assets/icon-192.png",
+      "bytes": 2218,
+      "sha256": "9c5a487451e6ff3ca93e3d80269fbbea69edb1eccc47260fdbcfb39020c65725"
+    },
+    {
+      "path": "assets/icon-512.png",
+      "bytes": 5787,
+      "sha256": "26c6d4190d50929e41a5da6f9e0ac16fe2438b1743217c47c2b1791f0b09e8d2"
+    },
+    {
+      "path": "assets/textures/dirt.png",
+      "bytes": 13912,
+      "sha256": "07a40af566b616d2690da70c41e77ce16303fdda55908a5736faed278767884d"
+    },
+    {
+      "path": "assets/textures/foliage.png",
+      "bytes": 12095,
+      "sha256": "7deb28687078f2611a8cdeaafa6c4f743aa784329a49b950d2f48827826558ce"
+    },
+    {
+      "path": "assets/textures/grass.png",
+      "bytes": 8152,
+      "sha256": "cb8745bde6abd18386363cd9a0cd6f6d43dbc168edf7d9d5fb419e1af1d9d820"
+    },
+    {
+      "path": "assets/textures/rune.png",
+      "bytes": 1230,
+      "sha256": "2284fef6b336d0ed5de48f4b4af33b84895c8a9fb259f76c154328f54cd8c467"
+    },
+    {
+      "path": "assets/textures/stone.png",
+      "bytes": 1572,
+      "sha256": "9ef2e132342b1d973c9f9aabccf9f8df0758d85b2ef253564e8d28f2698ab0f0"
+    },
+    {
+      "path": "assets/textures/water.png",
+      "bytes": 3840,
+      "sha256": "00e19d8a43600cedc93abfc44fdeaba02400a719a1a6952037fc3919e0b385a4"
+    },
+    {
+      "path": "assets/textures/wood.png",
+      "bytes": 595,
+      "sha256": "460fbf705fa6c6d2349394710e4167e251f02835c19d50aa5c0f3b6913552ea1"
+    },
+    {
+      "path": "docs/AUDIT.md",
+      "bytes": 10221,
+      "sha256": "7f04209a6a5da3a49c0c3c458ad19abfa42fdb597c24ebf347200584f167898e"
+    },
+    {
+      "path": "docs/IPHONE_CHECKLIST.md",
+      "bytes": 7838,
+      "sha256": "349ce4dcda46383deefef5f947ac5fff7595ad158d5db27675331d072458d7ec"
+    },
+    {
+      "path": "docs/TEST_REPORT.md",
+      "bytes": 9994,
+      "sha256": "894d99863ca1378a36f13e3ca65cd09ec54770af0a35a3ae85e3ebf3c24c8ad0"
+    },
+    {
+      "path": "docs/history/ITERATION_HISTORY.md",
+      "bytes": 823,
+      "sha256": "a6914fec2bb2c95adcdd261c0195f025475265765761111c370dbff6907f0206"
+    },
+    {
+      "path": "docs/history/ITERATION_HISTORY_2_0_TO_2_7.md",
+      "bytes": 371,
+      "sha256": "387465fda74e70125c71f59c0ade444937f049dde8a8f3d82240189ddd153b08"
+    },
+    {
+      "path": "docs/history/ITERATION_HISTORY_V30.md",
+      "bytes": 583,
+      "sha256": "8a557df71b5c9a97a769b587d20cd2e6943cd3db5feb83a29cd482bfdbc17d4b"
+    },
+    {
+      "path": "docs/history/ITERATION_HISTORY_V31_REALFIX.md",
+      "bytes": 515,
+      "sha256": "751e2d8a8a6db2ff060548a29d8723ae503dadde62cbf787c7f5ee0caaa740f2"
+    },
+    {
+      "path": "docs/history/README_SOURCE.md",
+      "bytes": 335,
+      "sha256": "d5998fa899ac50e8c97a6646d448761019570762b676170591e5a815f8cf659b"
+    },
+    {
+      "path": "docs/history/TEST_REPORT_RC10.md",
+      "bytes": 3127,
+      "sha256": "8d7133ac206f86ec9f78b652aca0830dc65b2a01052afb11dc3328d57d0ba3df"
+    },
+    {
+      "path": "docs/history/TEST_REPORT_RC11.md",
+      "bytes": 1278,
+      "sha256": "f83bfe2f63e4f8fe58c55d4e5ae2537b49dba1a459bfaed79f69b50e2c529118"
+    },
+    {
+      "path": "docs/history/TEST_REPORT_RC20.md",
+      "bytes": 1695,
+      "sha256": "f5f807ee164d1425f178baf45a3852083994f983f618b14a8e1760c3d6b50734"
+    },
+    {
+      "path": "docs/history/TEST_REPORT_V27.md",
+      "bytes": 661,
+      "sha256": "b7e0621d051dc837f1e7bd2a271f822c527fc2867e7f7bbe3dee7fe27ea1b9dd"
+    },
+    {
+      "path": "docs/history/TEST_REPORT_V30.md",
+      "bytes": 863,
+      "sha256": "764c16e725340cd1c7873b191ac52140de2977feaccf5ac17de1d78ccf8aaf18"
+    },
+    {
+      "path": "docs/history/TEST_REPORT_V31_REALFIX.md",
+      "bytes": 690,
+      "sha256": "702392259c59751e4fea215db4af357c4adbee2ac02e8e7115810d011432ca29"
+    },
+    {
+      "path": "game.js",
+      "bytes": 81414,
+      "sha256": "fe7e2ddb4bf81fe94fd543932bf3de177a5178360c320cfa95df92c3dcbdca3a"
+    },
+    {
+      "path": "index.html",
+      "bytes": 4636,
+      "sha256": "ded5ed43d0a3a0ec2b74e6d7f1b36072ba988a628ac02aad5b69bcb3a79411b4"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 614,
+      "sha256": "63a106655dc0e5702eb496d9898cb8a1a7de1875bcab1ff6e90fef99e0536719"
+    },
+    {
+      "path": "selftest.html",
+      "bytes": 2488,
+      "sha256": "2c6822aed5008bded972368a6c2bc80e12db26cb6ce87b86dbc46e7c18f7011e"
+    },
+    {
+      "path": "style.css",
+      "bytes": 16768,
+      "sha256": "29f2d8ee58fd761c8d3055c963bef58d6a7ef196cfdb6c53f4ce033a3cafaffb"
+    },
+    {
+      "path": "sw.js",
+      "bytes": 1957,
+      "sha256": "331178e6c8f648cca5d0d47b256b3424387b5f8515540e2c9b91ecf12eea81d5"
+    },
+    {
+      "path": "tests/check.py",
+      "bytes": 3580,
+      "sha256": "6ae4df3d95068b5c1197b35287622c9fd6fc6af99f79fe355a7c2ceaf0bd2362"
+    },
+    {
+      "path": "tests/results.json",
+      "bytes": 4324,
+      "sha256": "eb41ead0c8cdb6ecf8d96d9998bc612a29c3315267eb57abe0f280595a916f3a"
+    },
+    {
+      "path": "tests/run.cjs",
+      "bytes": 7573,
+      "sha256": "9066e1efdcd61aaf250b2d3dbfc8e2c0bb9c3fd6cf7744c4b37f653435276665"
+    },
+    {
+      "path": "tests/static-results.json",
+      "bytes": 2015,
+      "sha256": "595583989a8d238265bfdb5e9c22d4b5896db1d5be368e4c0964b937a6e5785e"
+    },
+    {
+      "path": "tests/suite.js",
+      "bytes": 11726,
+      "sha256": "bdadf567e0bb5f50f3cea479f1a7a8ff20e94e3cb90450e6ff31ce7c601a7f04"
+    },
+    {
+      "path": "tests/sw-results.json",
+      "bytes": 1339,
+      "sha256": "ad1d509ac3a3ccfd79cdc2931ca5a5c8cfc93261b4aa6d690e5688824d3cb6fd"
+    },
+    {
+      "path": "tests/sw.test.cjs",
+      "bytes": 4500,
+      "sha256": "18bd6979f649cd9cb3c3951ae8c8ab28048d78d5d2c3bba48e5b1a1e52a3680a"
+    }
+  ]
+}
