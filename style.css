@@ -183,25 +183,8 @@ button:active {
 #resourceHud b {
   color:#f0d486;
 }
-#interactPrompt {
-  position:fixed;
-  z-index:12;
-  left:50%;
-  transform:translateX(-50%);
-  display:flex;
-  gap:8px;
-  align-items:center;
-  padding:11px 15px;
-  border-radius:13px;
-  background:rgba(9,16,16,.94);
-  border:1px solid rgba(225,200,127,.34);
-  color:#f6eccf;
-  box-shadow:0 10px 32px rgba(0,0,0,.3);
-}
-.promptIcon {
-  color:#e5c46d;
-  font-size:18px;
-}
+
+
 .hidden {
   display:none!important;
 }
@@ -722,16 +705,8 @@ html,body {
   right:0;
   bottom:174px;
 }
-#interactPrompt {
-  bottom:calc(var(--bottom) + 286px);
-  max-width:calc(100% - var(--left) - var(--right) - 32px);
-  min-height:48px;
-  font-size:13px;
-  white-space:normal;
-}
-#interactPrompt:active {
-  transform:translateX(-50%) scale(.97);
-}
+
+
 .netPill {
   left:calc(var(--left) + 14px);
   top:calc(var(--top) + 179px);
@@ -899,10 +874,7 @@ button:focus-visible {
     height:232px;
     bottom:calc(var(--bottom) + 12px);
   }
-  #interactPrompt {
-    bottom:calc(var(--bottom) + 20px);
-    max-width:240px;
-  }
+  
   .perfMonitor {
     left:calc(var(--left) + 232px);
     right:auto;
@@ -920,3 +892,15 @@ button:focus-visible {
     transition:none!important;
   }
 }
+/* Shop and useful graphics presets, 3.3.0. */
+.shopEntry { margin: 0 0 16px; background: #3a4d36; border-color: #c6ac68; }
+.shopWallet { color: #f0d486; font-size: 18px; padding: 4px 0 10px; }
+.shopList { display: grid; gap: 12px; }
+.shopList .card h3 { font-size: 16px; color: #eee1b9; }
+.shopList .card p { font-size: 14px; }
+.devicePresets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.action.use.available { border-color: #e4c76f; background: radial-gradient(circle at 35% 25%, #626341, #24372e); }
+.assetIcon { display: block; width: 64px; height: 64px; margin-bottom: 8px; overflow: hidden; }
+.shopList .assetIcon { float: right; width: 76px; height: 76px; margin: 0 0 8px 12px; }
+.shopList .card .btn { clear: both; }
+.portrait svg { width: 100%; height: 100%; border-radius: inherit; }

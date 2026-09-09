@@ -1,7 +1,9 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '3.2.0';
+  const BUILD_VERSION = '3.4.0';
+  const art = window.AetherArt;
+  const itemArt = id => art ? art.icon({healing:'potion',dawnBlade:'sword',wardenArmor:'armor',guardianToken:'armor',emberShard:'ore'}[id] || id) : '';
   const $ = id => document.getElementById(id);
   const canvas = $('game'),
     ctx = canvas.getContext('2d', {
@@ -25,8 +27,8 @@
     modal: $('modal'),
     modalTitle: $('modalTitle'),
     modalBody: $('modalBody'),
-    prompt: $('interactPrompt'),
-    promptText: $('interactText'),
+    actionUse: $('actionUse'),
+    actionLabel: $('actionLabel'),
     badge: $('zoneBadge'),
     loading: $('loadingOverlay'),
     loadText: $('loadText'),
@@ -258,6 +260,7 @@
       weapon: 'Меч следопыта',
       armor: 'Панцирь следопыта'
     },
+    shopOwned: {},
     quests: {
       mist: {
         step: 0,
@@ -582,6 +585,10 @@
         const value = object(saved.equipment)[key];
         if (typeof value === 'string') player.equipment[key] = value.slice(0, 160);
       }
+      player.shopOwned = {};
+      for (const id of ['dawnBlade', 'wardenArmor']) {
+        if (object(saved.shopOwned)[id] === true) player.shopOwned[id] = true;
+      }
       for (const [key, fields] of Object.entries(defaults.quests)) for (const field of Object.keys(fields)) player.quests[key][field] = Math.floor(finite(object(object(saved.quests)[key])[field], 0, 0, field === 'step' ? 3 : 1e9));
       const config = object(parsed.settings);
       if (Object.hasOwn(QUALITY, config.quality)) settings.quality = config.quality;
@@ -637,6 +644,7 @@
     for (const [k, img] of Object.entries(textureImages)) {
       if (img.complete) patterns[k] = ctx.createPattern(img, 'repeat');
     }
+    if(art)Object.assign(patterns,art.patterns(ctx));
     makeAmbient();
     if (particles.length > profile.particles) particles.length = profile.particles;
     atmosphereGradient = null;
@@ -1159,22 +1167,153 @@
     requestAnimationFrame(tick);
   }
   function openModal(title, body) {
+    shopOpen = false;
     resetInput();
     setText(ui.modalTitle, title);
     ui.modalBody.innerHTML = body;
     ui.modal.classList.remove('hidden');
   }
   function closeModal() {
+    shopOpen = false;
     ui.modal.classList.add('hidden');
     resetFrameLimiter();
     updateUI();
   }
   function openInventory() {
-    openModal('Сумка и экипировка', `<div class="grid"><div class="card"><h3>Оружие</h3><p>${escapeHTML(player.equipment.weapon)}<br>Урон: <b>${player.damage}</b></p></div><div class="card"><h3>Броня</h3><p>${escapeHTML(player.equipment.armor)}<br>Защита: <b>24</b></p></div><div class="card"><h3>Ресурсы</h3><p>Древесина: ${player.inv.wood}<br>Руда: ${player.inv.ore}<br>Трава: ${player.inv.herb}</p></div><div class="card"><h3>Валюта</h3><p class="gold">${player.gold} золотых</p><p>Знаки: ${player.inv.guardianToken || 0}<br>Осколки: ${player.inv.emberShard || 0}</p></div></div><div class="sectionTitle">КРАФТ</div><button class="btn" id="craftBtn">Закалить меч · 3 древесины + 2 руды</button><button class="btn" id="potionBtn">Зелье жизни · 3 травы + 1 древесина</button>`);
+    openModal('Сумка и экипировка', `<button class="btn shopEntry" id="shopEntry">Магазин · ${player.gold} золотых</button><div class="grid"><div class="card">${itemArt('sword')}<h3>Оружие</h3><p>${escapeHTML(player.equipment.weapon)}<br>Урон: <b>${player.damage}</b></p></div><div class="card">${itemArt('armor')}<h3>Броня</h3><p>${escapeHTML(player.equipment.armor)}<br>Макс. здоровье: <b>${player.maxHp}</b></p></div><div class="card"><h3>Ресурсы</h3><p>Древесина: ${player.inv.wood}<br>Руда: ${player.inv.ore}<br>Трава: ${player.inv.herb}</p></div><div class="card"><h3>Валюта</h3><p class="gold">${player.gold} золотых</p><p>Знаки: ${player.inv.guardianToken || 0}<br>Осколки: ${player.inv.emberShard || 0}</p></div></div><div class="sectionTitle">КРАФТ</div><button class="btn" id="craftBtn">Закалить меч · 3 древесины + 2 руды</button><button class="btn" id="potionBtn">Зелье жизни · 3 травы + 1 древесина</button>`);
     $('craftBtn').disabled = player.inv.wood < 3 || player.inv.ore < 2;
     $('potionBtn').disabled = player.inv.herb < 3 || player.inv.wood < 1;
     bindTap($('craftBtn'), () => craft('blade'));
     bindTap($('potionBtn'), () => craft('potion'));
+    bindTap($('shopEntry'), openShop);
+  }
+  const SHOP_ITEMS = [{
+    id: 'herb',
+    name: 'Лекарственные травы',
+    note: '3 травы для крафта. Покупка не заменяет сбор по квесту.',
+    price: 45,
+    resource: 'herb',
+    count: 3
+  }, {
+    id: 'wood',
+    name: 'Связка древесины',
+    note: '3 древесины для крафта. Покупка не заменяет сбор по квесту.',
+    price: 60,
+    resource: 'wood',
+    count: 3
+  }, {
+    id: 'ore',
+    name: 'Серебряная руда',
+    note: '2 руды для закалки оружия.',
+    price: 90,
+    resource: 'ore',
+    count: 2
+  }, {
+    id: 'healing',
+    name: 'Лечебный настой',
+    note: 'Сразу восстанавливает до 100 здоровья.',
+    price: 35,
+    heal: 100
+  }, {
+    id: 'dawnBlade',
+    name: 'Клинок рассвета',
+    note: 'Экипируется сразу: +15 к текущему урону. Все прежние усиления сохраняются. Один раз.',
+    price: 350,
+    damage: 15
+  }, {
+    id: 'wardenArmor',
+    name: 'Доспех хранителя',
+    note: 'Экипируется сразу: +40 к максимальному и текущему здоровью. Один раз.',
+    price: 450,
+    health: 40
+  }];
+  let shopOpen = false,
+    purchaseReadyAt = 0;
+  function unavailableItem(item) {
+    if (player.shopOwned[item.id]) return 'Уже куплено';
+    if (item.heal && player.hp >= player.maxHp) return 'Здоровье полное';
+    if (player.gold < item.price) return 'Не хватает ' + (item.price - player.gold) + ' золота';
+    return '';
+  }
+  function openShop() {
+    openModal('Магазин', `<div class="shopWallet">Золото: <b>${player.gold}</b></div>
+      <p class="note">Предметы и снаряжение применяются сразу. Покупки сохраняются вместе с прогрессом.</p>
+      <div class="shopList">${SHOP_ITEMS.map(item => `<article class="card">${itemArt(item.id)}<h3>${item.name}</h3><p>${item.note}</p><button class="btn" id="buy-${item.id}" ${unavailableItem(item) ? 'disabled' : ''}>${unavailableItem(item) || 'Купить · ' + item.price + ' золота'}</button></article>`).join('')}</div>
+      <button class="btn" id="shopBack">Вернуться в сумку</button>`);
+    shopOpen = true;
+    for (const item of SHOP_ITEMS) bindTap($('buy-' + item.id), () => buyItem(item.id));
+    bindTap($('shopBack'), openInventory);
+  }
+  function buyItem(id) {
+    const item = SHOP_ITEMS.find(entry => entry.id === id);
+    if (!shopOpen || !item || performance.now() < purchaseReadyAt) return false;
+    const reason = unavailableItem(item);
+    if (reason) {
+      toast(reason);
+      return false;
+    }
+    purchaseReadyAt = performance.now() + 350;
+    const before = {
+      gold: player.gold,
+      damage: player.damage,
+      hp: player.hp,
+      maxHp: player.maxHp,
+      inv: {
+        ...player.inv
+      },
+      equipment: {
+        ...player.equipment
+      },
+      shopOwned: {
+        ...player.shopOwned
+      }
+    };
+    player.gold -= item.price;
+    if (item.resource) player.inv[item.resource] += item.count;
+    if (item.heal) player.hp = Math.min(player.maxHp, player.hp + item.heal);
+    if (item.damage) {
+      player.damage += item.damage;
+      player.equipment.weapon = item.name;
+      player.shopOwned[id] = true;
+    }
+    if (item.health) {
+      player.maxHp += item.health;
+      player.hp += item.health;
+      player.equipment.armor = item.name;
+      player.shopOwned[id] = true;
+    }
+    if (!save()) {
+      Object.assign(player, before);
+      toast('Покупка отменена: не удалось сохранить прогресс');
+      return false;
+    }
+    updateUI();
+    openShop();
+    toast('Куплено: ' + item.name);
+    return true;
+  }
+  function devicePanel() {
+    const names = {
+      low: 'Низкое',
+      medium: 'Среднее',
+      high: 'Высокое',
+      'very-high': 'Очень высокое'
+    };
+    return `<div class="sectionTitle">ИГРА НА УСТРОЙСТВЕ</div>
+      <div class="card"><p>Текущее качество: <b>${names[settings.quality]}</b><br>
+      Лимит отрисовки: <b>${settings.fps} FPS</b><br>Разрешение игры: ${canvas.width} × ${canvas.height}</p></div>
+      <p class="note">Если телефон нагревается или игра дёргается, включите экономию. Баланс вернёт среднее качество и 60 FPS.</p>
+      <div class="devicePresets"><button class="btn" id="economyBtn">Экономия · 30 FPS</button><button class="btn" id="balancedBtn">Баланс · 60 FPS</button></div>`;
+  }
+  function applyPreset(quality, fps) {
+    settings.quality = quality;
+    settings.fps = fps;
+    storage.setItem('aef_quality', quality);
+    storage.setItem('aef_fps', String(fps));
+    applyGraphics();
+    resetFrameLimiter();
+    save();
+    openMenu();
   }
   function craft(recipe = 'blade') {
     if (recipe === 'blade' && player.inv.wood >= 3 && player.inv.ore >= 2) {
@@ -1198,7 +1337,7 @@
     } else toast('Недостаточно ресурсов');
   }
   function openMenu() {
-    openModal('Настройки · v' + BUILD_VERSION, `<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><div class="sectionTitle">КАЧЕСТВО ГРАФИКИ</div><div class="settingRow"><div class="seg" id="qualitySeg">${['low', 'medium', 'high', 'very-high'].map(q => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}">${q === 'very-high' ? 'Very High' : q[0].toUpperCase() + q.slice(1)}</button>`).join('')}</div><div class="note">Меняет внутреннее разрешение canvas, плотность окружения и лимит частиц, детализацию текстур, тени и туман. Применяется сразу.</div></div><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="settingRow"><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div><div class="note">Лимит управляет реальными отрисованными кадрами. Монитор считает только кадры после update + draw.</div></div><div class="sectionTitle">МОНИТОР ПРОИЗВОДИТЕЛЬНОСТИ</div><button class="btn" id="perfBtn">${perfMonitorEnabled ? 'Выключить frame-time monitor' : 'Включить frame-time monitor'}</button><div class="sectionTitle">УСТРОЙСТВО</div><div class="card"><p>${device.ios ? 'iOS' : device.android ? 'Android' : 'Mobile'} · RAM: ${device.ram === null ? 'n/a' : device.ram + ' GB'} · ${device.cores} CPU cores · DPR ${device.dpr.toFixed(2)}<br>Профиль: <b>${detected.toUpperCase()}</b><br>RAM: n/a означает, что Safari не предоставляет этот показатель.</p></div><div class="sectionTitle">СОХРАНЕНИЕ</div><button class="btn" id="saveBtn">Сохранить прогресс</button>`);
+    openModal('Настройки · v' + BUILD_VERSION, `<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><div class="sectionTitle">КАЧЕСТВО ГРАФИКИ</div><div class="settingRow"><div class="seg" id="qualitySeg">${['low', 'medium', 'high', 'very-high'].map(q => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}">${q === 'very-high' ? 'Very High' : q[0].toUpperCase() + q.slice(1)}</button>`).join('')}</div><div class="note">Меняет внутреннее разрешение canvas, плотность окружения и лимит частиц, детализацию текстур, тени и туман. Применяется сразу.</div></div><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="settingRow"><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div><div class="note">Лимит управляет реальными отрисованными кадрами. Монитор считает только кадры после update + draw.</div></div><div class="sectionTitle">МОНИТОР ПРОИЗВОДИТЕЛЬНОСТИ</div><button class="btn" id="perfBtn">${perfMonitorEnabled ? 'Выключить frame-time monitor' : 'Включить frame-time monitor'}</button>${devicePanel()}<div class="sectionTitle">СОХРАНЕНИЕ</div><button class="btn" id="saveBtn">Сохранить прогресс</button>`);
     document.querySelectorAll('#qualitySeg button').forEach(b => bindTap(b, () => {
       settings.quality = b.dataset.q;
       storage.setItem('aef_quality', settings.quality);
@@ -1222,10 +1361,12 @@
       refreshPerformanceMonitorVisibility();
       openMenu();
     });
+    bindTap($('economyBtn'), () => applyPreset('low', 30));
+    bindTap($('balancedBtn'), () => applyPreset('medium', 60));
   }
   function bindTap(el, fn) {
     if (!el) return;
-    const action = el.classList.contains('action') || el === ui.prompt;
+    const action = el.classList.contains('action');
     // Gameplay fires on contact; modal buttons fire on click so scrolling is safe.
     el.addEventListener(action ? 'pointerdown' : 'click', event => {
       if (el.disabled) return;
@@ -1356,7 +1497,6 @@
       if (a === 'attack') attack();else if (a === 'dodge') dodge();else if (a === 'skill1') skill(1);else if (a === 'skill2') skill(2);else if (a === 'skill3') skill(3);else if (a === 'use') interact();
     });
   });
-  bindTap(ui.prompt, interact);
   bindTap($('inventoryBtn'), openInventory);
   bindTap($('menuBtn'), openMenu);
   bindTap($('modalClose'), closeModal);
@@ -1488,16 +1628,23 @@
     setText(ui.ore, player.inv.ore);
     setText(ui.gold, player.gold);
     const hit = nearbyInteraction();
-    if (hit) {
-      ui.prompt.classList.remove('hidden');
-      setText(ui.promptText, hit.type === 'portal' ? canUsePortal() ? 'Перейти в другую локацию' : 'Локация закрыта: завершите квест' : hit.type === 'scout' ? questState().step === 0 ? 'Поговорить с разведчиком' : 'Спросить о задании' : hit.type === 'loot' ? 'Подобрать лут' : 'Собрать ресурс');
-    } else ui.prompt.classList.add('hidden');
+    ui.actionUse.classList.toggle('available', !!hit);
+    setText(ui.actionLabel, hit ? {
+      portal: 'ПЕРЕЙТИ',
+      scout: 'ГОВОРИТЬ',
+      loot: 'ПОДОБРАТЬ',
+      resource: 'СОБРАТЬ'
+    }[hit.type] : 'ДЕЙСТВИЕ');
   }
   function isoY(v) {
     return v * .82;
   }
   function shadowColor(alpha) {
     return `rgba(0,0,0,${Math.max(.02, alpha * (.25 + profile.shadow * 1.45)).toFixed(3)})`;
+  }
+  function groundShadow(x,y,width) {
+    ctx.save();ctx.fillStyle=shadowColor(.3);ctx.beginPath();
+    ctx.ellipse(x,y,width,width*.28,0,0,Math.PI*2);ctx.fill();ctx.restore();
   }
   function screenPos(x, y) {
     return {
@@ -1533,7 +1680,7 @@
     const basePattern = zoneId === 'mistwood' ? patterns.grass : zoneId === 'stonevale' ? patterns.stone : patterns.dirt;
     texturedRect(basePattern, z.ground, -160, -160, WORLD.w + 320, WORLD.h * .82 + 320, .42 + profile.textureScale * .3);
     ctx.globalAlpha = .2 + profile.detail * .06;
-    for (let i = 0; i < 24 + profile.detail * 10; i++) {
+    for (let i = 0; !art?.terrainReady && i < 24 + profile.detail * 10; i++) {
       const {
         x,
         y,
@@ -1561,6 +1708,15 @@
     }
   }
   function drawAmbientItem(a) {
+    if(art?.has('pine')){
+      const p=screenPos(a.x,a.y),tree=zoneId==='mistwood';
+      const name=tree?(a.kind<.5?'pine':'oak'):zoneId==='stonevale'?'rock':a.kind<.3?'ruins':'rock';
+      ctx.save();
+      if(tree&&Math.abs(a.x-player.x)<85&&a.y>player.y&&a.y-player.y<190)ctx.globalAlpha=.3;
+      groundShadow(p.x,p.y+12,(tree?30:24)*a.scale);
+      art.draw(ctx,name,p.x,p.y+16,(tree?118:50)*a.scale);
+      ctx.restore();return;
+    }
     const s = screenPos(a.x, a.y);
     ctx.save();
     ctx.translate(s.x, s.y);
@@ -1637,6 +1793,10 @@
     ctx.restore();
   }
   function drawCamp(z) {
+    if(art?.has('house')){
+      const p=screenPos(z.camp.x,z.camp.y);groundShadow(p.x,p.y+14,55);
+      art.draw(ctx,'house',p.x,p.y+20,130);return;
+    }
     const s = screenPos(z.camp.x, z.camp.y);
     ctx.save();
     ctx.translate(s.x, s.y);
@@ -1682,6 +1842,10 @@
     ctx.restore();
   }
   function drawScout(z) {
+    if(art?.has('scout')){
+      const p=screenPos(z.scout.x,z.scout.y);groundShadow(p.x,p.y+14,22);
+      art.draw(ctx,'scout',p.x,p.y+17,82);return;
+    }
     const s = screenPos(z.scout.x, z.scout.y);
     ctx.save();
     ctx.translate(s.x, s.y);
@@ -1744,6 +1908,10 @@
     ctx.restore();
   }
   function drawResource(e) {
+    if(art?.has(e.type)){
+      const p=screenPos(e.x,e.y);groundShadow(p.x,p.y+12,17);
+      art.draw(ctx,e.type,p.x,p.y+16,e.type==='herb'?36:40);return;
+    }
     const s = screenPos(e.x, e.y);
     ctx.save();
     ctx.translate(s.x, s.y);
@@ -1784,6 +1952,16 @@
     ctx.restore();
   }
   function drawEntity(e) {
+    if(art?.has(e.type)){
+      const p=screenPos(e.x,e.y),height=e.type==='guardian'?122:e.type==='boar'?54:80;
+      groundShadow(p.x,p.y+14,e.r*1.15);
+      ctx.save();ctx.globalAlpha=e.hp<=0?clamp((e._corpseUntil-time)/.75,0,1)*.5:e.hit>0?.65:1;
+      const bob=e.hp>0&&dist(player,e)>e.r+player.r+8?Math.sin(time*7+e.seed*6)*1.2:0;
+      art.draw(ctx,e.type,p.x,p.y+17+bob,height,player.x<e.x);
+      ctx.restore();
+      if(e.hp>0){const width=e.r*2.1;ctx.fillStyle='#111b19';ctx.fillRect(p.x-width/2,p.y-height+10,width,5);ctx.fillStyle=e.type==='guardian'?'#d5b077':'#dc7772';ctx.fillRect(p.x-width/2,p.y-height+10,width*clamp(e.hp/e.maxHp,0,1),5);}
+      return;
+    }
     const s = screenPos(e.x, e.y);
     ctx.save();
     ctx.translate(s.x, s.y);
@@ -1824,6 +2002,18 @@
     ctx.restore();
   }
   function drawPlayer() {
+    if(art?.has('hero')){
+      const p=screenPos(player.x,player.y),moving=Math.hypot(joy.x,joy.y)>.08;
+      groundShadow(p.x,p.y+15,24);
+      ctx.save();if(time<player.dodgeUntil)ctx.globalAlpha=.68;
+      art.draw(ctx,Math.sin(player.dir)<-.3?'heroBack':'hero',p.x,p.y+18+(moving?Math.sin(time*12)*1.6:0),88,Math.cos(player.dir)<0);
+      ctx.restore();
+      // Directional weapon remains a separate layer for aiming and attack feedback.
+      ctx.save();ctx.translate(p.x,p.y-4);ctx.rotate(player.dir);
+      ctx.strokeStyle='#e8d4a0';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(9,0);ctx.lineTo(36,0);ctx.stroke();
+      if(player.blocking){ctx.strokeStyle='#acd5df';ctx.lineWidth=3;ctx.beginPath();ctx.arc(0,0,36,-.95,.95);ctx.stroke();}
+      ctx.restore();return;
+    }
     const s = screenPos(player.x, player.y);
     ctx.save();
     ctx.translate(s.x, s.y);
@@ -1924,7 +2114,9 @@
     ctx.beginPath();
     ctx.ellipse(0, 30, 150, 36, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (zoneId === 'mistwood') {
+    if (art?.draw(ctx,zoneId==='mistwood'?'house':zoneId==='stonevale'?'ruins':'shrine',0,30,180)) {
+      // The existing landmark position is retained.
+    } else if (zoneId === 'mistwood') {
       ctx.fillStyle = '#5d4a39';
       for (let i = -1; i <= 1; i++) {
         ctx.fillRect(i * 58 - 11, -62, 22, 110);
@@ -1978,7 +2170,7 @@
       ctx.stroke();
     }
     ctx.restore();
-    if (zoneId === 'mistwood' && patterns.water && profile.detail >= 1) {
+    if (zoneId === 'mistwood' && patterns.water && visible(1940,620,200)) {
       const wx = {
           x: 1780,
           y: 620 * .82
@@ -1988,9 +2180,10 @@
           y: 620 * .82
         };
       ctx.save();
-      ctx.globalAlpha = .28;
+      ctx.globalAlpha = art?.terrainReady ? .8 : .28;
       ctx.fillStyle = patterns.water;
-      ctx.fillRect(wx.x, wx.y, Math.max(1, ww.x - wx.x), 34);
+      ctx.beginPath();ctx.ellipse((wx.x+ww.x)/2,wx.y,160,44,0,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle='rgba(157,205,185,.3)';ctx.lineWidth=3;ctx.stroke();
       ctx.restore();
     }
     ctx.restore();
@@ -1998,6 +2191,8 @@
   function drawLoot() {
     for (const l of lootDrops) {
       if (!visible(l.x, l.y, 35)) continue;
+      const asset={guardianToken:'armor',emberShard:'ore'}[l.id]||l.id;
+      if(art?.has(asset)){const p=screenPos(l.x,l.y);art.draw(ctx,asset,p.x,p.y+3+Math.sin(time*4+l.x)*2,25);continue;}
       const s = screenPos(l.x, l.y);
       ctx.save();
       ctx.translate(s.x, s.y + Math.sin(time * 4 + l.x) * 3);
@@ -2021,6 +2216,7 @@
     for (const [x, y, k] of list) {
       const s = screenPos(x, y);
       if (s.x < -140 || s.x > W + 140 || s.y < -140 || s.y > H + 140) continue;
+      if(art?.has('house')){groundShadow(s.x,s.y+15,45);art.draw(ctx,k==='SHRINE'||k==='BOSS'?'shrine':k==='RUIN'||k==='MINE'?'ruins':'house',s.x,s.y+20,140);continue;}
       ctx.save();
       ctx.translate(s.x, s.y);
       ctx.fillStyle = 'rgba(0,0,0,.18)';
@@ -2092,9 +2288,10 @@
       ctx.fillStyle = 'rgba(8,14,12,.76)';
       const label = active ? '✦  ' + (zoneId === 'ashfield' ? 'Смотритель' : 'Разведчик') : zoneId === 'ashfield' ? 'Смотритель' : 'Разведчик';
       const w = ctx.measureText(label).width + 18;
-      ctx.fillRect(s.x - w / 2, s.y - 58, w, 20);
+      const labelY = s.y - (art?.has('scout') ? 106 : 58);
+      ctx.fillRect(s.x - w / 2, labelY, w, 20);
       ctx.fillStyle = active ? '#f0d58e' : '#d3ddd8';
-      ctx.fillText(label, s.x, s.y - 43);
+      ctx.fillText(label, s.x, labelY + 15);
       ctx.restore();
     }
   }
@@ -2161,7 +2358,7 @@
       drawQueue.push(item);
     }
     for (const e of entities) if ((e.hp > 0 || e._corpseUntil > time) && visible(e.x, e.y, 100)) drawQueue.push(e);
-    for (const a of ambient) if (visible(a.x, a.y, 100)) drawQueue.push(a);
+    for (const a of ambient) if (visible(a.x, a.y, 250)) drawQueue.push(a);
     drawQueue.sort(sortDepth);
     for (const e of drawQueue) {
       if (e.kind === 'enemy') drawEntity(e);else if (e.kind === 'resource') drawResource(e);else if (e.kind === 'player') drawPlayer();else if (typeof e.scale === 'number') drawAmbientItem(e);else if (e.kind === 'camp') drawCamp(z);else if (e.kind === 'scout') drawScout(z);else drawPortal(z);
@@ -2330,7 +2527,7 @@
       firstPaint();
       ui.loadFill.style.width = '15%';
       setTimeout(hideLoading, 220);
-      await loadTextures();
+      await Promise.all([loadTextures(),art?.load(()=>applyGraphics())]);
       applyGraphics();
       drawWorld();
       drawMap();
@@ -2384,6 +2581,9 @@
       closeModal,
       openInventory,
       openMenu,
+      openShop,
+      buyItem,
+      applyPreset,
       suspend,
       resume,
       resetFrameLimiter,
