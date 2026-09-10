@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '3.5.0';
+  const BUILD_VERSION = '3.5.2';
   const art = window.AetherArt;
   const GEAR = {
     starterBlade: {
@@ -871,6 +871,15 @@
     if (q.id === 'ash' && s.step === 2) return `Победите врагов: ${s.kills}/6`;
     return step;
   }
+  function openQuests() {
+    const q = quest(), state = questState();
+    const steps = q.steps.map((text,index) => {
+      const current = index === state.step, complete = index < state.step;
+      return `<li class="${current?'current':complete?'complete':''}" ${current?'aria-current="step"':''}>${complete?'✓ ':''}${escapeHTML(current?currentObjective():text)}${current?' · Сейчас':''}</li>`;
+    }).join('');
+    openModal('Задания', `<article class="card"><p class="note">${escapeHTML(zones[zoneId].name)} · этап ${state.step+1} из ${q.steps.length}</p><h3>${escapeHTML(q.title)}</h3><ol class="questSteps">${steps}</ol></article><p class="note">Задание продвигается во время игры: разговор, сбор ресурсов, бой и переход в следующую зону. Покупка материалов не засчитывается как сбор.</p><button class="btn" id="questsClose">Вернуться в игру</button>`);
+    bindTap($('questsClose'), closeModal);
+  }
   function advanceQuest(reason, persist = true) {
     const q = quest(),
       s = questState();
@@ -1352,12 +1361,11 @@
     updateUI();
   }
   function openInventory() {
-    openModal('Сумка и экипировка', `<button class="btn" id="equipmentEntry">Экипировка и расходники</button><button class="btn shopEntry" id="shopEntry">Магазин · ${player.gold} золотых</button><div class="grid"><div class="card">${itemArt('sword')}<h3>Оружие</h3><p>${escapeHTML(player.equipment.weapon)}<br>Урон: <b>${player.damage}</b></p></div><div class="card">${itemArt('armor')}<h3>Броня</h3><p>${escapeHTML(player.equipment.armor)}<br>Макс. здоровье: <b>${player.maxHp}</b></p></div><div class="card"><h3>Ресурсы</h3><p>Древесина: ${player.inv.wood}<br>Руда: ${player.inv.ore}<br>Трава: ${player.inv.herb}</p></div><div class="card"><h3>Валюта</h3><p class="gold">${player.gold} золотых</p><p>Знаки: ${player.inv.guardianToken || 0}<br>Осколки: ${player.inv.emberShard || 0}</p></div></div><div class="card"><h3>Свойства материалов</h3><p>Древесина и руда: закалка, +5 урона за 3 древесины и 2 руды.<br>Трава: изготовление зелий.<br>Знак стража: открывает броню стража (+25 макс. здоровья при ношении).<br>Осколок: коллекционный трофей, боевого бонуса нет.</p></div><div class="sectionTitle">КРАФТ</div><button class="btn" id="brewBtn">Зелье лечения в сумку · 3 травы + 1 древесина · +100 HP при применении</button><button class="btn" id="craftBtn">Закалить меч · 3 древесины + 2 руды</button><button class="btn" id="potionBtn">Эликсир жизни · +12 макс. HP навсегда, полное лечение · 3 травы + 1 древесина</button>`);
+    openModal('Сумка и экипировка', `<button class="btn" id="equipmentEntry">Экипировка и расходники</button><div class="grid"><div class="card">${itemArt('sword')}<h3>Оружие</h3><p>${escapeHTML(player.equipment.weapon)}<br>Урон: <b>${player.damage}</b></p></div><div class="card">${itemArt('armor')}<h3>Броня</h3><p>${escapeHTML(player.equipment.armor)}<br>Макс. здоровье: <b>${player.maxHp}</b></p></div><div class="card"><h3>Ресурсы</h3><p>Древесина: ${player.inv.wood}<br>Руда: ${player.inv.ore}<br>Трава: ${player.inv.herb}</p></div><div class="card"><h3>Валюта</h3><p class="gold">${player.gold} золотых</p><p>Знаки: ${player.inv.guardianToken || 0}<br>Осколки: ${player.inv.emberShard || 0}</p></div></div><div class="card"><h3>Свойства материалов</h3><p>Древесина и руда: закалка, +5 урона за 3 древесины и 2 руды.<br>Трава: изготовление зелий.<br>Знак стража: открывает броню стража (+25 макс. здоровья при ношении).<br>Осколок: коллекционный трофей, боевого бонуса нет.</p></div><div class="sectionTitle">КРАФТ</div><button class="btn" id="brewBtn">Зелье лечения в сумку · 3 травы + 1 древесина · +100 HP при применении</button><button class="btn" id="craftBtn">Закалить меч · 3 древесины + 2 руды</button><button class="btn" id="potionBtn">Эликсир жизни · +12 макс. HP навсегда, полное лечение · 3 травы + 1 древесина</button>`);
     $('craftBtn').disabled = player.inv.wood < 3 || player.inv.ore < 2;
     $('potionBtn').disabled = player.inv.herb < 3 || player.inv.wood < 1;
     bindTap($('craftBtn'), () => craft('blade'));
     bindTap($('potionBtn'), () => craft('potion'));
-    bindTap($('shopEntry'), openShop);
     bindTap($('equipmentEntry'), openEquipment);
     $('brewBtn').disabled = player.inv.herb < 3 || player.inv.wood < 1;
     bindTap($('brewBtn'), brewSupply);
@@ -1427,10 +1435,10 @@
     openModal('Магазин', `<div class="shopWallet">Золото: <b>${player.gold}</b></div>
       <p class="note">Снаряжение надевается сразу; его можно сменить в экипировке. Зелья и тоники поступают в сумку. Лечение у торговца применяется сразу.</p>
       <div class="shopList">${SHOP_ITEMS.map(item => `<article class="card">${itemArt(item.id)}<h3>${item.name}</h3><p>${item.note}</p><button class="btn" id="buy-${item.id}" ${unavailableItem(item) ? 'disabled' : ''}>${unavailableItem(item) || 'Купить · ' + item.price + ' золота'}</button></article>`).join('')}</div>
-      <button class="btn" id="shopBack">Вернуться в сумку</button>`);
+      <button class="btn" id="shopBack">Вернуться в игру</button>`);
     shopOpen = true;
     for (const item of SHOP_ITEMS) bindTap($('buy-' + item.id), () => buyItem(item.id));
-    bindTap($('shopBack'), openInventory);
+    bindTap($('shopBack'), closeModal);
   }
   function buyItem(id) {
     const item = SHOP_ITEMS.find(entry => entry.id === id);
@@ -1713,6 +1721,8 @@
   });
   bindTap($('inventoryBtn'), openInventory);
   bindTap($('menuBtn'), openMenu);
+  bindTap($('questsBtn'), openQuests);
+  bindTap($('shopBtn'), openShop);
   bindTap($('modalClose'), closeModal);
   ['gesturestart', 'gesturechange', 'gestureend'].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), {
     passive: false
@@ -1892,9 +1902,10 @@
     setText(ui.level, 'Ур. ' + player.level);
     const z = zones[zoneId];
     setText(ui.zone, z.name);
-    setText(ui.objective, currentObjective());
+    const objective = currentObjective();
+    setText(ui.objective, objective);
     setText(ui.questTitle, z.quest.title);
-    setText(ui.questProgress, currentObjective());
+    setText(ui.questProgress, objective);
     setText(ui.badge, z.badge);
     setText(ui.herb, player.inv.herb);
     setText(ui.wood, player.inv.wood);
@@ -1902,7 +1913,8 @@
     setText(ui.gold, player.gold);
     const supplyId = player.loadout.quick;
     setText(ui.supplyLabel, (supplyId === 'tonic' ? 'ТОНИК' : supplyId ? 'ЗЕЛЬЕ' : 'ПУСТО') + ' · ' + (player.supplies[supplyId] || 0));
-    ui.supplyBtn.disabled = !player.supplies[supplyId];
+    const supplyEmpty = !player.supplies[supplyId];
+    if (ui.supplyBtn.disabled !== supplyEmpty) ui.supplyBtn.disabled = supplyEmpty;
     const hit = nearbyInteraction();
     ui.actionUse.classList.toggle('available', !!hit);
     setText(ui.actionLabel, hit ? {
@@ -2329,14 +2341,6 @@
       art.actor(ctx, Math.sin(player.dir) < -.3 ? 'heroBack' : 'hero', p.x, p.y + 18 + (moving ? Math.sin(time * 12) * 1.6 : 0), 88, time, moving ? 1 : 0, action, progress, Math.cos(player.dir) < 0);
       const lean = art.bodyLean(action, progress),
         facing = Math.cos(player.dir) < 0 ? -1 : 1;
-      if (player.loadout.armor !== 'starterArmor') {
-        ctx.save();
-        ctx.translate(p.x, p.y + 18);
-        ctx.scale(facing, 1);
-        ctx.rotate(lean);
-        art.draw(ctx, 'armor', 0, -40, 24);
-        ctx.restore();
-      }
       ctx.restore();
       const swing = action === 'attack' || action === 'cast' ? Math.sin(progress * Math.PI) * 1.8 * (player.combo % 2 ? -1 : 1) : 0;
       const handX = p.x + facing * (12 * Math.cos(lean) + 36 * Math.sin(lean)),
@@ -2944,6 +2948,7 @@
       joy,
       closeModal,
       openInventory,
+      openQuests,
       openMenu,
       openShop,
       buyItem,

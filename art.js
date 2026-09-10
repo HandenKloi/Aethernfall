@@ -1,4 +1,4 @@
-/* Aethernfall 3.5.0 — shared raster atlases; all rectangles use source pixels. */
+/* Aethernfall 3.5.2 — shared raster atlases; all rectangles use source pixels. */
 (() => {
   'use strict';
 
@@ -147,27 +147,27 @@
     if (flip) ctx.scale(-1, 1);
     ctx.rotate(lean + death * 1.35);
     ctx.scale(1, 1 + Math.sin(t * 2) * .009);
-    const part = (u, v, w, h, angle = 0, px = u + w / 2, py = v) => {
-      ctx.save();
-      ctx.translate((px - .5) * width, (py - 1) * height);
-      ctx.rotate(angle);
-      ctx.drawImage(images[r[0]], r[1] + u * r[3], r[2] + v * r[4], w * r[3], h * r[4], (u - px) * width, (v - py) * height, w * width + .3, h * height + .3);
-      ctx.restore();
-    };
     if (name === 'boar') {
-      part(0, .72, .5, .28, stride * .12);
-      part(.5, .72, .5, .28, -stride * .12);
-      part(0, 0, 1, .72);
+      drawActorPart(ctx, r, width, height, 0, .72, .5, .28, stride * .12);
+      drawActorPart(ctx, r, width, height, .5, .72, .5, .28, -stride * .12);
+      drawActorPart(ctx, r, width, height, 0, 0, 1, .72);
     } else {
-      part(0, .72, .5, .28, stride * .15);
-      part(.5, .72, .5, .28, -stride * .15);
-      part(.23, .28, .54, .44);
-      part(0, 0, 1, .28, Math.sin(t * 1.5) * .012, .5, .28);
-      part(0, .28, .23, .44, arm, .22, .30);
-      part(.77, .28, .23, .44, -arm, .78, .30);
+      drawActorPart(ctx, r, width, height, 0, .72, .5, .28, stride * .15);
+      drawActorPart(ctx, r, width, height, .5, .72, .5, .28, -stride * .15);
+      drawActorPart(ctx, r, width, height, .23, .28, .54, .44);
+      drawActorPart(ctx, r, width, height, 0, 0, 1, .28, Math.sin(t * 1.5) * .012, .5, .28);
+      drawActorPart(ctx, r, width, height, 0, .28, .23, .44, arm, .22, .30);
+      drawActorPart(ctx, r, width, height, .77, .28, .23, .44, -arm, .78, .30);
     }
     ctx.restore();
     return true;
+  }
+  function drawActorPart(ctx, r, width, height, u, v, w, h, angle = 0, px = u + w / 2, py = v) {
+    ctx.save();
+    ctx.translate((px - .5) * width, (py - 1) * height);
+    ctx.rotate(angle);
+    ctx.drawImage(images[r[0]], r[1] + u * r[3], r[2] + v * r[4], w * r[3], h * r[4], (u - px) * width, (v - py) * height, w * width + .3, h * height + .3);
+    ctx.restore();
   }
   function icon(name) {
     const r = sprites[name];

@@ -893,7 +893,15 @@ button:focus-visible {
   }
 }
 /* Shop and useful graphics presets, 3.3.0. */
-.shopEntry { margin: 0 0 16px; background: #3a4d36; border-color: #c6ac68; }
+.hudTop .heroPanel { flex:1 1 205px; min-width:0; max-width:205px; }
+.hudTop .topActions { flex:0 0 auto; gap:6px; }
+.hudTop .topBtn { height:44px; min-width:44px; font-size:12px; }
+.hudTop .roundBtn { width:44px; padding:10px; border-radius:50%; display:grid; place-items:center; }
+.roundBtn svg { width:24px; height:24px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; pointer-events:none; }
+.questSteps { padding-left:26px; margin:16px 0; }
+.questSteps li { padding:10px 8px; color:#b4c4bd; line-height:1.5; }
+.questSteps .current { color:#ffe19a; background:#34483a; border-radius:10px; }
+.questSteps .complete { color:#91c79b; }
 .shopWallet { color: #f0d486; font-size: 18px; padding: 4px 0 10px; }
 .shopList { display: grid; gap: 12px; }
 .shopList .card h3 { font-size: 16px; color: #eee1b9; }

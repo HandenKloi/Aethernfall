@@ -7,9 +7,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#101817">
-<title>Aethernfall v3.5.0</title>
-<link rel="manifest" href="manifest.json?v=3.5.0">
-<link rel="stylesheet" href="style.css?v=3.5.0">
+<title>Aethernfall v3.5.2</title>
+<link rel="manifest" href="manifest.json?v=3.5.2">
+<link rel="stylesheet" href="style.css?v=3.5.2">
 <link rel="apple-touch-icon" href="assets/icon-192.png">
 <link rel="icon" href="assets/icon-192.png">
 <meta name="apple-mobile-web-app-title" content="Aethernfall">
@@ -50,7 +50,9 @@
 </section>
 <div class="topActions">
 <button class="topBtn" id="inventoryBtn">Сумка</button>
-<button class="topBtn" id="menuBtn">Меню</button>
+<button class="topBtn roundBtn" id="questsBtn" aria-label="Задания" title="Задания"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3l5 3 11 13-2 2L6 8zM3 17l5 4M4 21l3-3M20 3l-5 3L4 19l2 2L18 8zM16 21l5-4M20 21l-3-3"/></svg></button>
+<button class="topBtn roundBtn" id="shopBtn" aria-label="Магазин" title="Магазин"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v11h16V10M3 10l2-7h14l2 7M3 10q3 4 6 0 3 4 6 0 3 4 6 0M9 21v-7h6v7"/></svg></button>
+<button class="topBtn roundBtn" id="menuBtn" aria-label="Меню" title="Меню"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
 </div>
 </header>
 <section id="questTracker" class="panel">
@@ -78,7 +80,7 @@
 <span id="perfPillFps">--</span> FPS · <span id="perfPillMs">--</span> ms</div>
 <div id="lootTicker" class="lootTicker">
 </div>
-<div class="versionMark">AETHERNFALL v3.5.0</div>
+<div class="versionMark">AETHERNFALL v3.5.2</div>
 <div id="joystick" class="joystick">
 <div class="joyRing">
 </div>
@@ -143,8 +145,8 @@
 </div>
 </div>
 </div>
-<script src="art.js?v=3.5.0" defer></script>
-<script src="game.js?v=3.5.0" defer>
+<script src="art.js?v=3.5.2" defer></script>
+<script src="game.js?v=3.5.2" defer>
 </script>
 <div id="perfMonitor" class="perfMonitor hidden" aria-live="polite">
   <div>
