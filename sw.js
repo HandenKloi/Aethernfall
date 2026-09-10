@@ -1,10 +1,10 @@
 'use strict';
 
-const VERSION = '3.6.0';
+const VERSION = '3.6.1';
 // Scope isolates caches of different GitHub Pages repositories on the same origin.
 const PREFIX = 'aethernfall:' + self.registration.scope + ':';
 const CACHE_NAME = PREFIX + VERSION;
-const CORE = ['./physics.js?v=' + VERSION, './art.js?v=' + VERSION, './assets/art/characters.webp', './assets/art/objects.webp', './assets/art/terrain.webp', './', './index.html', './style.css?v=' + VERSION, './game.js?v=' + VERSION, './manifest.json?v=' + VERSION, './assets/icon-192.png', './assets/icon-512.png', ...['grass', 'dirt', 'stone', 'water', 'wood', 'foliage', 'rune'].map(n => './assets/textures/' + n + '.png')];
+const CORE = ['./assets/art/portal.svg', './physics.js?v=' + VERSION, './art.js?v=' + VERSION, './assets/art/characters.webp', './assets/art/objects.webp', './assets/art/terrain.webp', './', './index.html', './style.css?v=' + VERSION, './game.js?v=' + VERSION, './manifest.json?v=' + VERSION, './assets/icon-192.png', './assets/icon-512.png', ...['grass', 'dirt', 'stone', 'water', 'wood', 'foliage', 'rune'].map(n => './assets/textures/' + n + '.png')];
 self.addEventListener('install', event => {
   // Reject a partial installation; the previous worker stays usable.
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(CORE.map(url => new Request(new URL(url, self.registration.scope), {

@@ -16,6 +16,9 @@
         buckets.get(key).push(o);
       }
     }
+    function removeSource(source) {
+      set(obstacles.filter(o => o.source !== source));
+    }
     function obstacleAt(x, y, r, ignore = null) {
       if (x < r || y < r || x > width - r || y > height - r) return {
         x,
@@ -31,12 +34,14 @@
       return null;
     }
     function clearLine(x, y, tx, ty, r, ignore = null) {
-      if(tx<r||ty<r||tx>width-r||ty>height-r)return false;
-      const dx=tx-x,dy=ty-y,length2=dx*dx+dy*dy;
-      for(const o of obstacles){
-        if(!active(o)||ignore&&o.source===ignore)continue;
-        const t=length2?Math.max(0,Math.min(1,((o.x-x)*dx+(o.y-y)*dy)/length2)):0;
-        if((x+t*dx-o.x)**2+(y+t*dy-o.y)**2<(r+o.r)**2-.001)return false;
+      if (tx < r || ty < r || tx > width - r || ty > height - r) return false;
+      const dx = tx - x,
+        dy = ty - y,
+        length2 = dx * dx + dy * dy;
+      for (const o of obstacles) {
+        if (!active(o) || ignore && o.source === ignore) continue;
+        const t = length2 ? Math.max(0, Math.min(1, ((o.x - x) * dx + (o.y - y) * dy) / length2)) : 0;
+        if ((x + t * dx - o.x) ** 2 + (y + t * dy - o.y) ** 2 < (r + o.r) ** 2 - .001) return false;
       }
       return true;
     }
@@ -185,6 +190,7 @@
     }
     return {
       set,
+      removeSource,
       move,
       relocate,
       chase,

@@ -1,8 +1,13 @@
-/* Aethernfall 3.6.0 — shared raster atlases; all rectangles use source pixels. */
+/* Aethernfall 3.6.1 — shared raster atlases; all rectangles use source pixels. */
 (() => {
   'use strict';
 
   const sheets = {
+    portal: {
+      src: './assets/art/portal.svg',
+      width: 160,
+      height: 200
+    },
     characters: {
       src: './assets/art/characters.webp',
       width: 1536,
@@ -20,6 +25,7 @@
     }
   };
   const sprites = {
+    portal: ['portal', 0, 0, 160, 200],
     hero: ['characters', 121, 8, 271, 494],
     heroBack: ['characters', 621, 12, 274, 491],
     scout: ['characters', 1127, 10, 279, 488],
@@ -41,6 +47,7 @@
   };
   const images = {},
     surfaces = {};
+  const materials = [{}, {}, {}, {}];
   let loading;
   function makeSurfaces(image) {
     // Mirrored repetitions share edge pixels, avoiding hard terrain tile seams.
@@ -56,6 +63,41 @@
         c.restore();
       }
       surfaces[name] = tile;
+      for (let level = 0; level < 4; level++) {
+        const variant = document.createElement('canvas');
+        variant.width = variant.height = 384;
+        const c = variant.getContext('2d');
+        if (level === 0 && name !== 'water') {
+          c.fillStyle = {
+            grass: '#40583b',
+            stone: '#6c7166',
+            dirt: '#65523f'
+          }[name];
+          c.fillRect(0, 0, 384, 384);
+        } else c.drawImage(tile, 0, 0);
+        const density = [24, 45, 115, 220][level];
+        for (let n = 0; n < density; n++) {
+          const x = (n * 127 + index * 43) % 380 + 2,
+            y = (n * 83 + index * 61) % 380 + 2;
+          c.strokeStyle = name === 'grass' ? n % 3 ? '#82955a88' : '#203f3088' : name === 'stone' ? '#b4b69d66' : name === 'water' ? '#b4f0e744' : '#bba47c55';
+          c.lineWidth = level >= 2 ? 1.2 : 1;
+          c.beginPath();
+          c.moveTo(x, y);
+          c.lineTo(x + (n % 3 - 1) * 2, y - (name === 'grass' ? 3 + n % 5 : 1));
+          c.stroke();
+          if (level >= 2 && n % 9 === 0 && name === 'grass') {
+            c.fillStyle = '#d7cd95';
+            c.fillRect(x, y - 4, 2, 2);
+          }
+          if (level === 3 && n % 7 === 0 && name !== 'water') {
+            c.fillStyle = '#26392d77';
+            c.fillRect(x + 3, y + 1, 4, 2);
+            c.fillStyle = '#b1b49a99';
+            c.fillRect(x + 3, y, 3, 1);
+          }
+        }
+        materials[level][name] = variant;
+      }
     });
   }
   function load(changed = () => {}) {
@@ -103,9 +145,9 @@
     ctx.restore();
     return true;
   }
-  function patterns(ctx) {
+  function patterns(ctx, detail = 1) {
     const result = {};
-    for (const [name, tile] of Object.entries(surfaces)) result[name] = ctx.createPattern(tile, 'repeat');
+    for (const [name, tile] of Object.entries(materials[detail] || materials[1])) result[name] = ctx.createPattern(tile, 'repeat');
     return result;
   }
   function weapon(ctx, x, y, height, angle) {

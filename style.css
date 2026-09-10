@@ -903,6 +903,11 @@ button:focus-visible {
 .questSteps li { padding:10px 8px; color:#b4c4bd; line-height:1.5; }
 .questSteps .current { color:#ffe19a; background:#34483a; border-radius:10px; }
 .questSteps .complete { color:#91c79b; }
+#questTracker { padding:3px 8px!important; max-width:250px; }
+#questToggle { display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; min-height:44px; padding:0; background:none; color:#e1ece5; pointer-events:auto; text-align:left; }
+#questToggle b { font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#questProgress { padding:0 0 6px; font-size:11px; }
+#questTracker.collapsed #questProgress { display:none; }
 #questTracker { top:calc(var(--top) + 126px); padding:8px 10px; background:rgba(9,23,20,.58); }
 #minimapFrame { top:calc(var(--top) + 126px); }
 .netPill { top:calc(var(--top) + 220px); }

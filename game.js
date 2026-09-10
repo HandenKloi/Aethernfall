@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '3.6.0';
+  const BUILD_VERSION = '3.6.1';
   const art = window.AetherArt;
   const GEAR = {
     emptyHand: {
@@ -66,7 +66,8 @@
       start: time,
       duration,
       x: actor.x,
-      y: actor.y
+      y: actor.y,
+      dir: actor.dir
     });
   }
   const itemArt = id => art ? art.icon({
@@ -793,16 +794,12 @@
     const viewportScale = window.visualViewport?.scale || 1;
     W = Math.round((window.visualViewport?.width || innerWidth) * viewportScale);
     H = Math.round((window.visualViewport?.height || innerHeight) * viewportScale);
-    const dprCap = {
-      low: 1,
-      medium: 1.25,
-      high: 1.5,
-      'very-high': 1.75
-    }[settings.quality];
-    DPR = Math.min(device.dpr, dprCap, Math.sqrt(1500000 / (W * H)));
+    DPR = Math.min(device.dpr, 2, Math.sqrt(1500000 / (W * H)));
     document.documentElement.style.setProperty('--app-height', H + 'px');
-    canvas.width = Math.max(1, Math.floor(W * DPR));
-    canvas.height = Math.max(1, Math.floor(H * DPR));
+    const renderWidth = Math.max(1, Math.floor(W * DPR)),
+      renderHeight = Math.max(1, Math.floor(H * DPR));
+    if (canvas.width !== renderWidth) canvas.width = renderWidth;
+    if (canvas.height !== renderHeight) canvas.height = renderHeight;
     canvas.style.width = W + 'px';
     canvas.style.height = H + 'px';
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -811,7 +808,7 @@
     for (const [k, img] of Object.entries(textureImages)) {
       if (img.complete) patterns[k] = ctx.createPattern(img, 'repeat');
     }
-    if (art) Object.assign(patterns, art.patterns(ctx));
+    if (art) Object.assign(patterns, art.patterns(ctx, profile.detail));
     if (!ambient.length) makeAmbient();
     if (particles.length > profile.particles) particles.length = profile.particles;
     atmosphereGradient = null;
@@ -1197,6 +1194,7 @@
     }
     if (target) player.dir = Math.atan2(target.y - player.y, target.x - player.x);
     const a = player.dir;
+    motions.get(player).dir = a;
     let hits = 0;
     for (const e of entities) {
       if (e.hp <= 0 || e.kind !== 'enemy') continue;
@@ -1284,7 +1282,7 @@
   };
   function considerInteraction(type, entity, radius) {
     const d = Math.hypot(player.x - entity.x, player.y - entity.y);
-    if (d >= radius || physics && !physics.clearLine(player.x,player.y,entity.x,entity.y,1,entity)) return;
+    if (d >= radius || physics && !physics.clearLine(player.x, player.y, entity.x, entity.y, 1, entity)) return;
     if (d < interactionResult.d - 6 || Math.abs(d - interactionResult.d) < 6 && interactionPriority[type] < interactionPriority[interactionResult.type]) {
       interactionResult.type = type;
       interactionResult.entity = entity;
@@ -1380,6 +1378,8 @@
       herb: 'трава'
     }[key]);
     burst(r.x, r.y, '#d6c274', 12, 105);
+    r.hp = 0;
+    physics?.removeSource(r);
     const idx = entities.indexOf(r);
     if (idx >= 0) entities.splice(idx, 1);
     updateUI();
@@ -1634,7 +1634,7 @@
     return true;
   }
   function openMenu() {
-    openModal('Настройки · v' + BUILD_VERSION, `<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><div class="sectionTitle">КАЧЕСТВО ГРАФИКИ</div><div class="settingRow"><div class="seg" id="qualitySeg">${['low', 'medium', 'high', 'very-high'].map(q => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}">${q === 'very-high' ? 'Very High' : q[0].toUpperCase() + q.slice(1)}</button>`).join('')}</div><div class="note">Меняет внутреннее разрешение canvas, лимит частиц, детализацию текстур, тени и туман. Препятствия одинаковы при любом качестве. Применяется сразу.</div></div><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="settingRow"><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div><div class="note">Лимит управляет реальными отрисованными кадрами. Монитор считает только кадры после update + draw.</div></div><div class="sectionTitle">МОНИТОР ПРОИЗВОДИТЕЛЬНОСТИ</div><button class="btn" id="perfBtn">${perfMonitorEnabled ? 'Выключить frame-time monitor' : 'Включить frame-time monitor'}</button>${devicePanel()}<div class="sectionTitle">СОХРАНЕНИЕ</div><button class="btn" id="saveBtn">Сохранить прогресс</button>`);
+    openModal('Настройки · v' + BUILD_VERSION, `<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><div class="sectionTitle">КАЧЕСТВО ГРАФИКИ</div><div class="settingRow"><div class="seg" id="qualitySeg">${['low', 'medium', 'high', 'very-high'].map(q => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}">${q === 'very-high' ? 'Very High' : q[0].toUpperCase() + q.slice(1)}</button>`).join('')}</div><div class="note">Меняет материалы земли, мелкие детали, тени, оформление порталов и лимит частиц. Разрешение и резкость спрайтов одинаковы при любом качестве. Препятствия не меняются. Применяется сразу.</div></div><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="settingRow"><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div><div class="note">Лимит управляет реальными отрисованными кадрами. Монитор считает только кадры после update + draw.</div></div><div class="sectionTitle">МОНИТОР ПРОИЗВОДИТЕЛЬНОСТИ</div><button class="btn" id="perfBtn">${perfMonitorEnabled ? 'Выключить frame-time monitor' : 'Включить frame-time monitor'}</button>${devicePanel()}<div class="sectionTitle">СОХРАНЕНИЕ</div><button class="btn" id="saveBtn">Сохранить прогресс</button>`);
     document.querySelectorAll('#qualitySeg button').forEach(b => bindTap(b, () => {
       settings.quality = b.dataset.q;
       storage.setItem('aef_quality', settings.quality);
@@ -1795,6 +1795,13 @@
     });
   });
   bindTap($('inventoryBtn'), openInventory);
+  function toggleQuest() {
+    const panel = $('questTracker'),
+      collapsed = panel.classList.toggle('collapsed');
+    $('questToggle').setAttribute('aria-expanded', String(!collapsed));
+    setText($('questChevron'), collapsed ? '⌄' : '⌃');
+  }
+  bindTap($('questToggle'), toggleQuest);
   bindTap($('menuBtn'), openMenu);
   bindTap($('questsBtn'), openQuests);
   bindTap($('shopBtn'), openShop);
@@ -2256,33 +2263,34 @@
   }
   function drawPortal(z) {
     const s = screenPos(z.portal.x, z.portal.y);
-    ctx.save();
-    ctx.translate(s.x, s.y);
-    ctx.scale(1, .82);
-    const pulse = 1 + Math.sin(time * 3) * .07,
-      col = zoneId === 'mistwood' ? '#76c2ce' : zoneId === 'stonevale' ? '#d9ad6d' : '#cf745c';
-    ctx.scale(pulse, pulse);
-    ctx.strokeStyle = col;
-    ctx.lineWidth = 7;
-    ctx.shadowColor = col;
-    ctx.shadowBlur = profile.detail >= 2 ? 10 : 0;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 38, 53, 0, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = col;
-    ctx.globalAlpha = .16;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 29, 43, 0, 0, Math.PI * 2);
-    ctx.fill();
-    if (patterns.rune && profile.detail >= 2) {
-      ctx.globalAlpha = .22;
-      ctx.fillStyle = patterns.rune;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, 27, 41, 0, 0, Math.PI * 2);
-      ctx.fill();
+    const open = canUsePortal();
+    groundShadow(s.x, s.y + 17, 43);
+    if (art?.has('portal')) {
+      ctx.save();
+      ctx.globalAlpha = open ? 1 : .58;
+      art.draw(ctx, 'portal', s.x, s.y + 22, 140);
+      ctx.restore();
+      if (open && profile.detail >= 2) {
+        ctx.save();
+        ctx.fillStyle = zoneId === 'ashfield' ? '#ffd0ab' : '#d1ffee';
+        ctx.globalAlpha = .25 + Math.sin(time * 2) * .15;
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y - 68);
+        ctx.lineTo(s.x + 5, s.y - 52);
+        ctx.lineTo(s.x, s.y - 36);
+        ctx.lineTo(s.x - 5, s.y - 52);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+    } else {
+      ctx.fillStyle = '#63756b';
+      ctx.fillRect(s.x - 34, s.y - 75, 13, 92);
+      ctx.fillRect(s.x + 21, s.y - 75, 13, 92);
+      ctx.fillRect(s.x - 34, s.y - 83, 68, 13);
+      ctx.fillStyle = open ? '#568b91' : '#233c3d';
+      ctx.fillRect(s.x - 20, s.y - 70, 40, 86);
     }
-    ctx.restore();
   }
   function drawResource(e) {
     if (art?.has(e.type)) {
@@ -2427,7 +2435,7 @@
         handY = p.y + 18 + bob + hand.x * Math.sin(lean) + hand.y * Math.cos(lean);
       const leftX = p.x + facing * (left.x * Math.cos(lean) - left.y * Math.sin(lean)),
         leftY = p.y + 18 + bob + left.x * Math.sin(lean) + left.y * Math.cos(lean);
-      if (action === 'drink') art.draw(ctx, 'potion', handX, handY, 23);else art.weapon(ctx, handX, handY, player.loadout.weapon === 'dawnBlade' ? 48 : 40, player.dir + (player.blocking && player.loadout.offhand !== 'buckler' ? -Math.PI / 2 : swing));
+      if (action === 'drink') art.draw(ctx, 'potion', handX, handY, 23);else art.weapon(ctx, handX, handY, player.loadout.weapon === 'dawnBlade' ? 48 : 40, (action === 'attack' || action === 'cast' ? motion.dir ?? player.dir : facing > 0 ? .85 : Math.PI - .85) + (player.blocking && player.loadout.offhand !== 'buckler' ? -Math.PI / 2 : swing));
       if (player.loadout.offhand === 'buckler') art.shield(ctx, leftX, leftY, player.blocking ? 34 : 29, player.blocking ? player.dir : 0);
       return;
     }
@@ -2499,21 +2507,7 @@
   }
   function drawLandmarks(z) {
     ctx.save();
-    // Major road/path
-
     ctx.translate(W / 2 - player.x, H / 2 - player.y * .82);
-    ctx.globalAlpha = .42;
-    ctx.fillStyle = zoneId === 'mistwood' ? '#7d7657' : zoneId === 'stonevale' ? '#928875' : '#8d6656';
-    ctx.beginPath();
-    ctx.moveTo(-180, WORLD.h * .18);
-    ctx.quadraticCurveTo(WORLD.w * .42, WORLD.h * .46, WORLD.w * .50, WORLD.h * .74);
-    ctx.quadraticCurveTo(WORLD.w * .58, WORLD.h * .98, WORLD.w + 180, WORLD.h * .82);
-    ctx.lineTo(WORLD.w + 180, WORLD.h * .95);
-    ctx.quadraticCurveTo(WORLD.w * .57, WORLD.h * 1.08, WORLD.w * .45, WORLD.h * .80);
-    ctx.quadraticCurveTo(WORLD.w * .34, WORLD.h * .54, -180, WORLD.h * .30);
-    ctx.closePath();
-    ctx.fill();
-    ctx.globalAlpha = .95;
     // Zone landmark cluster
     const lx = zoneId === 'mistwood' ? 1180 : zoneId === 'stonevale' ? 1220 : 1520;
     const ly = zoneId === 'mistwood' ? 420 : zoneId === 'stonevale' ? 520 : 900;
@@ -2522,7 +2516,7 @@
     ctx.scale(1, .82);
     ctx.fillStyle = shadowColor(.18);
     ctx.beginPath();
-    ctx.ellipse(0, 30, 150, 36, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 30, 48, 12, 0, 0, Math.PI * 2);
     ctx.fill();
     if (art?.has('house')) {
       // The existing landmark position is retained.
@@ -2741,30 +2735,6 @@
     }
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
-    ctx.globalAlpha = .12;
-    ctx.strokeStyle = z.accent;
-    ctx.lineWidth = 12;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(-60, H * .80);
-    ctx.quadraticCurveTo(W * .36, H * .58, W + 60, H * .46);
-    ctx.stroke();
-    ctx.globalAlpha = .08;
-    ctx.lineWidth = 42;
-    ctx.strokeStyle = '#0b100d';
-    ctx.beginPath();
-    ctx.moveTo(-100, H * .88);
-    ctx.quadraticCurveTo(W * .40, H * .68, W + 100, H * .55);
-    ctx.stroke();
-    ctx.globalAlpha = .18;
-    for (let i = 0; i < 18; i++) {
-      const x = (i * 173 + Math.floor(player.x * .15)) % (W + 120) - 60;
-      const y = (i * 97 + Math.floor(player.y * .06)) % (H + 90) - 40;
-      ctx.fillStyle = i % 3 === 0 ? '#d7c991' : '#93a383';
-      ctx.beginPath();
-      ctx.ellipse(x, y, 1.5, 8 + i % 4 * 3, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
     ctx.restore();
   }
   function drawCombatTelegraphs() {
@@ -3023,6 +2993,7 @@
       moveActor,
       openInventory,
       openQuests,
+      toggleQuest,
       openMenu,
       openShop,
       buyItem,
