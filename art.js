@@ -1,4 +1,6 @@
-/* Aethernfall 3.6.1 — shared raster atlases; all rectangles use source pixels. */
+"use strict";
+
+/* Aethernfall 3.7.0 — shared raster atlases; all rectangles use source pixels. */
 (() => {
   'use strict';
 
@@ -67,33 +69,52 @@
         const variant = document.createElement('canvas');
         variant.width = variant.height = 384;
         const c = variant.getContext('2d');
-        if (level === 0 && name !== 'water') {
-          c.fillStyle = {
-            grass: '#40583b',
-            stone: '#6c7166',
-            dirt: '#65523f'
-          }[name];
-          c.fillRect(0, 0, 384, 384);
-        } else c.drawImage(tile, 0, 0);
-        const density = [24, 45, 115, 220][level];
+        c.drawImage(tile, 0, 0);
+        // Keep the photographic base in every preset; add readable material features.
+        const density = [0, 35, 90, 180][level];
         for (let n = 0; n < density; n++) {
-          const x = (n * 127 + index * 43) % 380 + 2,
-            y = (n * 83 + index * 61) % 380 + 2;
+          const noise = v => {
+            const k = Math.sin(v * 127.1 + index * 311.7) * 43758.5453;
+            return k - Math.floor(k);
+          };
+          const x = noise(n + 1) * 360 + 12,
+            y = noise(n + 703) * 360 + 12;
           c.strokeStyle = name === 'grass' ? n % 3 ? '#82955a88' : '#203f3088' : name === 'stone' ? '#b4b69d66' : name === 'water' ? '#b4f0e744' : '#bba47c55';
-          c.lineWidth = level >= 2 ? 1.2 : 1;
+          c.lineWidth = level >= 2 ? 2 : 1.5;
           c.beginPath();
           c.moveTo(x, y);
           c.lineTo(x + (n % 3 - 1) * 2, y - (name === 'grass' ? 3 + n % 5 : 1));
           c.stroke();
+          if (name === 'grass') {
+            c.strokeStyle = n % 2 ? '#bec779aa' : '#193c27bb';
+            c.beginPath();
+            c.moveTo(x, y);
+            c.quadraticCurveTo(x - 6, y - 5, x - 4, y - 12);
+            c.moveTo(x, y);
+            c.quadraticCurveTo(x + 7, y - 4, x + 6, y - 9);
+            c.stroke();
+            if (level >= 2 && n % 4 === 0) {
+              c.fillStyle = '#e3d6a8';
+              c.fillRect(x - 5, y - 13, 3, 3);
+            }
+          } else if (name !== 'water') {
+            c.fillStyle = '#23352888';
+            c.beginPath();
+            c.ellipse(x, y, 6 + n % 5, 3 + n % 3, 0, 0, Math.PI * 2);
+            c.fill();
+            c.fillStyle = name === 'stone' ? '#b9ba9faa' : '#b6a084aa';
+            c.beginPath();
+            c.moveTo(x - 4, y);
+            c.lineTo(x - 2, y - 3);
+            c.lineTo(x + 3 + n % 3, y - 2);
+            c.lineTo(x + 4, y + 1);
+            c.lineTo(x, y + 2);
+            c.closePath();
+            c.fill();
+          }
           if (level >= 2 && n % 9 === 0 && name === 'grass') {
             c.fillStyle = '#d7cd95';
             c.fillRect(x, y - 4, 2, 2);
-          }
-          if (level === 3 && n % 7 === 0 && name !== 'water') {
-            c.fillStyle = '#26392d77';
-            c.fillRect(x + 3, y + 1, 4, 2);
-            c.fillStyle = '#b1b49a99';
-            c.fillRect(x + 3, y, 3, 1);
           }
         }
         materials[level][name] = variant;
@@ -285,3 +306,4 @@
     }
   };
 })();
+

@@ -1,7 +1,9 @@
+"use strict";
+
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '3.6.1';
+  const BUILD_VERSION = '3.7.0';
   const art = window.AetherArt;
   const GEAR = {
     emptyHand: {
@@ -42,6 +44,7 @@
       slot: 'armor',
       name: 'Пластинчатая броня стража',
       health: 25,
+      blockDrain: .7,
       icon: 'armor'
     }
   };
@@ -125,7 +128,15 @@
     perfPill: $('perfPill'),
     perfPillFps: $('perfPillFps'),
     perfPillMs: $('perfPillMs'),
-    netPill: $('netPill')
+    netPill: $('netPill'),
+    targetHud: $('targetHud'),
+    targetName: $('targetName'),
+    targetHpText: $('targetHpText'),
+    targetHpFill: $('targetHpFill'),
+    skill3Btn: $('skill3Btn'),
+    skill3Status: $('skill3Status'),
+    dodgeBtn: $('dodgeBtn'),
+    dodgeStatus: $('dodgeStatus')
   };
 
   // Modern mobile browsers share the Pointer Events input path.
@@ -196,7 +207,8 @@
   };
   let settings = {
     quality: storage.getItem('aef_quality') || detected,
-    fps: Number(storage.getItem('aef_fps') || 60)
+    fps: Number(storage.getItem('aef_fps') || 60),
+    leftHanded: storage.getItem('aef_left_handed') === '1'
   };
   if (!Object.hasOwn(QUALITY, settings.quality)) settings.quality = detected;
   if (!FPS.includes(settings.fps)) settings.fps = 60;
@@ -230,6 +242,7 @@
     ashfield: [[940, 500, 'OUTPOST'], [1760, 1240, 'BOSS'], [1260, 930, 'SHRINE']]
   };
   const SAVE = 'aethernfall_save_v30';
+  const SAVE_BACKUP = SAVE + '_backup';
   const LEGACY_SAVES = ['aethernfall_save_v27', 'aethernfall_save_v21', 'aethernfall_save_v11'];
   const zones = {
     mistwood: {
@@ -382,7 +395,11 @@
     patterns = {},
     interactionLock = 0;
   let lootDrops = [],
-    floatingTexts = [];
+    floatingTexts = [],
+    focusedEnemy = null,
+    focusUntil = 0,
+    healSkillReadyAt = 0,
+    attackBuffered = false;
   const LOOT_TABLE = {
     common: [{
       id: 'coin',
@@ -403,17 +420,12 @@
     guardian: [{
       id: 'coin',
       label: 'Монеты',
-      chance: .55,
+      chance: .70,
       count: 35
     }, {
       id: 'ore',
       label: 'Серебряная руда',
-      chance: .25,
-      count: 1
-    }, {
-      id: 'guardianToken',
-      label: 'Знак стража',
-      chance: .20,
+      chance: .30,
       count: 1
     }]
   };
@@ -466,6 +478,9 @@
   }
   function resetInput() {
     resetJoy();
+    attackBuffered = false;
+    player.dashRemaining = 0;
+    player.dodgeUntil = 0;
     look.ids.clear();
     player.blocking = false;
     document.querySelectorAll('.pressed').forEach(el => el.classList.remove('pressed'));
@@ -636,12 +651,24 @@
       },
       settings
     };
-    return storage.setItem(SAVE, JSON.stringify(data));
+    const raw = JSON.stringify(data),
+      previous = storage.getItem(SAVE);
+    if (previous && previous !== raw) {
+      try {
+        const parsed = JSON.parse(previous);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) storage.setItem(SAVE_BACKUP, previous);
+      } catch {}
+    }
+    return storage.setItem(SAVE, raw);
   }
   function load() {
-    const raw = storage.getItem(SAVE) || LEGACY_SAVES.map(key => storage.getItem(key)).find(Boolean);
-    if (!raw) return;
-    try {
+    const primary = storage.getItem(SAVE),
+      backup = storage.getItem(SAVE_BACKUP),
+      legacy = LEGACY_SAVES.map(key => storage.getItem(key)).find(Boolean),
+      candidates = [[primary, true], [backup, false], [legacy, false]].filter(([raw]) => !!raw);
+    if (!candidates.length) return;
+    let primaryDamaged = false;
+    for (const [raw, isPrimary] of candidates) try {
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw Error('Invalid save');
       saveEnvelope = parsed;
@@ -669,12 +696,20 @@
       const config = object(parsed.settings);
       if (Object.hasOwn(QUALITY, config.quality)) settings.quality = config.quality;
       if (FPS.includes(Number(config.fps))) settings.fps = Number(config.fps);
+      if (typeof config.leftHanded === 'boolean') settings.leftHanded = config.leftHanded;
       player.attackCd = player.dodgeCd = player.dodgeUntil = player.combo = player.comboTimer = 0;
+      healSkillReadyAt = 0;
+      attackBuffered = false;
       player.blocking = false;
       restoredPosition = true;
+      if (primaryDamaged && !isPrimary) storage.setItem(SAVE, raw);
+      return;
     } catch {
-      // Preserve the exact damaged bytes before allowing a fresh save to replace them.
-      saveBlocked = !storage.setItem(SAVE + '_recovery_' + Date.now(), raw);
+      if (isPrimary) {
+        primaryDamaged = true;
+        // Preserve the exact damaged bytes before trying the last known-good backup.
+        if (!storage.setItem(SAVE + '_recovery_' + Date.now(), raw)) saveBlocked = true;
+      }
     }
   }
   load();
@@ -760,7 +795,7 @@
         worn = player.loadout[item.slot] === id;
       const baseDamage = player.damage - (GEAR[player.loadout.weapon].damage || 0);
       const baseHp = player.maxHp - (GEAR[player.loadout.armor].health || 0);
-      const stats = item.slot === 'offhand' ? id === 'buckler' ? 'Блок: снижение входящего урона на 82% (с округлением). Не повышает HP.' : 'Блок мечом: снижение входящего урона на 74% (с округлением).' : item.slot === 'weapon' ? `Урон с оружием: ${baseDamage + (item.damage || 0)} · бонус +${item.damage || 0}<br>Комбо: до +20% · крит: 12%, ×1,5` : `Макс. здоровье: ${baseHp + (item.health || 0)} · бонус +${item.health || 0}<br>Бонус здоровья действует, пока броня надета. Блок определяется щитом.`;
+      const stats = item.slot === 'offhand' ? id === 'buckler' ? 'Блок: снижение входящего урона на 82% (с округлением). Не повышает HP.' : 'Блок мечом: снижение входящего урона на 74% (с округлением).' : item.slot === 'weapon' ? `Урон с оружием: ${baseDamage + (item.damage || 0)} · бонус +${item.damage || 0}<br>Комбо: до +20% · крит: 12%, ×1,5` : `Макс. здоровье: ${baseHp + (item.health || 0)} · бонус +${item.health || 0}<br>${item.blockDrain ? 'Особенность: расход выносливости при удержании блока −30%.' : 'Бонус здоровья действует, пока броня надета. Блок определяется щитом.'}`;
       return `<article class="card">${itemArt(item.icon)}<h3>${item.name}</h3><p>${stats}</p><button class="btn" id="equip-${id}" ${!owned || worn ? 'disabled' : ''}>${worn ? 'Надето' : owned ? 'Надеть' : 'Не получено'}</button></article>`;
     }).join('');
     openModal('Экипировка персонажа', `<p class="note">Усиления от уровня и закалки сохраняются при смене оружия. Бонус брони действует, пока она надета.</p><div class="shopList">${gearCards}</div><div class="sectionTitle">БЫСТРЫЙ РАСХОДНИК</div><div class="shopList">${Object.entries(SUPPLIES).map(([id, s]) => `<article class="card">${itemArt('potion')}<h3>${s.name} · ${player.supplies[id]} шт.</h3><p>${s.note}<br>Расход: 1 шт. за применение. Используется кнопкой «Зелье» во время игры.</p><button class="btn" id="supply-${id}" ${player.loadout.quick === id ? 'disabled' : ''}>${player.loadout.quick === id ? 'В быстром слоте' : 'В быстрый слот'}</button></article>`).join('')}</div><button class="btn" id="supply-clear">Освободить быстрый слот</button><button class="btn" id="equipmentBack">Вернуться в сумку</button>`);
@@ -796,6 +831,7 @@
     H = Math.round((window.visualViewport?.height || innerHeight) * viewportScale);
     DPR = Math.min(device.dpr, 2, Math.sqrt(1500000 / (W * H)));
     document.documentElement.style.setProperty('--app-height', H + 'px');
+    document.body.classList.toggle('leftHanded', !!settings.leftHanded);
     const renderWidth = Math.max(1, Math.floor(W * DPR)),
       renderHeight = Math.max(1, Math.floor(H * DPR));
     if (canvas.width !== renderWidth) canvas.width = renderWidth;
@@ -896,7 +932,13 @@
         for (const key of Object.keys(s)) s[key] = 0;
       }
     }
-    if (s.step !== previousStep) ensureQuestTargets();
+    if (s.step !== previousStep) {
+      ensureQuestTargets();
+      if (q.id === 'ash' && previousStep === 2 && s.step === 3) {
+        player.inv.emberShard = (player.inv.emberShard || 0) + 1;
+        toast('Получен Осколок пламени · навыки усилены');
+      }
+    }
     if (persist) save();
   }
   function ensureQuestTargets() {
@@ -919,6 +961,15 @@
       for (let i = available; i < needed; i++) addEnemy(type, clamp(z.scout.x + 300 + i * 65, 80, WORLD.w - 80), clamp(z.scout.y + 250, 80, WORLD.h - 80));
     }
   }
+  // Level 6 is the original starting balance. Never change a wounded enemy mid-fight.
+  function scaleEnemy(e) {
+    if (!e.baseStats) return;
+    const level = clamp(Math.floor(Number(player.level) || 1), 1, 100);
+    e.level = level;
+    const extra = Math.max(0, level - 6);
+    e.hp = e.maxHp = Math.round(e.baseStats.hp * (1 + extra * .09));
+    e.damage = Math.round(e.baseStats.damage * (1 + extra * .055));
+  }
   function addEnemy(type, x, y) {
     const cap = entities.reduce((n, e) => n + (e.kind === 'enemy' && e.type !== 'guardian' && e.hp > 0), 0);
     if (type !== 'guardian' && cap >= 17) return;
@@ -935,7 +986,9 @@
       cd: 0,
       hit: 0,
       seed: rng(x + y),
-      stun: 0
+      stun: 0,
+      windup: 0,
+      pendingAttack: false
     };
     if (type === 'raider') Object.assign(e, {
       r: 21,
@@ -958,11 +1011,24 @@
       speed: 48,
       damage: 22
     });
+    e.baseStats = {
+      hp: e.maxHp,
+      damage: e.damage
+    };
+    scaleEnemy(e);
     entities.push(e);
     physics?.relocate(e);
+    e.homeX = e.x;
+    e.homeY = e.y;
+    e.home = {
+      x: e.x,
+      y: e.y
+    };
+    e.aiState = 'idle';
+    return e;
   }
   function addResource(kind, x, y) {
-    entities.push({
+    const resource = {
       kind: 'resource',
       type: kind,
       x,
@@ -971,7 +1037,10 @@
       hp: 1,
       maxHp: 1,
       pulse: rng(x * y) * Math.PI * 2
-    });
+    };
+    entities.push(resource);
+    physics?.relocate(resource);
+    return resource;
   }
   function makeAmbient() {
     ambient = [];
@@ -1006,18 +1075,19 @@
       r: (zoneId === 'mistwood' ? 18 : 23) * a.scale
     });
     physics.set(items);
-    for (const e of entities) if (e.kind === 'resource') {
-      physics.relocate(e);
-      items.push({
-        x: e.x,
-        y: e.y,
-        r: e.type === 'herb' ? 12 : 18,
-        source: e
-      });
-      physics.set(items);
-    }
+    // Resource nodes remain collectible scenery, not hard collision or projectile blockers.
+    for (const e of entities) if (e.kind === 'resource') physics.relocate(e);
     physics.relocate(player);
-    for (const e of entities) if (e.kind === 'enemy') physics.relocate(e);
+    for (const e of entities) if (e.kind === 'enemy') {
+      physics.relocate(e);
+      e.homeX = e.x;
+      e.homeY = e.y;
+      e.home = {
+        x: e.x,
+        y: e.y
+      };
+      e.aiState = 'idle';
+    }
   }
   function moveActor(actor, dx, dy) {
     const edge = actor === player ? 70 : 40;
@@ -1051,6 +1121,8 @@
     projectiles = [];
     lootDrops = [];
     floatingTexts = [];
+    focusedEnemy = null;
+    focusUntil = 0;
     const z = zones[zoneId];
     player.x = z.camp.x;
     player.y = z.camp.y;
@@ -1124,21 +1196,30 @@
     };
     return `${names[id] || id} ×${count}`;
   }
+  function skillMultiplier() {
+    return 1 + Math.min(5, Math.max(0, player.inv.emberShard || 0)) * .03;
+  }
+  function focusEnemy(e, seconds = 4) {
+    if (!e || e.kind !== 'enemy' || e.hp <= 0) return;
+    focusedEnemy = e;
+    focusUntil = Math.max(focusUntil, time + seconds);
+  }
+  function addLootDrop(id, label, count, x, y) {
+    lootDrops.push({
+      id, label, count, x, y, life: 22
+    });
+  }
   function spawnLootFromEnemy(e) {
     const table = e.type === 'guardian' ? LOOT_TABLE.guardian : LOOT_TABLE.common;
+    if (e.type === 'guardian' && !(player.inv.guardianToken > 0) && !lootDrops.some(l => l.id === 'guardianToken' && l.life > 0)) {
+      addLootDrop('guardianToken', 'Знак стража', 1, e.x + 10, e.y - 6);
+    }
     const roll = Math.random();
     let acc = 0;
     for (const d of table) {
       acc += d.chance;
       if (roll <= acc) {
-        lootDrops.push({
-          id: d.id,
-          label: d.label,
-          count: d.count + (d.id === 'coin' && e.type === 'guardian' ? Math.floor(Math.random() * 20) : 0),
-          x: e.x + (Math.random() * 24 - 12),
-          y: e.y + (Math.random() * 24 - 12),
-          life: 22
-        });
+        addLootDrop(d.id, d.label, d.count + (d.id === 'coin' && e.type === 'guardian' ? Math.floor(Math.random() * 20) : 0), e.x + (Math.random() * 24 - 12), e.y + (Math.random() * 24 - 12));
         break;
       }
     }
@@ -1168,6 +1249,7 @@
   }
   function hitTarget(e, dmg) {
     if (!e || e.hp <= 0 || !Number.isFinite(dmg) || dmg <= 0) return;
+    focusEnemy(e);
     if (!Number.isFinite(e.hp)) e.hp = 0;
     e.hp -= dmg;
     e.hit = .16;
@@ -1176,7 +1258,12 @@
     if (e.hp <= 0) kill(e);
   }
   function attack() {
-    if (player.attackCd > 0 || isPaused()) return;
+    if (isPaused()) return false;
+    if (player.attackCd > 0) {
+      if (player.attackCd <= .13) attackBuffered = true;
+      return false;
+    }
+    attackBuffered = false;
     player.attackCd = .42;
     animate(player, 'attack', .42);
     player.combo = player.comboTimer > 0 ? Math.min(3, player.combo + 1) : 1;
@@ -1211,6 +1298,7 @@
       hits++;
     }
     burst(player.x + Math.cos(a) * 36, player.y + Math.sin(a) * 36, '#e4bf69', hits ? 12 + player.combo * 2 : 5, 95);
+    return hits > 0;
   }
   function dodge() {
     if (player.dodgeCd > time || player.stamina < 24 || isPaused()) return;
@@ -1222,19 +1310,54 @@
     const mx = moving ? joy.x : Math.cos(player.dir),
       my = moving ? joy.y : Math.sin(player.dir),
       mag = Math.hypot(mx, my) || 1;
-    moveActor(player, mx / mag * 125, my / mag * 125);
+    player.dashX = mx / mag;
+    player.dashY = my / mag;
+    player.dashRemaining = .28;
     burst(player.x, player.y, '#91c6cc', 16, 145);
     toast('Уклонение');
   }
+  function acquireEnemy(maxRange, maxAngle) {
+    let best = null,
+      bestScore = Infinity;
+    for (const e of entities) {
+      if (e.hp <= 0 || e.kind !== 'enemy') continue;
+      const d = dist(player, e);
+      if (d > maxRange || physics && !physics.clearLine(player.x, player.y, e.x, e.y, 2)) continue;
+      const angle = Math.abs(angleDiff(Math.atan2(e.y - player.y, e.x - player.x), player.dir));
+      if (angle > maxAngle) continue;
+      const score = d + angle * 42;
+      if (score < bestScore) {
+        best = e;
+        bestScore = score;
+      }
+    }
+    return best;
+  }
   function skill(n) {
-    if (isPaused()) return;
+    if (isPaused()) return false;
+    if (n === 3 && player.hp >= player.maxHp) {
+      toast('Здоровье полное');
+      return false;
+    }
+    if (n === 3 && time < healSkillReadyAt) {
+      toast('Второе дыхание: ' + Math.ceil(healSkillReadyAt - time) + ' с');
+      return false;
+    }
     if (player.stamina < 20) {
       toast('Недостаточно выносливости');
-      return;
+      return false;
+    }
+    if (n === 1 || n === 2) {
+      const target = acquireEnemy(n === 1 ? 180 : 430, n === 1 ? 1.8 : 1.45);
+      if (target) {
+        player.dir = Math.atan2(target.y - player.y, target.x - player.x);
+        focusEnemy(target, 2.5);
+      }
     }
     player.stamina -= 20;
     animate(player, n === 3 ? 'drink' : 'cast', .55);
     const a = player.dir;
+    const skillPower = skillMultiplier();
     if (n === 1) {
       let hits = 0;
       for (const e of entities) {
@@ -1242,7 +1365,7 @@
         const d = dist(player, e),
           ea = Math.atan2(e.y - player.y, e.x - player.x);
         if (d < 165 && Math.abs(angleDiff(ea, a)) < 1.3 && (!physics || physics.clearLine(player.x, player.y, e.x, e.y, 2))) {
-          hitTarget(e, Math.round(player.damage * 1.85));
+          hitTarget(e, Math.round(player.damage * 1.85 * skillPower));
           hits++;
         }
       }
@@ -1256,7 +1379,7 @@
           y: player.y + Math.sin(a) * 24,
           vx: Math.cos(aa) * 480,
           vy: Math.sin(aa) * 480,
-          damage: Math.round(player.damage * .9),
+          damage: Math.round(player.damage * .9 * skillPower),
           life: .82,
           color: '#bfe9ee'
         });
@@ -1265,9 +1388,11 @@
     } else {
       const before = player.hp;
       player.hp = Math.min(player.maxHp, player.hp + 70);
+      healSkillReadyAt = time + 8;
       burst(player.x, player.y, '#86c99b', 20, 100);
-      toast(before === player.maxHp ? 'Второе дыхание готово' : 'Восстановлено здоровье');
+      toast('Восстановлено здоровье');
     }
+    return true;
   }
   const interactionResult = {
     type: '',
@@ -1335,11 +1460,6 @@
       const l = hit.entity;
       if (!l) return;
       if (l.id === 'coin') player.gold += l.count;else player.inv[l.id] = (player.inv[l.id] || 0) + l.count;
-      if (l.id === 'guardianToken') {
-        const oldMax = player.maxHp;
-        switchGear('guardianArmor');
-        player.hp = Math.min(player.maxHp, player.hp + Math.max(0, player.maxHp - oldMax));
-      }
       const text = l.id === 'coin' ? `Золото +${l.count}` : `Получено: ${l.label} ×${l.count}`;
       toast(text);
       if (ui.lootTicker) {
@@ -1379,7 +1499,6 @@
     }[key]);
     burst(r.x, r.y, '#d6c274', 12, 105);
     r.hp = 0;
-    physics?.removeSource(r);
     const idx = entities.indexOf(r);
     if (idx >= 0) entities.splice(idx, 1);
     updateUI();
@@ -1426,7 +1545,7 @@
     updateUI();
   }
   function openInventory() {
-    openModal('Сумка и экипировка', `<button class="btn" id="equipmentEntry">Экипировка и расходники</button><div class="grid"><div class="card">${itemArt('sword')}<h3>Оружие</h3><p>${escapeHTML(player.equipment.weapon)}<br>Урон: <b>${player.damage}</b></p></div><div class="card">${itemArt('armor')}<h3>Броня</h3><p>${escapeHTML(player.equipment.armor)}<br>Макс. здоровье: <b>${player.maxHp}</b></p></div><div class="card"><h3>Ресурсы</h3><p>Древесина: ${player.inv.wood}<br>Руда: ${player.inv.ore}<br>Трава: ${player.inv.herb}</p></div><div class="card"><h3>Валюта</h3><p class="gold">${player.gold} золотых</p><p>Знаки: ${player.inv.guardianToken || 0}<br>Осколки: ${player.inv.emberShard || 0}</p></div></div><div class="card"><h3>Свойства материалов</h3><p>Древесина и руда: закалка, +5 урона за 3 древесины и 2 руды.<br>Трава: изготовление зелий.<br>Знак стража: открывает броню стража (+25 макс. здоровья при ношении).<br>Осколок: коллекционный трофей, боевого бонуса нет.</p></div><div class="sectionTitle">КРАФТ</div><button class="btn" id="brewBtn">Зелье лечения в сумку · 3 травы + 1 древесина · +100 HP при применении</button><button class="btn" id="craftBtn">Закалить меч · 3 древесины + 2 руды</button><button class="btn" id="potionBtn">Эликсир жизни · +12 макс. HP навсегда, полное лечение · 3 травы + 1 древесина</button>`);
+    openModal('Сумка и экипировка', `<button class="btn" id="equipmentEntry">Экипировка и расходники</button><div class="grid"><div class="card">${itemArt('sword')}<h3>Оружие</h3><p>${escapeHTML(player.equipment.weapon)}<br>Урон: <b>${player.damage}</b></p></div><div class="card">${itemArt('armor')}<h3>Броня</h3><p>${escapeHTML(player.equipment.armor)}<br>Макс. здоровье: <b>${player.maxHp}</b></p></div><div class="card"><h3>Ресурсы</h3><p>Древесина: ${player.inv.wood}<br>Руда: ${player.inv.ore}<br>Трава: ${player.inv.herb}</p></div><div class="card"><h3>Валюта</h3><p class="gold">${player.gold} золотых</p><p>Знаки: ${player.inv.guardianToken || 0}<br>Осколки: ${player.inv.emberShard || 0}</p></div></div><div class="card"><h3>Свойства материалов</h3><p>Древесина и руда: закалка, +5 урона за 3 древесины и 2 руды.<br>Трава: изготовление зелий.<br>Знак стража: открывает броню стража (+25 макс. здоровья при ношении).<br>Осколок пламени: +3% урона навыков за каждый, максимум +15%.</p></div><div class="sectionTitle">КРАФТ</div><button class="btn" id="brewBtn">Зелье лечения в сумку · 3 травы + 1 древесина · +100 HP при применении</button><button class="btn" id="craftBtn">Закалить меч · 3 древесины + 2 руды</button><button class="btn" id="potionBtn">Эликсир жизни · +12 макс. HP навсегда, полное лечение · 3 травы + 1 древесина</button>`);
     $('craftBtn').disabled = player.inv.wood < 3 || player.inv.ore < 2;
     $('potionBtn').disabled = player.inv.herb < 3 || player.inv.wood < 1;
     bindTap($('craftBtn'), () => craft('blade'));
@@ -1634,7 +1753,7 @@
     return true;
   }
   function openMenu() {
-    openModal('Настройки · v' + BUILD_VERSION, `<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><div class="sectionTitle">КАЧЕСТВО ГРАФИКИ</div><div class="settingRow"><div class="seg" id="qualitySeg">${['low', 'medium', 'high', 'very-high'].map(q => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}">${q === 'very-high' ? 'Very High' : q[0].toUpperCase() + q.slice(1)}</button>`).join('')}</div><div class="note">Меняет материалы земли, мелкие детали, тени, оформление порталов и лимит частиц. Разрешение и резкость спрайтов одинаковы при любом качестве. Препятствия не меняются. Применяется сразу.</div></div><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="settingRow"><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div><div class="note">Лимит управляет реальными отрисованными кадрами. Монитор считает только кадры после update + draw.</div></div><div class="sectionTitle">МОНИТОР ПРОИЗВОДИТЕЛЬНОСТИ</div><button class="btn" id="perfBtn">${perfMonitorEnabled ? 'Выключить frame-time monitor' : 'Включить frame-time monitor'}</button>${devicePanel()}<div class="sectionTitle">СОХРАНЕНИЕ</div><button class="btn" id="saveBtn">Сохранить прогресс</button>`);
+    openModal('Настройки · v' + BUILD_VERSION, `<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><div class="sectionTitle">КАЧЕСТВО ГРАФИКИ</div><div class="settingRow"><div class="seg" id="qualitySeg">${['low', 'medium', 'high', 'very-high'].map(q => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}">${q === 'very-high' ? 'Very High' : q[0].toUpperCase() + q.slice(1)}</button>`).join('')}</div><div class="note">Меняет материалы земли, мелкие детали, тени, оформление порталов и лимит частиц. Разрешение и резкость спрайтов одинаковы при любом качестве. Препятствия не меняются. Применяется сразу.</div></div><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="settingRow"><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div><div class="note">Лимит управляет реальными отрисованными кадрами. Монитор считает только кадры после update + draw.</div></div><div class="sectionTitle">УПРАВЛЕНИЕ</div><button class="btn" id="handedBtn">${settings.leftHanded ? 'Левша: действия слева' : 'Обычное: действия справа'}</button><div class="note">Меняет местами джойстик и боевые кнопки. Применяется сразу.</div><div class="sectionTitle">МОНИТОР ПРОИЗВОДИТЕЛЬНОСТИ</div><button class="btn" id="perfBtn">${perfMonitorEnabled ? 'Выключить frame-time monitor' : 'Включить frame-time monitor'}</button>${devicePanel()}<div class="sectionTitle">СОХРАНЕНИЕ</div><button class="btn" id="saveBtn">Сохранить прогресс</button>`);
     document.querySelectorAll('#qualitySeg button').forEach(b => bindTap(b, () => {
       settings.quality = b.dataset.q;
       storage.setItem('aef_quality', settings.quality);
@@ -1651,6 +1770,13 @@
     }));
     bindTap($('saveBtn'), () => {
       toast(save() ? 'Прогресс сохранён' : 'Не удалось сохранить: хранилище недоступно');
+    });
+    bindTap($('handedBtn'), () => {
+      settings.leftHanded = !settings.leftHanded;
+      storage.setItem('aef_left_handed', settings.leftHanded ? '1' : '0');
+      applyGraphics();
+      save();
+      openMenu();
     });
     bindTap($('perfBtn'), () => {
       perfMonitorEnabled = !perfMonitorEnabled;
@@ -1738,7 +1864,8 @@
     passive: true
   });
   canvas.addEventListener('pointerdown', e => {
-    if (isPaused() || e.clientX < W * .43 || look.ids.size) return;
+    const inLookZone = settings.leftHanded ? e.clientX < W * .57 : e.clientX >= W * .43;
+    if (isPaused() || !inLookZone || look.ids.size) return;
     look.ids.add(e.pointerId);
     look.lastX = e.clientX;
     capture(canvas, e.pointerId);
@@ -1765,6 +1892,10 @@
         e.preventDefault();
         e.stopPropagation();
         if (isPaused() || blockPointer !== null && player.blocking) return;
+        if (player.stamina < 8) {
+          toast('Недостаточно выносливости для блока');
+          return;
+        }
         blockPointer = e.pointerId;
         player.blocking = true;
         btn.classList.add('pressed');
@@ -1799,7 +1930,7 @@
     const panel = $('questTracker'),
       collapsed = panel.classList.toggle('collapsed');
     $('questToggle').setAttribute('aria-expanded', String(!collapsed));
-    setText($('questChevron'), collapsed ? '⌄' : '⌃');
+    setText($('questChevron'), collapsed ? '›' : '‹');
   }
   bindTap($('questToggle'), toggleQuest);
   bindTap($('menuBtn'), openMenu);
@@ -1871,13 +2002,14 @@
       if (!Number.isFinite(e.patrolT)) e.patrolT = 0;
       if (!Number.isFinite(e.dir)) e.dir = e.seed * 6.283185;
       const d = dist(player, e);
-      if (d >= 620) {
+      if (e.aiState === 'idle') {
         e.patrolT += dt;
         if (e.patrolT >= 1.1) {
           e.patrolT = 0;
           e.dir += (rng(Math.floor(time * 3) + Math.floor(e.x) + Math.floor(e.y)) - .5) * 0.9;
         }
         const speed = e.type === 'guardian' ? 12 : 18;
+        if (Math.hypot(e.x - e.homeX, e.y - e.homeY) > 70) e.dir = Math.atan2(e.homeY - e.y, e.homeX - e.x);
         moveActor(e, Math.cos(e.dir) * speed * dt, Math.sin(e.dir) * speed * dt);
       }
     }
@@ -1891,48 +2023,101 @@
     player.attackCd = Math.max(0, player.attackCd - dt);
     player.comboTimer = Math.max(0, player.comboTimer - dt);
     if (player.comboTimer === 0) player.combo = 0;
-    player.stamina = clamp(player.stamina + (player.blocking ? 12 : 24) * dt, 0, player.maxStamina);
+    if (player.blocking) {
+      const drain = 12 * (GEAR[player.loadout.armor]?.blockDrain || 1);
+      player.stamina = clamp(player.stamina - drain * dt, 0, player.maxStamina);
+      if (player.stamina <= 0) {
+        player.blocking = false;
+        document.querySelector('[data-act="block"]')?.classList.remove('pressed');
+        toast('Блок сбит: выносливость исчерпана');
+      }
+    } else player.stamina = clamp(player.stamina + 24 * dt, 0, player.maxStamina);
+    if (attackBuffered && player.attackCd <= 0) attack();
     const moving = Math.hypot(joy.x, joy.y) > .06;
     const dodgeUntil = Number.isFinite(player.dodgeUntil) ? player.dodgeUntil : 0;
     player.dodgeUntil = dodgeUntil;
     const speed = player.speed * (player.blocking ? .58 : 1) * (player.dodgeUntil > time ? .9 : 1);
-    if (moving && time >= dodgeUntil) {
-      moveActor(player, joy.x * speed * dt, joy.y * speed * dt);
+    const dashStep = Math.min(dt, Math.max(0, player.dashRemaining || 0), Math.max(0, dodgeUntil - (time - dt)));
+    if (dashStep > 0) {
+      moveActor(player, player.dashX * (125 / .28) * dashStep, player.dashY * (125 / .28) * dashStep);
+      player.dashRemaining = Math.max(0, player.dashRemaining - dashStep);
+    }
+    const walkStep = dt - dashStep;
+    if (moving && time >= dodgeUntil && walkStep > 0) {
+      moveActor(player, joy.x * speed * walkStep, joy.y * speed * walkStep);
       player.dir = Math.atan2(joy.y, joy.x);
     }
     updateEnemies(dt);
     updateProjectiles(dt);
     updateEffects(dt);
   }
+  function damagePlayerFromEnemy(e) {
+    focusEnemy(e, 2.5);
+    if (time < player.dodgeUntil) return;
+    const reduction = player.blocking ? player.loadout.offhand === 'buckler' ? .18 : .26 : 1;
+    const dmg = Math.max(1, Math.ceil(e.damage * reduction));
+    player.hp = Math.max(0, player.hp - dmg);
+    animate(player, player.blocking ? 'block' : 'hit', .24);
+    addFloatingText('−' + dmg, player.x, player.y - 52, '#ff9690');
+    burst(player.x, player.y, '#e06d68', 7, 80);
+    if (player.hp <= 0) {
+      animate(player, 'death', .75);
+      player.hp = player.maxHp;
+      player.x = zones[zoneId].camp.x;
+      player.y = zones[zoneId].camp.y;
+      physics?.relocate(player);
+      resetInput();
+      toast('Вы возвращены к лагерю');
+    }
+  }
   function updateEnemies(dt) {
     for (const e of entities) {
       if (e.hp <= 0 || e.kind !== 'enemy') continue;
       e.cd = Math.max(0, e.cd - dt);
       e.hit = Math.max(0, e.hit - dt);
-      const d = dist(player, e);
-      if (d < 620) {
-        const a = Math.atan2(player.y - e.y, player.x - e.x);
-        if (d > e.r + player.r + 8) {
-          if (physics) physics.chase(e, player, e.speed * dt, time);else moveActor(e, Math.cos(a) * e.speed * dt, Math.sin(a) * e.speed * dt);
-        } else if (e.cd <= 0 && (!physics || physics.clearLine(e.x, e.y, player.x, player.y, 2))) {
-          e.cd = e.type === 'guardian' ? 1.05 : 1.35;
-          animate(e, 'attack', .4);
-          if (time >= player.dodgeUntil) {
-            const dmg = player.blocking ? Math.ceil(e.damage * (player.loadout.offhand === 'buckler' ? .18 : .26)) : e.damage;
-            player.hp = Math.max(0, player.hp - dmg);
-            animate(player, player.blocking ? 'block' : 'hit', .24);
-            addFloatingText('−' + dmg, player.x, player.y - 52, '#ff9690');
-            burst(player.x, player.y, '#e06d68', 7, 80);
-            if (player.hp <= 0) {
-              animate(player, 'death', .75);
-              player.hp = player.maxHp;
-              player.x = zones[zoneId].camp.x;
-              player.y = zones[zoneId].camp.y;
-              physics?.relocate(player);
-              toast('Вы возвращены к лагерю');
-            }
-          }
-        }
+      e.windup = Math.max(0, (Number(e.windup) || 0) - dt);
+      if (!Number.isFinite(e.homeX)) {
+        e.homeX = e.x;
+        e.homeY = e.y;
+        e.home = {
+          x: e.x,
+          y: e.y
+        };
+        e.aiState = 'idle';
+      }
+      const d = dist(player, e),
+        homeDistance = Math.hypot(e.x - e.homeX, e.y - e.homeY),
+        playerFromHome = Math.hypot(player.x - e.homeX, player.y - e.homeY),
+        attackRange = e.r + player.r + 8;
+      if (e.aiState === 'chase' && (d > 370 || homeDistance > 420 || playerFromHome > 480)) {
+        e.aiState = 'return';
+        e.pendingAttack = false;
+        e.windup = 0;
+      }
+      if (e.aiState === 'return') {
+        if (homeDistance > 8) {
+          if (physics) physics.chase(e, e.home, e.speed * dt, time);else moveActor(e, (e.homeX - e.x) / homeDistance * e.speed * dt, (e.homeY - e.y) / homeDistance * e.speed * dt);
+        } else e.aiState = 'idle';
+        continue;
+      }
+      if (e.aiState === 'idle' && e.hp === e.maxHp && e.level !== clamp(Math.floor(Number(player.level) || 1), 1, 100)) scaleEnemy(e);
+      if (e.aiState === 'idle' && d < 220 && playerFromHome < 300 && (!physics || physics.clearLine(e.x, e.y, player.x, player.y, 2))) e.aiState = 'chase';
+      if (e.aiState !== 'chase') continue;
+      if (e.pendingAttack) {
+        if (e.windup > 0) continue;
+        e.pendingAttack = false;
+        e.cd = e.type === 'guardian' ? 1.05 : 1.35;
+        if (d <= attackRange + 12 && (!physics || physics.clearLine(e.x, e.y, player.x, player.y, 2))) damagePlayerFromEnemy(e);
+        continue;
+      }
+      const a = Math.atan2(player.y - e.y, player.x - e.x);
+      if (d > attackRange) {
+        if (physics) physics.chase(e, player, e.speed * dt, time);else moveActor(e, Math.cos(a) * e.speed * dt, Math.sin(a) * e.speed * dt);
+      } else if (e.cd <= 0 && (!physics || physics.clearLine(e.x, e.y, player.x, player.y, 2))) {
+        e.pendingAttack = true;
+        e.windup = e.type === 'guardian' ? .48 : .32;
+        animate(e, 'attack', e.windup + .16);
+        focusEnemy(e, 2.5);
       }
     }
     updateEnemyPatrol(dt);
@@ -1999,6 +2184,22 @@
     setText(ui.supplyLabel, (supplyId === 'tonic' ? 'ТОНИК' : supplyId ? 'ЗЕЛЬЕ' : 'ПУСТО') + ' · ' + (player.supplies[supplyId] || 0));
     const supplyEmpty = !player.supplies[supplyId];
     if (ui.supplyBtn.disabled !== supplyEmpty) ui.supplyBtn.disabled = supplyEmpty;
+    const healRemaining = Math.max(0, healSkillReadyAt - time),
+      dodgeRemaining = Math.max(0, player.dodgeCd - time);
+    setText(ui.skill3Status, healRemaining > 0 ? healRemaining.toFixed(1) + 'с' : 'ДЫХАНИЕ');
+    ui.skill3Btn?.classList.toggle('cooldown', healRemaining > 0);
+    setText(ui.dodgeStatus, dodgeRemaining > 0 ? dodgeRemaining.toFixed(1) + 'с' : 'УКЛОН');
+    ui.dodgeBtn?.classList.toggle('cooldown', dodgeRemaining > 0);
+    if (focusedEnemy && focusedEnemy.hp > 0 && (time < focusUntil || focusedEnemy.aiState === 'chase' && dist(player, focusedEnemy) < 320)) {
+      const names = {raider: 'Налётчик', boar: 'Вепрь', guardian: 'Страж руин'};
+      ui.targetHud?.classList.remove('hidden');
+      setText(ui.targetName, names[focusedEnemy.type] || 'Противник');
+      setText(ui.targetHpText, Math.max(0, Math.ceil(focusedEnemy.hp)) + ' / ' + Math.ceil(focusedEnemy.maxHp));
+      setWidth(ui.targetHpFill, clamp(focusedEnemy.hp / focusedEnemy.maxHp * 100, 0, 100) + '%');
+    } else {
+      focusedEnemy = null;
+      ui.targetHud?.classList.add('hidden');
+    }
     const hit = nearbyInteraction();
     ui.actionUse.classList.toggle('available', !!hit);
     setText(ui.actionLabel, hit ? {
@@ -2406,12 +2607,6 @@
       const motion = motions.get(player),
         progress = motion ? clamp((time - motion.start) / motion.duration, 0, 1) : 1;
       const action = progress < 1 ? motion.action : player.blocking ? 'block' : 'idle';
-      if (action === 'dodge') {
-        const start = screenPos(motion.x, motion.y),
-          ease = 1 - Math.pow(1 - progress, 3);
-        p.x = start.x + (p.x - start.x) * ease;
-        p.y = start.y + (p.y - start.y) * ease;
-      }
       if (action === 'death') {
         const fallen = screenPos(motion.x, motion.y);
         ctx.save();
@@ -2739,13 +2934,18 @@
   }
   function drawCombatTelegraphs() {
     for (const e of entities) {
-      if (e.kind !== 'enemy' || e.hp <= 0 || e.cd > 0.35 || dist(player, e) > e.r + player.r + 28) continue;
-      const s = screenPos(e.x, e.y);
+      if (e.kind !== 'enemy' || e.hp <= 0 || !e.pendingAttack || !(e.windup > 0)) continue;
+      const s = screenPos(e.x, e.y),
+        total = e.type === 'guardian' ? .48 : .32,
+        progress = 1 - clamp(e.windup / total, 0, 1),
+        radius = e.type === 'guardian' ? 42 : 29;
       ctx.save();
-      ctx.strokeStyle = 'rgba(232,111,96,.62)';
-      ctx.lineWidth = 3;
+      ctx.fillStyle = `rgba(199,65,58,${(.06 + progress * .12).toFixed(3)})`;
+      ctx.strokeStyle = `rgba(255,145,118,${(.48 + progress * .42).toFixed(3)})`;
+      ctx.lineWidth = 2.5 + progress * 1.5;
       ctx.beginPath();
-      ctx.arc(s.x, s.y, 28, 0, Math.PI * 2);
+      ctx.arc(s.x, s.y, radius, 0, Math.PI * 2);
+      ctx.fill();
       ctx.stroke();
       ctx.restore();
     }
@@ -2779,6 +2979,28 @@
     drawFloatingTexts();
     drawNpcLabels();
   }
+  function objectiveTarget() {
+    const q = quest(),
+      state = questState(),
+      z = zones[zoneId];
+    if (state.step === 0) return z.scout;
+    if (state.step >= 3) return z.portal;
+    let type = '';
+    if (state.step === 1) type = q.id === 'mist' ? 'herb' : q.id === 'stone' ? 'ore' : 'wood';
+    if (state.step === 2) type = q.id === 'stone' ? 'guardian' : 'enemy';
+    let best = null,
+      bestDist = Infinity;
+    for (const e of entities) {
+      const match = state.step === 1 ? e.kind === 'resource' && e.type === type && e.hp > 0 : e.kind === 'enemy' && e.hp > 0 && (type === 'enemy' || e.type === type) && (q.id !== 'mist' || e.type === 'raider');
+      if (!match) continue;
+      const d = dist(player, e);
+      if (d < bestDist) {
+        best = e;
+        bestDist = d;
+      }
+    }
+    return best || (state.step === 1 ? z.scout : z.portal);
+  }
   function drawMap() {
     const z = zones[zoneId];
     mctx.clearRect(0, 0, 240, 240);
@@ -2808,6 +3030,16 @@
     mctx.beginPath();
     mctx.arc(z.portal.x / WORLD.w * 240, z.portal.y / WORLD.h * 240, 3.5, 0, Math.PI * 2);
     mctx.fill();
+    const target = objectiveTarget();
+    if (target) {
+      const tx = target.x / WORLD.w * 240,
+        ty = target.y / WORLD.h * 240;
+      mctx.strokeStyle = '#ffe08a';
+      mctx.lineWidth = 2;
+      mctx.beginPath();
+      mctx.arc(tx, ty, 5 + (Math.sin(time * 5) + 1) * 1.2, 0, Math.PI * 2);
+      mctx.stroke();
+    }
     mctx.fillStyle = '#eef5ef';
     mctx.beginPath();
     mctx.arc(player.x / WORLD.w * 240, player.y / WORLD.h * 240, 4, 0, Math.PI * 2);
@@ -2966,6 +3198,11 @@
         projectiles,
         time,
         DPR,
+        combat: {
+          healSkillReadyAt,
+          attackBuffered,
+          focusedEnemy
+        },
         perf: {
           fps: perfActualFps,
           frameMs: perfAvgFrameMs,
@@ -3015,6 +3252,9 @@
       applyGraphics,
       update,
       nearbyInteraction,
+      objectiveTarget,
+      acquireEnemy,
+      skillMultiplier,
       zones,
       player,
       setFps: f => {
@@ -3034,3 +3274,4 @@
   } else boot();
   if (!globalThis.__AETHER_TEST__) registerPWA();
 })();
+
