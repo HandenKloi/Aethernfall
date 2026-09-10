@@ -1,9 +1,19 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '3.5.2';
+  const BUILD_VERSION = '3.6.0';
   const art = window.AetherArt;
   const GEAR = {
+    emptyHand: {
+      slot: 'offhand',
+      name: 'Без щита',
+      icon: 'sword'
+    },
+    buckler: {
+      slot: 'offhand',
+      name: 'Щит дозорного',
+      icon: 'shield'
+    },
     starterBlade: {
       slot: 'weapon',
       name: 'Меч следопыта',
@@ -61,6 +71,7 @@
   }
   const itemArt = id => art ? art.icon({
     healing: 'potion',
+    buckler: 'shield',
     tonic: 'potion',
     dawnBlade: 'sword',
     wardenArmor: 'armor',
@@ -210,6 +221,13 @@
     w: 2800,
     h: 1800
   };
+  const physics = window.AetherPhysics?.create(WORLD.w, WORLD.h);
+  let structures = [];
+  const LANDMARKS = {
+    mistwood: [[940, 440, 'FOREST'], [1540, 1030, 'RUIN'], [2150, 540, 'SHRINE']],
+    stonevale: [[820, 480, 'VILLAGE'], [1500, 840, 'MINE'], [2180, 520, 'RUIN']],
+    ashfield: [[940, 500, 'OUTPOST'], [1760, 1240, 'BOSS'], [1260, 930, 'SHRINE']]
+  };
   const SAVE = 'aethernfall_save_v30';
   const LEGACY_SAVES = ['aethernfall_save_v27', 'aethernfall_save_v21', 'aethernfall_save_v11'];
   const zones = {
@@ -329,6 +347,7 @@
     loadout: {
       weapon: 'starterBlade',
       armor: 'starterArmor',
+      offhand: 'emptyHand',
       quick: 'potion'
     },
     supplies: {
@@ -485,26 +504,6 @@
   addEventListener('pageshow', resume);
   document.addEventListener('visibilitychange', () => document.hidden ? suspend() : resume());
   function drawCombatFeedback() {
-    const s = screenPos(player.x, player.y);
-    ctx.save();
-    ctx.translate(s.x, s.y);
-    ctx.scale(1, .82);
-    if (player.attackCd > .16) {
-      const phase = (.42 - player.attackCd) / .26;
-      ctx.strokeStyle = 'rgba(255,224,153,' + (1 - phase) + ')';
-      ctx.lineWidth = 3 + player.combo;
-      ctx.beginPath();
-      ctx.arc(0, 0, 55 + phase * 12, player.dir - 1 + phase * .6, player.dir + .7 + phase * .6);
-      ctx.stroke();
-    }
-    if (time < player.dodgeUntil) {
-      ctx.strokeStyle = 'rgba(143,218,222,.65)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(0, 12, 33, 14, 0, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-    ctx.restore();
     const hit = nearbyInteraction();
     if (hit) {
       const e = hit.entity || zones[zoneId].portal;
@@ -661,7 +660,7 @@
         if (typeof value === 'string') player.equipment[key] = value.slice(0, 160);
       }
       player.shopOwned = {};
-      for (const id of ['dawnBlade', 'wardenArmor']) {
+      for (const id of ['dawnBlade', 'wardenArmor', 'buckler']) {
         if (object(saved.shopOwned)[id] === true) player.shopOwned[id] = true;
       }
       restoreEquipment(saved);
@@ -679,7 +678,7 @@
   }
   load();
   function ownsGear(id) {
-    return id === 'starterBlade' || id === 'starterArmor' || player.shopOwned[id] === true || id === 'guardianArmor' && player.inv.guardianToken > 0;
+    return id === 'emptyHand' || id === 'starterBlade' || id === 'starterArmor' || player.shopOwned[id] === true || id === 'guardianArmor' && player.inv.guardianToken > 0;
   }
   function restoreEquipment(saved) {
     const previous = object(saved.loadout);
@@ -688,9 +687,10 @@
     player.loadout = {
       weapon,
       armor,
+      offhand: 'emptyHand',
       quick: 'potion'
     };
-    for (const slot of ['weapon', 'armor']) if (Object.hasOwn(GEAR, previous[slot]) && GEAR[previous[slot]].slot === slot && ownsGear(previous[slot])) player.loadout[slot] = previous[slot];
+    for (const slot of ['weapon', 'armor', 'offhand']) if (Object.hasOwn(GEAR, previous[slot]) && GEAR[previous[slot]].slot === slot && ownsGear(previous[slot])) player.loadout[slot] = previous[slot];
     if (previous.quick === '' || Object.hasOwn(SUPPLIES, previous.quick)) player.loadout.quick = previous.quick;
     player.supplies = {};
     for (const id of Object.keys(SUPPLIES)) player.supplies[id] = Math.floor(finite(object(saved.supplies)[id], 0, 0, 9999));
@@ -759,7 +759,7 @@
         worn = player.loadout[item.slot] === id;
       const baseDamage = player.damage - (GEAR[player.loadout.weapon].damage || 0);
       const baseHp = player.maxHp - (GEAR[player.loadout.armor].health || 0);
-      const stats = item.slot === 'weapon' ? `Урон с оружием: ${baseDamage + (item.damage || 0)} · бонус +${item.damage || 0}<br>Комбо: до +20% · крит: 12%, ×1,5` : `Макс. здоровье: ${baseHp + (item.health || 0)} · бонус +${item.health || 0}<br>Блок снижает входящий урон на 74% (с округлением)`;
+      const stats = item.slot === 'offhand' ? id === 'buckler' ? 'Блок: снижение входящего урона на 82% (с округлением). Не повышает HP.' : 'Блок мечом: снижение входящего урона на 74% (с округлением).' : item.slot === 'weapon' ? `Урон с оружием: ${baseDamage + (item.damage || 0)} · бонус +${item.damage || 0}<br>Комбо: до +20% · крит: 12%, ×1,5` : `Макс. здоровье: ${baseHp + (item.health || 0)} · бонус +${item.health || 0}<br>Бонус здоровья действует, пока броня надета. Блок определяется щитом.`;
       return `<article class="card">${itemArt(item.icon)}<h3>${item.name}</h3><p>${stats}</p><button class="btn" id="equip-${id}" ${!owned || worn ? 'disabled' : ''}>${worn ? 'Надето' : owned ? 'Надеть' : 'Не получено'}</button></article>`;
     }).join('');
     openModal('Экипировка персонажа', `<p class="note">Усиления от уровня и закалки сохраняются при смене оружия. Бонус брони действует, пока она надета.</p><div class="shopList">${gearCards}</div><div class="sectionTitle">БЫСТРЫЙ РАСХОДНИК</div><div class="shopList">${Object.entries(SUPPLIES).map(([id, s]) => `<article class="card">${itemArt('potion')}<h3>${s.name} · ${player.supplies[id]} шт.</h3><p>${s.note}<br>Расход: 1 шт. за применение. Используется кнопкой «Зелье» во время игры.</p><button class="btn" id="supply-${id}" ${player.loadout.quick === id ? 'disabled' : ''}>${player.loadout.quick === id ? 'В быстром слоте' : 'В быстрый слот'}</button></article>`).join('')}</div><button class="btn" id="supply-clear">Освободить быстрый слот</button><button class="btn" id="equipmentBack">Вернуться в сумку</button>`);
@@ -812,7 +812,7 @@
       if (img.complete) patterns[k] = ctx.createPattern(img, 'repeat');
     }
     if (art) Object.assign(patterns, art.patterns(ctx));
-    makeAmbient();
+    if (!ambient.length) makeAmbient();
     if (particles.length > profile.particles) particles.length = profile.particles;
     atmosphereGradient = null;
   }
@@ -872,12 +872,14 @@
     return step;
   }
   function openQuests() {
-    const q = quest(), state = questState();
-    const steps = q.steps.map((text,index) => {
-      const current = index === state.step, complete = index < state.step;
-      return `<li class="${current?'current':complete?'complete':''}" ${current?'aria-current="step"':''}>${complete?'✓ ':''}${escapeHTML(current?currentObjective():text)}${current?' · Сейчас':''}</li>`;
+    const q = quest(),
+      state = questState();
+    const steps = q.steps.map((text, index) => {
+      const current = index === state.step,
+        complete = index < state.step;
+      return `<li class="${current ? 'current' : complete ? 'complete' : ''}" ${current ? 'aria-current="step"' : ''}>${complete ? '✓ ' : ''}${escapeHTML(current ? currentObjective() : text)}${current ? ' · Сейчас' : ''}</li>`;
     }).join('');
-    openModal('Задания', `<article class="card"><p class="note">${escapeHTML(zones[zoneId].name)} · этап ${state.step+1} из ${q.steps.length}</p><h3>${escapeHTML(q.title)}</h3><ol class="questSteps">${steps}</ol></article><p class="note">Задание продвигается во время игры: разговор, сбор ресурсов, бой и переход в следующую зону. Покупка материалов не засчитывается как сбор.</p><button class="btn" id="questsClose">Вернуться в игру</button>`);
+    openModal('Задания', `<article class="card"><p class="note">${escapeHTML(zones[zoneId].name)} · этап ${state.step + 1} из ${q.steps.length}</p><h3>${escapeHTML(q.title)}</h3><ol class="questSteps">${steps}</ol></article><p class="note">Задание продвигается во время игры: разговор, сбор ресурсов, бой и переход в следующую зону. Покупка материалов не засчитывается как сбор.</p><button class="btn" id="questsClose">Вернуться в игру</button>`);
     bindTap($('questsClose'), closeModal);
   }
   function advanceQuest(reason, persist = true) {
@@ -960,6 +962,7 @@
       damage: 22
     });
     entities.push(e);
+    physics?.relocate(e);
   }
   function addResource(kind, x, y) {
     entities.push({
@@ -975,7 +978,7 @@
   }
   function makeAmbient() {
     ambient = [];
-    for (let i = 0; i < profile.ambient; i++) ambient.push({
+    for (let i = 0; i < 40; i++) ambient.push({
       x: 60 + rng(i + 7) * (WORLD.w - 120),
       y: 60 + rng(i + 91) * (WORLD.h - 120),
       kind: rng(i + 201),
@@ -983,7 +986,69 @@
       seed: i
     });
   }
+  function buildObstacles() {
+    if (!physics) return;
+    const z = zones[zoneId],
+      items = [{
+        x: z.camp.x,
+        y: z.camp.y - 100,
+        r: 48
+      }, {
+        x: zoneId === 'mistwood' ? 1180 : zoneId === 'stonevale' ? 1220 : 1520,
+        y: zoneId === 'mistwood' ? 430 : zoneId === 'stonevale' ? 530 : 910,
+        r: 65
+      }, ...LANDMARKS[zoneId].map(([x, y]) => ({
+        x,
+        y: y + 8,
+        r: 43
+      }))];
+    ambient = ambient.filter(a => [z.camp, z.scout, z.portal].every(p => dist(a, p) > 120) && items.every(o => dist(a, o) > o.r + 55 * a.scale));
+    for (const a of ambient) items.push({
+      x: a.x,
+      y: a.y + 8,
+      r: (zoneId === 'mistwood' ? 18 : 23) * a.scale
+    });
+    physics.set(items);
+    for (const e of entities) if (e.kind === 'resource') {
+      physics.relocate(e);
+      items.push({
+        x: e.x,
+        y: e.y,
+        r: e.type === 'herb' ? 12 : 18,
+        source: e
+      });
+      physics.set(items);
+    }
+    physics.relocate(player);
+    for (const e of entities) if (e.kind === 'enemy') physics.relocate(e);
+  }
+  function moveActor(actor, dx, dy) {
+    const edge = actor === player ? 70 : 40;
+    if (physics) {
+      physics.move(actor, dx, dy, edge);
+      return;
+    }
+    actor.x += dx;
+    actor.y += dy;
+    actor.x = clamp(actor.x, edge, WORLD.w - edge);
+    actor.y = clamp(actor.y, edge, WORLD.h - edge);
+  }
   function resetZone() {
+    physics?.set([]);
+    structures = LANDMARKS[zoneId].map(([x, y, k]) => ({
+      kind: 'structure',
+      x,
+      y,
+      asset: k === 'SHRINE' || k === 'BOSS' ? 'shrine' : k === 'RUIN' || k === 'MINE' ? 'ruins' : 'house',
+      height: 140
+    }));
+    structures.push({
+      kind: 'structure',
+      x: zoneId === 'mistwood' ? 1180 : zoneId === 'stonevale' ? 1220 : 1520,
+      y: zoneId === 'mistwood' ? 420 : zoneId === 'stonevale' ? 520 : 900,
+      asset: zoneId === 'mistwood' ? 'house' : zoneId === 'stonevale' ? 'ruins' : 'shrine',
+      height: 148
+    });
     entities = [];
     particles = [];
     projectiles = [];
@@ -1008,6 +1073,7 @@
     }
     if (zoneId === 'stonevale') addEnemy('guardian', 1680, 720);
     makeAmbient();
+    buildObstacles();
   }
   function burst(x, y, color, count = 10, speed = 110) {
     const room = Math.max(0, profile.particles - particles.length);
@@ -1124,7 +1190,7 @@
       if (e.hp <= 0 || e.kind !== 'enemy') continue;
       const d = dist(player, e),
         hitRange = 104 + e.r;
-      if (d < hitRange && d < bestDist) {
+      if (d < hitRange && d < bestDist && (!physics || physics.clearLine(player.x, player.y, e.x, e.y, 2))) {
         bestDist = d;
         target = e;
       }
@@ -1136,7 +1202,7 @@
       if (e.hp <= 0 || e.kind !== 'enemy') continue;
       const d = dist(player, e),
         hitRange = 104 + e.r;
-      if (d >= hitRange) continue;
+      if (d >= hitRange || physics && !physics.clearLine(player.x, player.y, e.x, e.y, 2)) continue;
       const ea = Math.atan2(e.y - player.y, e.x - player.x);
       if (Math.abs(angleDiff(ea, a)) >= 1.05) continue;
       const crit = Math.random() < .12;
@@ -1158,8 +1224,7 @@
     const mx = moving ? joy.x : Math.cos(player.dir),
       my = moving ? joy.y : Math.sin(player.dir),
       mag = Math.hypot(mx, my) || 1;
-    player.x = clamp(player.x + mx / mag * 125, 70, WORLD.w - 70);
-    player.y = clamp(player.y + my / mag * 125, 70, WORLD.h - 70);
+    moveActor(player, mx / mag * 125, my / mag * 125);
     burst(player.x, player.y, '#91c6cc', 16, 145);
     toast('Уклонение');
   }
@@ -1178,7 +1243,7 @@
         if (e.hp <= 0 || e.kind !== 'enemy') continue;
         const d = dist(player, e),
           ea = Math.atan2(e.y - player.y, e.x - player.x);
-        if (d < 165 && Math.abs(angleDiff(ea, a)) < 1.3) {
+        if (d < 165 && Math.abs(angleDiff(ea, a)) < 1.3 && (!physics || physics.clearLine(player.x, player.y, e.x, e.y, 2))) {
           hitTarget(e, Math.round(player.damage * 1.85));
           hits++;
         }
@@ -1219,7 +1284,7 @@
   };
   function considerInteraction(type, entity, radius) {
     const d = Math.hypot(player.x - entity.x, player.y - entity.y);
-    if (d >= radius) return;
+    if (d >= radius || physics && !physics.clearLine(player.x,player.y,entity.x,entity.y,1,entity)) return;
     if (d < interactionResult.d - 6 || Math.abs(d - interactionResult.d) < 6 && interactionPriority[type] < interactionPriority[interactionResult.type]) {
       interactionResult.type = type;
       interactionResult.entity = entity;
@@ -1371,6 +1436,12 @@
     bindTap($('brewBtn'), brewSupply);
   }
   const SHOP_ITEMS = [{
+    id: 'buckler',
+    name: 'Щит дозорного',
+    note: 'Левая рука. При блоке снижает входящий урон на 82% (с округлением).',
+    price: 220,
+    gear: true
+  }, {
     id: 'herb',
     name: 'Лекарственные травы',
     note: '3 травы для крафта. Покупка не заменяет сбор по квесту.',
@@ -1474,6 +1545,10 @@
     if (item.resource) player.inv[item.resource] += item.count;
     if (item.supply) player.supplies[item.supply]++;
     if (item.heal) player.hp = Math.min(player.maxHp, player.hp + item.heal);
+    if (item.gear) {
+      player.shopOwned[id] = true;
+      switchGear(id);
+    }
     if (item.damage) {
       player.shopOwned[id] = true;
       switchGear(id);
@@ -1559,7 +1634,7 @@
     return true;
   }
   function openMenu() {
-    openModal('Настройки · v' + BUILD_VERSION, `<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><div class="sectionTitle">КАЧЕСТВО ГРАФИКИ</div><div class="settingRow"><div class="seg" id="qualitySeg">${['low', 'medium', 'high', 'very-high'].map(q => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}">${q === 'very-high' ? 'Very High' : q[0].toUpperCase() + q.slice(1)}</button>`).join('')}</div><div class="note">Меняет внутреннее разрешение canvas, плотность окружения и лимит частиц, детализацию текстур, тени и туман. Применяется сразу.</div></div><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="settingRow"><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div><div class="note">Лимит управляет реальными отрисованными кадрами. Монитор считает только кадры после update + draw.</div></div><div class="sectionTitle">МОНИТОР ПРОИЗВОДИТЕЛЬНОСТИ</div><button class="btn" id="perfBtn">${perfMonitorEnabled ? 'Выключить frame-time monitor' : 'Включить frame-time monitor'}</button>${devicePanel()}<div class="sectionTitle">СОХРАНЕНИЕ</div><button class="btn" id="saveBtn">Сохранить прогресс</button>`);
+    openModal('Настройки · v' + BUILD_VERSION, `<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><div class="sectionTitle">КАЧЕСТВО ГРАФИКИ</div><div class="settingRow"><div class="seg" id="qualitySeg">${['low', 'medium', 'high', 'very-high'].map(q => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}">${q === 'very-high' ? 'Very High' : q[0].toUpperCase() + q.slice(1)}</button>`).join('')}</div><div class="note">Меняет внутреннее разрешение canvas, лимит частиц, детализацию текстур, тени и туман. Препятствия одинаковы при любом качестве. Применяется сразу.</div></div><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="settingRow"><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div><div class="note">Лимит управляет реальными отрисованными кадрами. Монитор считает только кадры после update + draw.</div></div><div class="sectionTitle">МОНИТОР ПРОИЗВОДИТЕЛЬНОСТИ</div><button class="btn" id="perfBtn">${perfMonitorEnabled ? 'Выключить frame-time monitor' : 'Включить frame-time monitor'}</button>${devicePanel()}<div class="sectionTitle">СОХРАНЕНИЕ</div><button class="btn" id="saveBtn">Сохранить прогресс</button>`);
     document.querySelectorAll('#qualitySeg button').forEach(b => bindTap(b, () => {
       settings.quality = b.dataset.q;
       storage.setItem('aef_quality', settings.quality);
@@ -1796,8 +1871,7 @@
           e.dir += (rng(Math.floor(time * 3) + Math.floor(e.x) + Math.floor(e.y)) - .5) * 0.9;
         }
         const speed = e.type === 'guardian' ? 12 : 18;
-        e.x = clamp(e.x + Math.cos(e.dir) * speed * dt, 45, WORLD.w - 45);
-        e.y = clamp(e.y + Math.sin(e.dir) * speed * dt, 45, WORLD.h - 45);
+        moveActor(e, Math.cos(e.dir) * speed * dt, Math.sin(e.dir) * speed * dt);
       }
     }
   }
@@ -1816,8 +1890,7 @@
     player.dodgeUntil = dodgeUntil;
     const speed = player.speed * (player.blocking ? .58 : 1) * (player.dodgeUntil > time ? .9 : 1);
     if (moving && time >= dodgeUntil) {
-      player.x = clamp(player.x + joy.x * speed * dt, 70, WORLD.w - 70);
-      player.y = clamp(player.y + joy.y * speed * dt, 70, WORLD.h - 70);
+      moveActor(player, joy.x * speed * dt, joy.y * speed * dt);
       player.dir = Math.atan2(joy.y, joy.x);
     }
     updateEnemies(dt);
@@ -1833,13 +1906,12 @@
       if (d < 620) {
         const a = Math.atan2(player.y - e.y, player.x - e.x);
         if (d > e.r + player.r + 8) {
-          e.x = clamp(e.x + Math.cos(a) * e.speed * dt, 40, WORLD.w - 40);
-          e.y = clamp(e.y + Math.sin(a) * e.speed * dt, 40, WORLD.h - 40);
-        } else if (e.cd <= 0) {
+          if (physics) physics.chase(e, player, e.speed * dt, time);else moveActor(e, Math.cos(a) * e.speed * dt, Math.sin(a) * e.speed * dt);
+        } else if (e.cd <= 0 && (!physics || physics.clearLine(e.x, e.y, player.x, player.y, 2))) {
           e.cd = e.type === 'guardian' ? 1.05 : 1.35;
           animate(e, 'attack', .4);
           if (time >= player.dodgeUntil) {
-            const dmg = player.blocking ? Math.ceil(e.damage * .26) : e.damage;
+            const dmg = player.blocking ? Math.ceil(e.damage * (player.loadout.offhand === 'buckler' ? .18 : .26)) : e.damage;
             player.hp = Math.max(0, player.hp - dmg);
             animate(player, player.blocking ? 'block' : 'hit', .24);
             addFloatingText('−' + dmg, player.x, player.y - 52, '#ff9690');
@@ -1849,6 +1921,7 @@
               player.hp = player.maxHp;
               player.x = zones[zoneId].camp.x;
               player.y = zones[zoneId].camp.y;
+              physics?.relocate(player);
               toast('Вы возвращены к лагерю');
             }
           }
@@ -1860,6 +1933,10 @@
   function updateProjectiles(dt) {
     for (let i = projectiles.length - 1; i >= 0; i--) {
       const p = projectiles[i];
+      if (physics && !physics.clearLine(p.x, p.y, p.x + p.vx * dt, p.y + p.vy * dt, 3)) {
+        projectiles.splice(i, 1);
+        continue;
+      }
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.life -= dt;
@@ -2090,12 +2167,12 @@
   }
   function drawCamp(z) {
     if (art?.has('house')) {
-      const p = screenPos(z.camp.x, z.camp.y);
+      const p = screenPos(z.camp.x, z.camp.y - 100);
       groundShadow(p.x, p.y + 14, 55);
       art.draw(ctx, 'house', p.x, p.y + 20, 130);
       return;
     }
-    const s = screenPos(z.camp.x, z.camp.y);
+    const s = screenPos(z.camp.x, z.camp.y - 100);
     ctx.save();
     ctx.translate(s.x, s.y);
     ctx.scale(1, .82);
@@ -2343,20 +2420,15 @@
         facing = Math.cos(player.dir) < 0 ? -1 : 1;
       ctx.restore();
       const swing = action === 'attack' || action === 'cast' ? Math.sin(progress * Math.PI) * 1.8 * (player.combo % 2 ? -1 : 1) : 0;
-      const handX = p.x + facing * (12 * Math.cos(lean) + 36 * Math.sin(lean)),
-        handY = p.y + 18 + 12 * Math.sin(lean) - 36 * Math.cos(lean);
-      if (action === 'drink') art.draw(ctx, 'potion', handX, handY - Math.sin(progress * Math.PI) * 20, 23);else art.weapon(ctx, handX, handY, player.loadout.weapon === 'dawnBlade' ? 48 : 40, player.dir + swing);
-      ctx.save();
-      ctx.translate(p.x, p.y - 4);
-      ctx.rotate(player.dir);
-      if (player.blocking) {
-        ctx.strokeStyle = '#acd5df';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(0, 0, 36, -.95, .95);
-        ctx.stroke();
-      }
-      ctx.restore();
+      const hand = art.hand(action, progress, time, moving ? 1 : 0, false),
+        left = art.hand(action, progress, time, moving ? 1 : 0, true);
+      const bob = moving ? Math.sin(time * 12) * 1.6 : 0;
+      const handX = p.x + facing * (hand.x * Math.cos(lean) - hand.y * Math.sin(lean)),
+        handY = p.y + 18 + bob + hand.x * Math.sin(lean) + hand.y * Math.cos(lean);
+      const leftX = p.x + facing * (left.x * Math.cos(lean) - left.y * Math.sin(lean)),
+        leftY = p.y + 18 + bob + left.x * Math.sin(lean) + left.y * Math.cos(lean);
+      if (action === 'drink') art.draw(ctx, 'potion', handX, handY, 23);else art.weapon(ctx, handX, handY, player.loadout.weapon === 'dawnBlade' ? 48 : 40, player.dir + (player.blocking && player.loadout.offhand !== 'buckler' ? -Math.PI / 2 : swing));
+      if (player.loadout.offhand === 'buckler') art.shield(ctx, leftX, leftY, player.blocking ? 34 : 29, player.blocking ? player.dir : 0);
       return;
     }
     const s = screenPos(player.x, player.y);
@@ -2398,13 +2470,6 @@
     ctx.lineTo(38, -11);
     ctx.stroke();
     ctx.restore();
-    if (player.blocking) {
-      ctx.strokeStyle = '#b8d9dc';
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.arc(0, 0, 37, -.95, .95);
-      ctx.stroke();
-    }
     ctx.restore();
   }
   function drawProjectiles() {
@@ -2459,7 +2524,7 @@
     ctx.beginPath();
     ctx.ellipse(0, 30, 150, 36, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (art?.draw(ctx, zoneId === 'mistwood' ? 'house' : zoneId === 'stonevale' ? 'ruins' : 'shrine', 0, 30, 180)) {
+    if (art?.has('house')) {
       // The existing landmark position is retained.
     } else if (zoneId === 'mistwood') {
       ctx.fillStyle = '#5d4a39';
@@ -2575,8 +2640,9 @@
     }
   }
   function drawWorldLandmarkOverlay() {
+    if (art?.has('house')) return;
     const z = zones[zoneId];
-    const list = zoneId === 'mistwood' ? [[940, 440, 'FOREST'], [1540, 1030, 'RUIN'], [2150, 540, 'SHRINE']] : zoneId === 'stonevale' ? [[820, 480, 'VILLAGE'], [1500, 840, 'MINE'], [2180, 520, 'RUIN']] : [[940, 500, 'OUTPOST'], [1760, 1240, 'BOSS'], [1260, 930, 'SHRINE']];
+    const list = LANDMARKS[zoneId];
     for (const [x, y, k] of list) {
       const s = screenPos(x, y);
       if (s.x < -140 || s.x > W + 140 || s.y < -140 || s.y > H + 140) continue;
@@ -2722,14 +2788,18 @@
     drawWorldLandmarkOverlay();
     drawQueue.length = 0;
     for (const item of staticDrawables) {
-      item.y = item.kind === 'player' ? player.y : z[item.kind].y;
+      item.y = item.kind === 'player' ? player.y : z[item.kind].y - (item.kind === 'camp' ? 100 : 0);
       drawQueue.push(item);
     }
     for (const e of entities) if ((e.hp > 0 || e._corpseUntil > time) && visible(e.x, e.y, 100)) drawQueue.push(e);
     for (const a of ambient) if (visible(a.x, a.y, 250)) drawQueue.push(a);
+    if (art?.has('house')) for (const item of structures) if (visible(item.x, item.y, 200)) drawQueue.push(item);
     drawQueue.sort(sortDepth);
     for (const e of drawQueue) {
-      if (e.kind === 'enemy') drawEntity(e);else if (e.kind === 'resource') drawResource(e);else if (e.kind === 'player') drawPlayer();else if (typeof e.scale === 'number') drawAmbientItem(e);else if (e.kind === 'camp') drawCamp(z);else if (e.kind === 'scout') drawScout(z);else drawPortal(z);
+      if (e.kind === 'structure') {
+        const p = screenPos(e.x, e.y);
+        art.draw(ctx, e.asset, p.x, p.y + 20, e.height);
+      } else if (e.kind === 'enemy') drawEntity(e);else if (e.kind === 'resource') drawResource(e);else if (e.kind === 'player') drawPlayer();else if (typeof e.scale === 'number') drawAmbientItem(e);else if (e.kind === 'camp') drawCamp(z);else if (e.kind === 'scout') drawScout(z);else drawPortal(z);
     }
     drawCombatTelegraphs();
     drawCombatFeedback();
@@ -2880,6 +2950,7 @@
       player.x = x;
       player.y = y;
     }
+    physics?.relocate(player);
     updateUI();
     drawWorld();
     drawMap();
@@ -2947,6 +3018,9 @@
       load,
       joy,
       closeModal,
+      physics,
+      buildObstacles,
+      moveActor,
       openInventory,
       openQuests,
       openMenu,

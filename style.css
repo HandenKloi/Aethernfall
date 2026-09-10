@@ -618,7 +618,8 @@ html,body {
 }
 #resourceHud {
   left:calc(var(--left) + 12px);
-  bottom:calc(var(--bottom) + 180px);
+  top:calc(var(--top) + 86px);
+  bottom:auto;
   font-size:11px;
   gap:9px;
   padding:8px;
@@ -902,6 +903,18 @@ button:focus-visible {
 .questSteps li { padding:10px 8px; color:#b4c4bd; line-height:1.5; }
 .questSteps .current { color:#ffe19a; background:#34483a; border-radius:10px; }
 .questSteps .complete { color:#91c79b; }
+#questTracker { top:calc(var(--top) + 126px); padding:8px 10px; background:rgba(9,23,20,.58); }
+#minimapFrame { top:calc(var(--top) + 126px); }
+.netPill { top:calc(var(--top) + 220px); }
+.versionMark { top:calc(var(--top) + 246px); }
+#toast,.lootTicker { font-size:11px; font-weight:600; padding:6px 10px; background:rgba(9,20,18,.52); border-radius:9px; box-shadow:none; max-width:72%; }
+#toast { top:calc(var(--top) + 280px); }
+.lootTicker { top:calc(var(--top) + 300px); }
+@media(orientation:landscape) and (max-height:520px) {
+  #resourceHud { display:flex; top:calc(var(--top) + 84px); font-size:10px; }
+  #toast { top:calc(var(--top) + 123px); }
+  .lootTicker { top:calc(var(--top) + 145px); }
+}
 .shopWallet { color: #f0d486; font-size: 18px; padding: 4px 0 10px; }
 .shopList { display: grid; gap: 12px; }
 .shopList .card h3 { font-size: 16px; color: #eee1b9; }

@@ -1,4 +1,4 @@
-/* Aethernfall 3.5.2 — shared raster atlases; all rectangles use source pixels. */
+/* Aethernfall 3.6.0 — shared raster atlases; all rectangles use source pixels. */
 (() => {
   'use strict';
 
@@ -127,21 +127,8 @@
     if (!r || !images[r[0]]) return false;
     const width = height * r[3] / r[4],
       stride = Math.sin(t * 10) * walk;
-    const pulse = Math.sin(Math.PI * Math.min(1, progress));
-    let arm = stride * .12 + Math.sin(t * 1.8) * .015;
+    const arm = armAngle(action, progress, t, walk);
     const lean = bodyLean(action, progress);
-    if (action === 'attack' || action === 'cast') {
-      arm = -pulse * .26;
-    }
-    if (action === 'gather') {
-      arm = pulse * .14;
-    }
-    if (action === 'drink') {
-      arm = -pulse * .3;
-    }
-    if (action === 'block') {
-      arm = -.2;
-    }
     ctx.save();
     ctx.translate(x, y);
     if (flip) ctx.scale(-1, 1);
@@ -170,16 +157,79 @@
     ctx.restore();
   }
   function icon(name) {
+    if (name === 'shield') return '<svg class="assetIcon" viewBox="-20 -24 40 52" aria-hidden="true"><path d="M-17-19Q0-27 17-19L15 7Q10 20 0 25Q-10 20-15 7Z" fill="#38525e" stroke="#d0be84" stroke-width="3"/><path d="M0-18V18M-11-8H11" stroke="#c7b57b" stroke-width="3"/></svg>';
     const r = sprites[name];
     if (!r) return '';
     const sheet = sheets[r[0]];
     return `<svg class="assetIcon" aria-hidden="true" viewBox="${r.slice(1).join(' ')}"><image href="${sheet.src}" width="${sheet.width}" height="${sheet.height}"/></svg>`;
   }
   function bodyLean(action, progress) {
-    const amount = action === 'attack' || action === 'cast' ? .08 : action === 'gather' ? .14 : action === 'hit' ? -.12 : action === 'dodge' ? -.65 : 0;
+    const amount = action === 'attack' || action === 'cast' ? .18 : action === 'gather' ? .14 : action === 'hit' ? -.12 : action === 'dodge' ? -.65 : 0;
     return Math.sin(Math.PI * Math.min(1, progress)) * amount;
   }
+  function armAngle(action, progress, t, walk) {
+    const pulse = Math.sin(Math.PI * Math.min(1, progress));
+    if (action === 'attack' || action === 'cast') return -pulse * .65;
+    if (action === 'block') return -.65;
+    if (action === 'drink') return -pulse * .7;
+    if (action === 'gather') return pulse * .3;
+    return Math.sin(t * 10) * walk * .12 + Math.sin(t * 1.8) * .015;
+  }
+  const hands = [{
+    x: 0,
+    y: 0
+  }, {
+    x: 0,
+    y: 0
+  }];
+  function hand(action, progress, t, walk, left) {
+    const width = 88 * 271 / 494,
+      angle = armAngle(action, progress, t, walk) * (left ? 1 : -1),
+      h = hands[left ? 1 : 0];
+    const dx = (left ? -.09 : .06) * width,
+      dy = .33 * 88;
+    h.x = (left ? -.28 : .28) * width + dx * Math.cos(angle) - dy * Math.sin(angle);
+    h.y = -.7 * 88 + dx * Math.sin(angle) + dy * Math.cos(angle);
+    return h;
+  }
+  function shield(ctx, x, y, size, angle = 0) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle * .12);
+    ctx.scale(size / 48, size / 48);
+    ctx.fillStyle = '#334f5b';
+    ctx.strokeStyle = '#cdbd88';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-17, -19);
+    ctx.quadraticCurveTo(0, -27, 17, -19);
+    ctx.lineTo(15, 7);
+    ctx.quadraticCurveTo(10, 20, 0, 25);
+    ctx.quadraticCurveTo(-10, 20, -15, 7);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = '#9caca9';
+    ctx.lineWidth = 1;
+    for (let i = -9; i <= 9; i += 6) {
+      ctx.beginPath();
+      ctx.moveTo(i, -15);
+      ctx.lineTo(i, 12 - Math.abs(i));
+      ctx.stroke();
+    }
+    ctx.strokeStyle = '#e3ca85';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, -17);
+    ctx.lineTo(0, 17);
+    ctx.moveTo(-11, -7);
+    ctx.lineTo(11, -7);
+    ctx.stroke();
+    ctx.restore();
+  }
   window.AetherArt = {
+    hand,
+    shield,
     bodyLean,
     load,
     draw,
