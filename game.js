@@ -3,7 +3,7 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '4.0.4';
+  const BUILD_VERSION = '4.0.5';
   const SAVE_SCHEMA = 4;
   const BASE_STATS = Object.freeze({ startLevel: 6, damage: 32, maxHp: 240, maxStamina: 100, speed: 205, damagePerLevel: 3, hpPerLevel: 18 });
   const MAX_UPGRADE_RANK = 5;
@@ -246,6 +246,15 @@
     android: /Android/i.test(navigator.userAgent)
   };
   const reduceMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true;
+  const IMPACT_FEEDBACK = Object.freeze({
+    evade: Object.freeze({ priority: 1, camera: 0, duration: 0, flash: 0, haptic: 4, sfx: 'dodge' }),
+    block: Object.freeze({ priority: 2, camera: 1.5, duration: .07, flash: 0, haptic: 7, sfx: 'block' }),
+    enemyHit: Object.freeze({ priority: 3, camera: 2, duration: .08, flash: 0, haptic: 5, sfx: 'hit' }),
+    playerHit: Object.freeze({ priority: 4, camera: 3.5, duration: .11, flash: .38, haptic: 12, sfx: 'hit' }),
+    enemyKill: Object.freeze({ priority: 5, camera: 3, duration: .10, flash: 0, haptic: 10, sfx: 'kill' }),
+    guardianKill: Object.freeze({ priority: 6, camera: 5, duration: .14, flash: 0, haptic: 24, sfx: 'kill' })
+  });
+  const DAMAGE_FLASH_DECAY = .38 / .16;
   const QUALITY = {
     low: {
       particles: 12,
@@ -661,6 +670,9 @@
     nextDiscoveryAt = 0,
     atmosphereGradient = null;
   let blockPointer = null;
+  let impactPendingKind = '', impactPendingPriority = 0, impactPendingDirX = 0, impactPendingDirY = 0;
+  let cameraImpactX = 0, cameraImpactY = 0, cameraImpactBaseX = 0, cameraImpactBaseY = 0, cameraImpactLife = 0, cameraImpactDuration = 0, damageFlash = 0;
+  let impactLastKind = '', impactLastSfx = '', impactLastHaptic = 0;
   const actionPointerResets = new Set();
   const joy = {
       id: null,
@@ -783,6 +795,7 @@
   let viewportResizeRaf = 0;
   function suspend() {
     resetInput();
+    resetImpactFeedback();
     if (suspended) return;
     audio.suspend();
     suspended = true;
@@ -1127,6 +1140,7 @@
     return true;
   }
   function load() {
+    resetImpactFeedback();
     saveBlockedReason = '';
     saveDirty = false;
     pendingLoadNotice = '';
@@ -1302,6 +1316,82 @@
     audio.sfx(name);
     if (!settings.haptics || !vibration || !hapticsAvailable) return false;
     try { return navigator.vibrate(vibration) !== false; } catch { return false; }
+  }
+  function queueImpactFeedback(kind, sourceX, sourceY, targetX, targetY) {
+    const spec = IMPACT_FEEDBACK[kind];
+    if (!spec) return false;
+    if (spec.priority < impactPendingPriority) return false;
+    let dirX = 0, dirY = 0;
+    if ([sourceX, sourceY, targetX, targetY].every(Number.isFinite)) {
+      const dx = targetX - sourceX, dy = targetY - sourceY, len = Math.hypot(dx, dy);
+      if (len > 0 && Number.isFinite(len)) {
+        dirX = dx / len;
+        dirY = dy / len;
+      }
+    }
+    impactPendingKind = kind;
+    impactPendingPriority = spec.priority;
+    impactPendingDirX = dirX;
+    impactPendingDirY = dirY;
+    return true;
+  }
+  function flushImpactFeedback() {
+    if (!impactPendingKind) return false;
+    const kind = impactPendingKind, spec = IMPACT_FEEDBACK[kind];
+    impactPendingKind = '';
+    impactPendingPriority = 0;
+    const magnitude = reduceMotion ? 0 : Math.min(6, Math.max(0, Number(spec.camera) || 0));
+    cameraImpactBaseX = impactPendingDirX * magnitude;
+    cameraImpactBaseY = impactPendingDirY * magnitude;
+    cameraImpactX = cameraImpactBaseX;
+    cameraImpactY = cameraImpactBaseY;
+    cameraImpactDuration = magnitude > 0 ? Math.max(0, Number(spec.duration) || 0) : 0;
+    cameraImpactLife = cameraImpactDuration;
+    damageFlash = Math.max(damageFlash, Math.min(.38, Math.max(0, Number(spec.flash) || 0)));
+    impactLastKind = kind;
+    impactLastSfx = spec.sfx || '';
+    impactLastHaptic = Math.max(0, Number(spec.haptic) || 0);
+    feedback(impactLastSfx, impactLastHaptic);
+    impactPendingDirX = 0;
+    impactPendingDirY = 0;
+    return true;
+  }
+  function updateImpactFeedback(dt) {
+    if (!Number.isFinite(dt) || dt < 0) return;
+    if (cameraImpactLife > 0 && cameraImpactDuration > 0) {
+      cameraImpactLife = Math.max(0, cameraImpactLife - dt);
+      const ratio = cameraImpactLife / cameraImpactDuration;
+      cameraImpactX = cameraImpactBaseX * ratio;
+      cameraImpactY = cameraImpactBaseY * ratio;
+    } else {
+      cameraImpactLife = 0;
+      cameraImpactX = 0;
+      cameraImpactY = 0;
+    }
+    damageFlash = Math.max(0, damageFlash - DAMAGE_FLASH_DECAY * dt);
+  }
+  function resetImpactFeedback() {
+    impactPendingKind = '';
+    impactPendingPriority = 0;
+    impactPendingDirX = 0;
+    impactPendingDirY = 0;
+    cameraImpactX = 0;
+    cameraImpactY = 0;
+    cameraImpactBaseX = 0;
+    cameraImpactBaseY = 0;
+    cameraImpactLife = 0;
+    cameraImpactDuration = 0;
+    damageFlash = 0;
+    impactLastKind = '';
+    impactLastSfx = '';
+    impactLastHaptic = 0;
+  }
+  function impactFeedbackState() {
+    return {
+      pendingKind: impactPendingKind, pendingPriority: impactPendingPriority, pendingDirX: impactPendingDirX, pendingDirY: impactPendingDirY,
+      cameraX: cameraImpactX, cameraY: cameraImpactY, cameraLife: cameraImpactLife, cameraDuration: cameraImpactDuration, damageFlash,
+      lastKind: impactLastKind, lastSfx: impactLastSfx, lastHaptic: impactLastHaptic
+    };
   }
   function audioStatusText() {
     const snap = audio.snapshot();
@@ -1657,6 +1747,7 @@
     actor.y = clamp(actor.y, edge, WORLD.h - edge);
   }
   function resetZone() {
+    resetImpactFeedback();
     physics?.set([]);
     structures = LANDMARKS[zoneId].map(([x, y, k]) => ({
       kind: 'structure',
@@ -1774,7 +1865,6 @@
   }
   function kill(e) {
     e.hp = 0;
-    feedback('kill', e.type === 'guardian' ? 24 : 10);
     e._corpseUntil = time + 0.75;
     gainXP(e.type === 'guardian' ? 120 : 18);
     player.gold += e.type === 'guardian' ? 90 : 4 + Math.floor(Math.random() * 5);
@@ -1798,12 +1888,17 @@
     const homeDistance = Math.hypot(e.x - (e.homeX ?? e.x), e.y - (e.homeY ?? e.y));
     const playerFromHome = Math.hypot(player.x - (e.homeX ?? e.x), player.y - (e.homeY ?? e.y));
     if (dist(player, e) < 440 && homeDistance <= 420 && playerFromHome <= 480) e.aiState = 'chase';
+    const lethal = e.hp - dmg <= 0;
     e.hp -= dmg;
-    feedback('hit', 5);
     e.hit = .16;
     animate(e, 'hit', .2);
-    burst(e.x, e.y, '#efcfa8', 9, 118);
-    if (e.hp <= 0) kill(e);
+    if (lethal) {
+      queueImpactFeedback(e.type === 'guardian' ? 'guardianKill' : 'enemyKill', player.x, player.y, e.x, e.y);
+      kill(e);
+    } else {
+      burst(e.x, e.y, '#efcfa8', 9, 118);
+      queueImpactFeedback('enemyHit', player.x, player.y, e.x, e.y);
+    }
   }
   function beginPlayerAttack() {
     const begun = combatEngine.beginAttack(combatStateSnapshot());
@@ -2724,6 +2819,7 @@
   }
   function update(dt) {
     if (!Number.isFinite(dt) || dt < 0) return;
+    updateImpactFeedback(dt);
     let live = 0;
     for (const e of entities) if (e.kind !== 'enemy' || e.hp > 0 || e._corpseUntil > time) entities[live++] = e;
     entities.length = live;
@@ -2750,6 +2846,7 @@
     updateProjectiles(dt);
     updateEffects(dt);
     checkDiscoveries();
+    flushImpactFeedback();
   }
   function enemyAttackTiming(e) {
     const windup = e.type === 'guardian' ? .52 : e.type === 'boar' ? .30 : .35;
@@ -2790,15 +2887,21 @@
     const range = enemyAttackRange(e, player.r);
     if (e.hp <= 0 || e.aiState !== 'chase' || dist(player, e) > range || physics && !physics.clearLine(e.x, e.y, player.x, player.y, 2)) return false;
     const impact = combatEngine.resolveIncomingDamage({ damage: e.damage, blocking: player.blocking, buckler: player.loadout.offhand === 'buckler', dodging: time < player.dodgeUntil });
-    if (!impact.valid || impact.avoided) return false;
+    if (!impact.valid) return false;
+    if (impact.avoided) {
+      burst(player.x, player.y, '#91c6cc', 5, 105);
+      queueImpactFeedback('evade', e.x, e.y, player.x, player.y);
+      return false;
+    }
     const dmg = impact.damage;
     player.hp = Math.max(0, player.hp - dmg);
     animate(player, impact.blocked ? 'block' : 'hit', .24);
-    feedback(impact.blocked ? 'block' : 'hit', impact.blocked ? 7 : 12);
     addFloatingText('−' + dmg, player.x, player.y - 52, '#ff9690');
-    burst(player.x, player.y, '#e06d68', 7, 80);
+    burst(player.x, player.y, impact.blocked ? '#e8d08a' : '#e06d68', 7, 80);
+    queueImpactFeedback(impact.blocked ? 'block' : 'playerHit', e.x, e.y, player.x, player.y);
     if (player.hp <= 0) {
       animate(player, 'death', .75);
+      flushImpactFeedback();
       player.hp = player.maxHp;
       player.x = zones[zoneId].camp.x;
       player.y = zones[zoneId].camp.y;
@@ -2809,6 +2912,7 @@
       physics?.relocate(player);
       save();
       toast('Вы возвращены к лагерю');
+      resetImpactFeedback();
     }
     return true;
   }
@@ -2999,8 +3103,8 @@
   }
   function screenPos(x, y) {
     return {
-      x: x - player.x + W / 2,
-      y: isoY(y - player.y) + H / 2
+      x: x - player.x + W / 2 + cameraImpactX,
+      y: isoY(y - player.y) + H / 2 + cameraImpactY
     };
   }
   function texturedRect(pattern, base, x, y, w, h, alpha = 1) {
@@ -3027,7 +3131,7 @@
     ctx.fillStyle = z.base;
     ctx.fillRect(0, 0, W, H);
     ctx.save();
-    ctx.translate(W / 2 - player.x, H / 2 - player.y * .82);
+    ctx.translate(W / 2 - player.x + cameraImpactX, H / 2 - player.y * .82 + cameraImpactY);
     const basePattern = zoneId === 'mistwood' ? patterns.grass : zoneId === 'stonevale' ? patterns.stone : patterns.dirt;
     texturedRect(basePattern, z.ground, -160, -160, WORLD.w + 320, WORLD.h * .82 + 320, .42 + profile.textureScale * .3);
     ctx.globalAlpha = .2 + profile.detail * .06;
@@ -3491,7 +3595,7 @@
   }
   function drawLandmarks(z) {
     ctx.save();
-    ctx.translate(W / 2 - player.x, H / 2 - player.y * .82);
+    ctx.translate(W / 2 - player.x + cameraImpactX, H / 2 - player.y * .82 + cameraImpactY);
     // Zone landmark cluster
     const lx = zoneId === 'mistwood' ? 1180 : zoneId === 'stonevale' ? 1220 : 1520;
     const ly = zoneId === 'mistwood' ? 420 : zoneId === 'stonevale' ? 520 : 900;
@@ -3865,6 +3969,18 @@
       }
     }
   }
+  function drawDamageFlash() {
+    if (damageFlash <= 0) return;
+    const band = Math.min(30, Math.max(18, Math.min(W, H) * .045));
+    ctx.save();
+    ctx.globalAlpha = Math.min(.38, damageFlash);
+    ctx.fillStyle = '#b83232';
+    ctx.fillRect(0, 0, W, band);
+    ctx.fillRect(0, H - band, W, band);
+    ctx.fillRect(0, band, band, Math.max(0, H - band * 2));
+    ctx.fillRect(W - band, band, band, Math.max(0, H - band * 2));
+    ctx.restore();
+  }
   function drawWorld() {
     const z = zones[zoneId];
     drawGround(z);
@@ -3896,6 +4012,7 @@
     drawFloatingTexts();
     drawNpcLabels();
     drawDiscoveryLabels();
+    drawDamageFlash();
   }
   function objectiveTarget() {
     const q = quest(), state = questState(), z = zones[zoneId];
@@ -4132,6 +4249,12 @@
       storage,
       firstPaint,
       resetInput,
+      queueImpactFeedback,
+      flushImpactFeedback,
+      updateImpactFeedback,
+      resetImpactFeedback,
+      impactFeedbackState,
+      screenPos,
       hitTarget,
       addEnemy,
       resetZone,
