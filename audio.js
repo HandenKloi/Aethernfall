@@ -1,6 +1,6 @@
 "use strict";
 
-/* Aethernfall 4.0.1 — local procedural audio mixer, no network assets. */
+/* Aethernfall 4.0.2 — local procedural audio mixer, no network assets. */
 (() => {
   'use strict';
 
@@ -108,19 +108,26 @@
   }
 
   function zoneTone() {
-    if (state.zone === 'stonevale') return { root: 92.5, fifth: 138.6, filter: 520, type: 'triangle' };
-    if (state.zone === 'ashfield') return { root: 82.4, fifth: 123.5, filter: 760, type: 'sawtooth' };
-    return { root: 110, fifth: 164.8, filter: 430, type: 'sine' };
+    if (state.zone === 'stonevale') return { root: 92.5, fifth: 138.6, third: 184.8, filter: 340, rustle: 960, type: 'triangle' };
+    if (state.zone === 'ashfield') return { root: 82.4, fifth: 123.5, third: 164.8, filter: 270, rustle: 1450, type: 'sawtooth' };
+    return { root: 110, fifth: 164.8, third: 220, filter: 420, rustle: 1180, type: 'sine' };
   }
 
-  function makeNoiseBuffer(seconds = 2) {
+  function makeNoiseBuffer(seconds = 2, color = 'brown') {
     const len = Math.max(1, Math.floor((ctx.sampleRate || 44100) * seconds));
     const buffer = ctx.createBuffer(1, len, ctx.sampleRate || 44100);
     const data = buffer.getChannelData(0);
-    let seed = 9137;
+    let seed = 9137, brown = 0;
     for (let i = 0; i < len; i++) {
       seed = seed * 16807 % 2147483647;
-      data[i] = (seed / 1073741823.5 - 1) * .7;
+      const white = seed / 1073741823.5 - 1;
+      if (color === 'brown') {
+        brown = (brown + white * .14) / 1.02;
+        data[i] = Math.max(-1, Math.min(1, brown * 3.2));
+      } else if (color === 'pink') {
+        brown = brown * .96 + white * .04;
+        data[i] = Math.max(-1, Math.min(1, white * .25 + brown * .95));
+      } else data[i] = white * .4;
     }
     return buffer;
   }
@@ -129,21 +136,31 @@
     if (!ctx || !unlocked || ctx.state !== 'running') return;
     stopNodes(musicNodes); stopNodes(ambientNodes);
     const tone = zoneTone(), now = ctx.currentTime;
-    // 4.0.0 was mixed too quietly for phone speakers. These buses remain well
-    // below clipping but are now clearly audible at the default sliders.
-    const musicBus = gain(.16, musicGain), ambienceBus = gain(.10, ambientGain);
+    // 4.0.2 raises the default clarity on phone speakers and replaces the raw
+    // white-noise ambience bed with shaped, filtered environmental layers.
+    const musicBus = gain(.22, musicGain), ambienceBus = gain(.12, ambientGain);
     musicNodes.push(musicBus); ambientNodes.push(ambienceBus);
-    for (const [freq, detune, level] of [[tone.root, -4, .58], [tone.fifth, 4, .34]]) {
+    for (const [freq, detune, level, wave] of [[tone.root, -5, .55, tone.type], [tone.fifth, 3, .26, tone.type], [tone.third, 7, .15, 'triangle']]) {
       const osc = ctx.createOscillator(), g = gain(level, musicBus);
-      osc.type = tone.type; osc.frequency.value = freq; osc.detune.value = detune;
-      osc.start(now); musicNodes.push(osc, g);
+      osc.type = wave; osc.frequency.value = freq; osc.detune.value = detune;
+      osc.connect(g);
+      g.gain.setValueAtTime(Math.max(.0001, level * .75), now);
+      g.gain.setTargetAtTime(level, now + .2, 1.6);
+      osc.start(now);
+      musicNodes.push(osc, g);
     }
-    const noise = ctx.createBufferSource(), filter = ctx.createBiquadFilter();
-    noise.buffer = makeNoiseBuffer(2); noise.loop = true;
-    filter.type = state.zone === 'ashfield' ? 'bandpass' : 'lowpass';
-    filter.frequency.value = tone.filter; filter.Q.value = state.zone === 'ashfield' ? .8 : .3;
-    noise.connect(filter); filter.connect(ambienceBus); noise.start(now);
-    ambientNodes.push(noise, filter);
+    const wind = ctx.createBufferSource(), windHP = ctx.createBiquadFilter(), windLP = ctx.createBiquadFilter(), windGain = gain(.95, ambienceBus);
+    wind.buffer = makeNoiseBuffer(4, 'brown'); wind.loop = true;
+    windHP.type = 'highpass'; windHP.frequency.value = 34;
+    windLP.type = 'lowpass'; windLP.frequency.value = tone.filter; windLP.Q.value = .35;
+    wind.connect(windHP); windHP.connect(windLP); windLP.connect(windGain); wind.start(now);
+    ambientNodes.push(wind, windHP, windLP, windGain);
+    const rustle = ctx.createBufferSource(), rustleFilter = ctx.createBiquadFilter(), rustleGain = gain(state.zone === 'ashfield' ? .18 : .14, ambienceBus);
+    rustle.buffer = makeNoiseBuffer(2.5, state.zone === 'ashfield' ? 'pink' : 'brown'); rustle.loop = true;
+    rustleFilter.type = state.zone === 'ashfield' ? 'bandpass' : 'highpass';
+    rustleFilter.frequency.value = tone.rustle; rustleFilter.Q.value = state.zone === 'ashfield' ? .7 : .25;
+    rustle.connect(rustleFilter); rustleFilter.connect(rustleGain); rustle.start(now);
+    ambientNodes.push(rustle, rustleFilter, rustleGain);
   }
 
   function configure(next = {}) {

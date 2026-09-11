@@ -3,7 +3,7 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '4.0.1';
+  const BUILD_VERSION = '4.0.2';
   const SAVE_SCHEMA = 4;
   const BASE_STATS = Object.freeze({ startLevel: 6, damage: 32, maxHp: 240, maxStamina: 100, speed: 205, damagePerLevel: 3, hpPerLevel: 18 });
   const MAX_UPGRADE_RANK = 5;
@@ -1985,6 +1985,14 @@
     portal: 3,
     portalLocked: 4
   };
+  const CAMP_INTERACTION_OFFSET = { x: -10, y: -36 };
+  const CAMP_GLOW_OFFSET = { x: -6, y: -38 };
+  function campInteractionPoint(camp) {
+    return { x: camp.x + CAMP_INTERACTION_OFFSET.x, y: camp.y + CAMP_INTERACTION_OFFSET.y };
+  }
+  function campGlowPoint(camp) {
+    return { x: camp.x + CAMP_GLOW_OFFSET.x, y: camp.y + CAMP_GLOW_OFFSET.y };
+  }
   function considerInteraction(type, entity, radius) {
     const d = Math.hypot(player.x - entity.x, player.y - entity.y);
     if (d >= radius || physics && !physics.clearLine(player.x, player.y, entity.x, entity.y, 1, entity)) return;
@@ -2000,7 +2008,7 @@
     interactionResult.d = Infinity;
     const z = zones[zoneId];
     considerInteraction('scout', z.scout, 120);
-    considerInteraction('camp', z.camp, 145);
+    considerInteraction('camp', campInteractionPoint(z.camp), 118);
     for (const loot of lootDrops) if (loot.life > 0) considerInteraction('loot', loot, 105);
     for (const e of entities) if (e.kind === 'resource' && e.hp > 0) considerInteraction('resource', e, 105);
     considerInteraction(canUsePortal() ? 'portal' : 'portalLocked', z.portal, 135);
@@ -3743,10 +3751,10 @@
     lightCtx.fillRect(0, 0, W, H);
     lightCtx.globalCompositeOperation = 'destination-out';
     const hero = screenPos(player.x, player.y),
-      camp = screenPos(z.camp.x, z.camp.y - 100),
+      camp = screenPos(campGlowPoint(z.camp).x, campGlowPoint(z.camp).y),
       portal = screenPos(z.portal.x, z.portal.y);
     lightHole(hero.x, hero.y - 18, 105, .48);
-    lightHole(camp.x + 17, camp.y + 8, 145, .78);
+    lightHole(camp.x, camp.y, 138, .78);
     if (canUsePortal()) lightHole(portal.x, portal.y - 28, 155, .88);
     let projectileLights = 0;
     for (const p of projectiles) {
@@ -3781,9 +3789,9 @@
     if (!(profile.bloom > 0)) return;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    const portal = screenPos(z.portal.x, z.portal.y), camp = screenPos(z.camp.x, z.camp.y - 100);
+    const portal = screenPos(z.portal.x, z.portal.y), camp = screenPos(campGlowPoint(z.camp).x, campGlowPoint(z.camp).y);
     if (canUsePortal()) glowCircle(portal.x, portal.y - 26, 95, zoneId === 'ashfield' ? FX_CACHE.glowPortalAsh : FX_CACHE.glowPortal, profile.bloom * .34);
-    glowCircle(camp.x + 17, camp.y + 8, 52, FX_CACHE.glowCamp, profile.bloom * .28);
+    glowCircle(camp.x, camp.y, 50, FX_CACHE.glowCamp, profile.bloom * .28);
     let count = 0;
     for (const p of projectiles) {
       if (count++ >= 8) break;
@@ -4141,6 +4149,8 @@
       applyGraphics,
       update,
       nearbyInteraction,
+      campInteractionPoint: id => { const zone = typeof id === 'string' && Object.hasOwn(zones, id) ? zones[id] : zones[zoneId]; return campInteractionPoint(zone.camp); },
+      campGlowPoint: id => { const zone = typeof id === 'string' && Object.hasOwn(zones, id) ? zones[id] : zones[zoneId]; return campGlowPoint(zone.camp); },
       isInCombat,
       statSources,
       objectiveTarget,

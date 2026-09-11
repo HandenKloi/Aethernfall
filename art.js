@@ -1,6 +1,6 @@
 "use strict";
 
-/* Aethernfall 4.0.1 — shared raster atlases; all rectangles use source pixels. */
+/* Aethernfall 4.0.2 — shared raster atlases; all rectangles use source pixels. */
 (() => {
   'use strict';
 
