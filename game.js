@@ -3,14 +3,41 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '4.0.2';
+  const BUILD_VERSION = '4.0.4';
   const SAVE_SCHEMA = 4;
   const BASE_STATS = Object.freeze({ startLevel: 6, damage: 32, maxHp: 240, maxStamina: 100, speed: 205, damagePerLevel: 3, hpPerLevel: 18 });
   const MAX_UPGRADE_RANK = 5;
-  const BLOCK_STAMINA_DRAIN = 12;
-  const SECOND_WIND_COOLDOWN = 8;
   const SUPPLY_COOLDOWN = 1.2;
-  const ATTACK_BUFFER_WINDOW = .13;
+  const COMBAT_RULES = Object.freeze({
+    attackCooldown: .42,
+    attackBufferWindow: .13,
+    comboWindow: .9,
+    maxCombo: 3,
+    critChance: .12,
+    critMultiplier: 1.5,
+    comboDamageStep: .10,
+    dodgeStaminaCost: 24,
+    dodgeCooldown: .78,
+    dodgeWindow: .28,
+    dashDuration: .28,
+    dashDistance: 125,
+    blockStaminaDrain: 12,
+    staminaRegen: 24,
+    bucklerIncomingMultiplier: .18,
+    blockIncomingMultiplier: .26,
+    skillStaminaCost: 20,
+    windSlashRange: 165,
+    windSlashHalfArc: 1.3,
+    windSlashDamageMultiplier: 1.85,
+    triplePulseCount: 3,
+    triplePulseSpread: .15,
+    triplePulseSpeed: 480,
+    triplePulseLifetime: .82,
+    triplePulseDamageMultiplier: .9,
+    secondWindHeal: 70,
+    secondWindCooldown: 8
+  });
+  const combatEngine = window.AetherCombat.createEngine(COMBAT_RULES);
   const art = window.AetherArt;
   const audio = window.AetherAudio || { unlock: async () => false, configure() {}, setZone() {}, sfx() {}, suspend() {}, resume() {}, snapshot: () => ({ available: false }) };
   const GEAR = {
@@ -200,8 +227,10 @@
     skill1Meta: $('skill1Meta'),
     skill2Meta: $('skill2Meta'),
     skill3Meta: $('skill3Meta'),
+    blockBtn: $('blockBtn'),
     dodgeBtn: $('dodgeBtn'),
-    dodgeMeta: $('dodgeMeta')
+    dodgeMeta: $('dodgeMeta'),
+    attackBtn: $('attackBtn')
   };
 
   // Modern mobile browsers share the Pointer Events input path.
@@ -464,6 +493,27 @@
     stonevale: { title: 'Серебро для укреплений', kind: 'gather', target: 'ore', required: 3, gold: 70, supply: 'tonic', note: 'Добудьте 3 единицы руды у старых выработок.' },
     ashfield: { title: 'Зачистка пепельной тропы', kind: 'kill', target: 'enemy', required: 5, gold: 100, supply: 'fieldKit', note: 'Победите 5 противников в Пепельных полях.' }
   });
+  const MAIN_QUEST_TRANSITIONS = Object.freeze({
+    mist: { steps: [
+      { type: 'talk', target: 'scout' },
+      { type: 'gather', target: 'herb', counter: 'herb', required: 3 },
+      { type: 'kill', target: 'raider', counter: 'kills', required: 4 },
+      { type: 'portal' }
+    ] },
+    stone: { steps: [
+      { type: 'talk', target: 'scout' },
+      { type: 'gather', target: 'ore', counter: 'ore', required: 2 },
+      { type: 'kill', target: 'guardian', counter: 'guardian', required: 1 },
+      { type: 'portal' }
+    ] },
+    ash: { steps: [
+      { type: 'talk', target: 'scout' },
+      { type: 'gather', target: 'wood', counter: 'wood', required: 4 },
+      { type: 'kill', target: 'enemy', counter: 'kills', required: 6 },
+      { type: 'portal', effect: 'questCycleCompleted' }
+    ] }
+  });
+  const questEngine = window.AetherQuests?.createEngine({ main: MAIN_QUEST_TRANSITIONS, contracts: CONTRACTS });
   const COSMETICS = Object.freeze({
     accents: { teal: '#7ef1e1', gold: '#f0d58e', ember: '#ff8e5c' },
     trails: { steel: '#91c6cc', aether: '#b7a8ff', ember: '#ff9b63' }
@@ -611,6 +661,7 @@
     nextDiscoveryAt = 0,
     atmosphereGradient = null;
   let blockPointer = null;
+  const actionPointerResets = new Set();
   const joy = {
       id: null,
       x: 0,
@@ -633,6 +684,73 @@
   }
   function setWidth(el, value) {
     if (el.style.width !== value) el.style.width = value;
+  }
+  function clamp01(value) {
+    return Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+  }
+  function getActionPresentation(action, state, now, pressed = false) {
+    const stamina = Number.isFinite(state?.stamina) ? state.stamina : 0,
+      hp = Number.isFinite(state?.hp) ? state.hp : 0,
+      maxHp = Number.isFinite(state?.maxHp) ? state.maxHp : 0,
+      attackCd = Math.max(0, Number.isFinite(state?.attackCd) ? state.attackCd : 0),
+      attackQueuedUntil = Number.isFinite(state?.attackQueuedUntil) ? state.attackQueuedUntil : 0,
+      dodgeLeft = Math.max(0, (Number.isFinite(state?.dodgeCd) ? state.dodgeCd : 0) - now),
+      secondWindLeft = Math.max(0, (Number.isFinite(state?.secondWindCd) ? state.secondWindCd : 0) - now);
+    let availability = 'ready', progress = 0, disabled = false, title = '', ariaLabel = '';
+    if (action === 'attack') {
+      if (attackCd > 0) {
+        availability = 'cooldown';
+        progress = clamp01(attackCd / COMBAT_RULES.attackCooldown);
+      }
+      const buffered = attackQueuedUntil > 0 && attackQueuedUntil >= now;
+      const interaction = pressed ? 'pressed' : buffered ? 'buffered' : 'idle';
+      title = buffered ? 'Атака · следующий удар принят' : attackCd > 0 ? 'Атака · восстановление' : 'Атака · готово';
+      ariaLabel = title;
+      return { availability, interaction, progress, disabled: false, title, ariaLabel };
+    }
+    if (action === 'dodge') {
+      if (dodgeLeft > 0) {
+        availability = 'cooldown';
+        progress = clamp01(dodgeLeft / COMBAT_RULES.dodgeCooldown);
+        disabled = true;
+        title = `Уклонение · восстановление ${dodgeLeft.toFixed(1)} с`;
+      } else if (stamina < COMBAT_RULES.dodgeStaminaCost) {
+        availability = 'resource';
+        disabled = true;
+        title = `Уклонение · недостаточно выносливости · нужно ${COMBAT_RULES.dodgeStaminaCost}`;
+      } else title = `Уклонение · готово · ${COMBAT_RULES.dodgeStaminaCost} выносливости`;
+      ariaLabel = title;
+      return { availability, interaction: pressed ? 'pressed' : 'idle', progress, disabled, title, ariaLabel };
+    }
+    if (action === 'skill1' || action === 'skill2') {
+      const name = action === 'skill1' ? 'Разрез ветра' : 'Тройной импульс';
+      if (stamina < COMBAT_RULES.skillStaminaCost) {
+        availability = 'resource';
+        disabled = true;
+        title = `${name} · недостаточно выносливости · нужно ${COMBAT_RULES.skillStaminaCost}`;
+      } else title = `${name} · готово · ${COMBAT_RULES.skillStaminaCost} выносливости`;
+      ariaLabel = title;
+      return { availability, interaction: pressed ? 'pressed' : 'idle', progress: 0, disabled, title, ariaLabel };
+    }
+    if (action === 'skill3') {
+      if (hp >= maxHp) {
+        availability = 'context';
+        disabled = true;
+        title = 'Второе дыхание · здоровье полное';
+      } else if (secondWindLeft > 0) {
+        availability = 'cooldown';
+        progress = clamp01(secondWindLeft / COMBAT_RULES.secondWindCooldown);
+        disabled = true;
+        title = `Второе дыхание · восстановление ${Math.ceil(secondWindLeft)} с`;
+      } else if (stamina < COMBAT_RULES.skillStaminaCost) {
+        availability = 'resource';
+        disabled = true;
+        title = `Второе дыхание · недостаточно выносливости · нужно ${COMBAT_RULES.skillStaminaCost}`;
+      } else title = `Второе дыхание · готово · ${COMBAT_RULES.skillStaminaCost} выносливости`;
+      ariaLabel = title;
+      return { availability, interaction: pressed ? 'pressed' : 'idle', progress, disabled, title, ariaLabel };
+    }
+    return { availability: 'ready', interaction: pressed ? 'pressed' : 'idle', progress: 0, disabled: false, title: '', ariaLabel: '' };
   }
   function escapeHTML(text) {
     return String(text).replace(/[&<>"']/g, c => ({
@@ -659,6 +777,7 @@
     look.ids.clear();
     blockPointer = null;
     player.blocking = false;
+    actionPointerResets.forEach(reset => reset());
     document.querySelectorAll('.pressed').forEach(el => el.classList.remove('pressed'));
   }
   let viewportResizeRaf = 0;
@@ -925,6 +1044,14 @@
   }
   function blockDrainMultiplier() {
     return (GEAR[player.loadout.armor]?.blockDrainMultiplier || 1) * (RUNES.armor[player.runes?.armor]?.block || 1);
+  }
+  const COMBAT_STATE_KEYS = ['attackCd', 'attackQueuedUntil', 'combo', 'comboTimer', 'stamina', 'dodgeCd', 'dodgeUntil', 'dashRemaining', 'secondWindCd', 'hp'];
+  function combatStateSnapshot() {
+    return Object.fromEntries(COMBAT_STATE_KEYS.map(key => [key, player[key]]));
+  }
+  function applyCombatState(state) {
+    if (!state || typeof state !== 'object') return;
+    for (const key of COMBAT_STATE_KEYS) if (Object.hasOwn(state, key) && Number.isFinite(state[key])) player[key] = state[key];
   }
   function applyCanonicalSave(snapshot) {
     zoneId = snapshot.zoneId;
@@ -1347,30 +1474,33 @@
         complete = index < state.step;
       return `<li class="${current ? 'current' : complete ? 'complete' : ''}" ${current ? 'aria-current="step"' : ''}>${complete ? '✓ ' : ''}${escapeHTML(current ? currentObjective() : text)}${current ? ' · Сейчас' : ''}</li>`;
     }).join('');
-    const def = CONTRACTS[zoneId], c = normalizeContract(zoneId), contractText = c.state === 0 ? 'Доступно в лагере' : c.state === 1 ? `Выполняется · ${c.progress}/${def.required}` : c.state === 2 ? 'Выполнено · заберите награду в лагере' : 'Завершено в этом цикле';
+    const def = CONTRACTS[zoneId], c = refreshLiveContract(zoneId), contractText = c.state === 0 ? 'Доступно в лагере' : c.state === 1 ? `Выполняется · ${c.progress}/${def.required}` : c.state === 2 ? 'Выполнено · заберите награду в лагере' : 'Завершено в этом цикле';
     openModal('Задания', `<article class="card"><p class="note">${escapeHTML(zones[zoneId].name)} · этап ${state.step + 1} из ${q.steps.length}</p><h3>${escapeHTML(q.title)}</h3><ol class="questSteps">${steps}</ol></article><article class="card"><p class="note">ПОРУЧЕНИЕ ЛАГЕРЯ</p><h3>${escapeHTML(def.title)}</h3><p>${escapeHTML(def.note)}</p><p><b>${contractText}</b></p></article><p class="note">Основное задание продвигается во время игры. Материалы из магазина не засчитываются как сбор. Поручения принимаются у доски в лагере.</p><button class="btn" id="questsClose">Вернуться в игру</button>`);
     bindTap($('questsClose'), closeModal);
   }
-  function advanceQuest(reason, persist = true) {
-    const q = quest(),
-      s = questState();
-    const previousStep = s.step;
-    if (q.id === 'mist') {
-      if (s.step === 0 && reason === 'scout') s.step = 1;else if (s.step === 1 && s.herb >= 3) s.step = 2;else if (s.step === 2 && s.kills >= 4) s.step = 3;else if (s.step === 3 && reason === 'portal') {
-        for (const key of Object.keys(s)) s[key] = 0;
-      }
-    } else if (q.id === 'stone') {
-      if (s.step === 0 && reason === 'scout') s.step = 1;else if (s.step === 1 && s.ore >= 2) s.step = 2;else if (s.step === 2 && s.guardian >= 1) s.step = 3;else if (s.step === 3 && reason === 'portal') {
-        for (const key of Object.keys(s)) s[key] = 0;
-      }
-    } else if (q.id === 'ash') {
-      if (s.step === 0 && reason === 'scout') s.step = 1;else if (s.step === 1 && s.wood >= 4) s.step = 2;else if (s.step === 2 && s.kills >= 6) s.step = 3;else if (s.step === 3 && reason === 'portal') {
-        player.progression.completedCycles++;
-        player.inv.emberShard = (player.inv.emberShard || 0) + 1;
-        for (const key of Object.keys(s)) s[key] = 0;
-      }
+  function applyMainQuestResult(questId, result) {
+    if (!result?.changed) return false;
+    player.quests[questId] = { ...result.state };
+    if (result.effects.some(effect => effect.type === 'questCycleCompleted')) {
+      player.progression.completedCycles++;
+      player.inv.emberShard = (player.inv.emberShard || 0) + 1;
     }
-    if (s.step !== previousStep) { ensureQuestTargets(); feedback('quest', 10); }
+    if (result.effects.some(effect => effect.type === 'questStepChanged')) {
+      ensureQuestTargets();
+      feedback('quest', 10);
+    }
+    return true;
+  }
+  function applyMainQuestEvent(event) {
+    if (!questEngine) return false;
+    const questId = quest().id;
+    return applyMainQuestResult(questId, questEngine.applyMainEvent(questId, questState(), event));
+  }
+  function advanceQuest(reason, persist = true) {
+    if (questEngine) {
+      const questId = quest().id;
+      applyMainQuestResult(questId, questEngine.evaluateLegacyReason(questId, questState(), reason));
+    }
     if (persist) save();
   }
   function ensureQuestTargets() {
@@ -1640,7 +1770,7 @@
   function cancelBlock() {
     if (!player.blocking) return;
     player.blocking = false;
-    document.querySelectorAll('.pressed').forEach(el => el.classList.remove('pressed'));
+    ui.blockBtn?.classList.remove('pressed');
   }
   function kill(e) {
     e.hp = 0;
@@ -1651,22 +1781,13 @@
     const s = questState();
     const firstGuardianUnlock = zoneId === 'stonevale' && e.type === 'guardian' && s.step === 2 && !(player.inv.guardianToken > 0);
     spawnLootFromEnemy(e, firstGuardianUnlock);
-    if (zoneId === 'mistwood' && quest().id === 'mist' && s.step === 2 && e.type === 'raider') {
-      s.kills++;
-      advanceQuest('kill', false);
-    }
     if (zoneId === 'stonevale' && e.type === 'guardian' && s.step === 2) {
-      s.guardian++;
       if (firstGuardianUnlock) {
         player.inv.guardianToken = 1;
         toast('Получен Знак стража · броня открыта');
       } else toast('Страж руин повержен!');
-      advanceQuest('kill', false);
     }
-    if (zoneId === 'ashfield' && s.step === 2) {
-      s.kills++;
-      advanceQuest('kill', false);
-    }
+    applyMainQuestEvent({ type: 'kill', target: e.type, category: 'enemy', amount: 1 });
     progressContract('kill', 'enemy');
     burst(e.x, e.y, e.type === 'guardian' ? '#ceb1ea' : '#e27677', 24, 155);
     save();
@@ -1684,13 +1805,11 @@
     burst(e.x, e.y, '#efcfa8', 9, 118);
     if (e.hp <= 0) kill(e);
   }
-  function performAttack() {
-    player.attackCd = .42;
+  function beginPlayerAttack() {
+    const begun = combatEngine.beginAttack(combatStateSnapshot());
+    applyCombatState(begun.state);
     feedback('attack', 6);
-    player.attackQueuedUntil = 0;
-    animate(player, 'attack', .42);
-    player.combo = player.comboTimer > 0 ? Math.min(3, player.combo + 1) : 1;
-    player.comboTimer = .9;
+    animate(player, 'attack', COMBAT_RULES.attackCooldown);
     let target = null,
       bestDist = Infinity;
     for (const e of entities) {
@@ -1713,11 +1832,10 @@
       if (d >= hitRange || physics && !physics.clearLine(player.x, player.y, e.x, e.y, 2)) continue;
       const ea = Math.atan2(e.y - player.y, e.x - player.x);
       if (Math.abs(angleDiff(ea, a)) >= 1.05) continue;
-      const crit = Math.random() < .12;
-      const amount = Math.round(player.damage * (crit ? 1.5 : 1) * (1 + .10 * Math.max(0, player.combo - 1)));
-      if (!Number.isFinite(amount) || amount <= 0) continue;
-      hitTarget(e, amount);
-      addFloatingText(crit ? 'КРИТ!' : String(amount), e.x, e.y - e.r - 18, crit ? '#ffe08a' : '#f4d3a3');
+      const resolved = combatEngine.resolveBasicDamage({ damage: player.damage, combo: player.combo, critRoll: Math.random() });
+      if (!resolved.valid) continue;
+      hitTarget(e, resolved.amount);
+      addFloatingText(resolved.critical ? 'КРИТ!' : String(resolved.amount), e.x, e.y - e.r - 18, resolved.critical ? '#ffe08a' : '#f4d3a3');
       hits++;
     }
     burst(player.x + Math.cos(a) * 36, player.y + Math.sin(a) * 36, COSMETICS.trails[player.cosmetics.trail] || '#e4bf69', hits ? 12 + player.combo * 2 : 5, 95);
@@ -1725,86 +1843,83 @@
   }
   function attack() {
     if (isPaused()) return false;
-    if (player.attackCd > 0) {
-      if (player.attackCd <= ATTACK_BUFFER_WINDOW) {
-        cancelBlock();
-        player.attackQueuedUntil = time + ATTACK_BUFFER_WINDOW;
-      }
-      return false;
-    }
+    const requested = combatEngine.requestAttack(combatStateSnapshot(), time);
+    if (requested.decision === 'reject') return false;
     cancelBlock();
-    return performAttack();
+    applyCombatState(requested.state);
+    if (requested.decision === 'buffer') return false;
+    return beginPlayerAttack();
   }
   function dodge() {
     if (isPaused()) return false;
-    if (player.dodgeCd > time || player.stamina < 24) return false;
+    const requested = combatEngine.requestDodge({ now: time, stamina: player.stamina, dodgeCd: player.dodgeCd });
+    if (!requested.accepted) return false;
     cancelBlock();
-    player.stamina -= 24;
-    player.dodgeCd = time + .78;
-    player.dodgeUntil = time + .28;
-    animate(player, 'dodge', .28);
+    applyCombatState(requested.state);
+    animate(player, 'dodge', requested.action.duration);
     const moving = Math.hypot(joy.x, joy.y) > .08;
     const mx = moving ? joy.x : Math.cos(player.dir),
       my = moving ? joy.y : Math.sin(player.dir),
       mag = Math.hypot(mx, my) || 1;
     player.dashX = mx / mag;
     player.dashY = my / mag;
-    player.dashRemaining = .28;
     burst(player.x, player.y, COSMETICS.trails[player.cosmetics.trail] || '#91c6cc', 16, 145);
     feedback('dodge', 10);
     toast('Уклонение');
     return true;
   }
   function skill(n) {
-    if (isPaused() || ![1, 2, 3].includes(n)) return false;
-    if (n === 3 && player.hp >= player.maxHp) {
-      toast('Здоровье полное');
-      return false;
-    }
-    if (n === 3 && player.secondWindCd > time) {
-      toast(`Второе дыхание: ${Math.ceil(player.secondWindCd - time)} с`);
-      return false;
-    }
-    if (player.stamina < 20) {
-      toast('Недостаточно выносливости');
+    if (isPaused()) return false;
+    const requested = combatEngine.requestSkill({
+      id: n,
+      now: time,
+      stamina: player.stamina,
+      hp: player.hp,
+      maxHp: player.maxHp,
+      secondWindCd: player.secondWindCd,
+      skillDamageMultiplier: skillDamageMultiplier()
+    });
+    if (!requested.accepted) {
+      if (requested.reason === 'fullHealth') toast('Здоровье полное');
+      else if (requested.reason === 'cooldown') toast(`Второе дыхание: ${Math.ceil(player.secondWindCd - time)} с`);
+      else if (requested.reason === 'stamina') toast('Недостаточно выносливости');
       return false;
     }
     cancelBlock();
-    player.stamina -= 20;
-    animate(player, n === 3 ? 'drink' : 'cast', .55);
+    applyCombatState(requested.state);
+    const action = requested.action;
+    animate(player, action.type === 'secondWind' ? 'drink' : 'cast', .55);
     const a = player.dir;
-    if (n === 1) {
+    if (action.type === 'windSlash') {
       let hits = 0;
       for (const e of entities) {
         if (e.hp <= 0 || e.kind !== 'enemy') continue;
         const d = dist(player, e),
           ea = Math.atan2(e.y - player.y, e.x - player.x);
-        if (d < 165 && Math.abs(angleDiff(ea, a)) < 1.3 && (!physics || physics.clearLine(player.x, player.y, e.x, e.y, 2))) {
-          hitTarget(e, Math.round(player.damage * 1.85 * skillDamageMultiplier()));
+        if (d < action.range && Math.abs(angleDiff(ea, a)) < action.halfArc && (!physics || physics.clearLine(player.x, player.y, e.x, e.y, 2))) {
+          hitTarget(e, Math.round(player.damage * action.damageMultiplier));
           hits++;
         }
       }
       burst(player.x, player.y, COSMETICS.trails[player.cosmetics.trail] || '#8fc4e3', 26, 160);
       feedback('attack', 8);
       toast(hits ? `Разрез ветра: ${hits} попад.` : 'Разрез ветра — мимо');
-    } else if (n === 2) {
-      for (let i = 0; i < 3; i++) {
-        const aa = a + (i - 1) * .15;
+    } else if (action.type === 'triplePulse') {
+      for (let i = 0; i < action.count; i++) {
+        const aa = a + (i - 1) * action.spread;
         projectiles.push({
           x: player.x + Math.cos(a) * 24,
           y: player.y + Math.sin(a) * 24,
-          vx: Math.cos(aa) * 480,
-          vy: Math.sin(aa) * 480,
-          damage: Math.round(player.damage * .9 * skillDamageMultiplier()),
-          life: .82,
+          vx: Math.cos(aa) * action.speed,
+          vy: Math.sin(aa) * action.speed,
+          damage: Math.round(player.damage * action.damageMultiplier),
+          life: action.lifetime,
           color: COSMETICS.trails[player.cosmetics.trail] || '#bfe9ee'
         });
       }
       feedback('attack', 8);
       toast('Тройной импульс');
     } else {
-      player.hp = Math.min(player.maxHp, player.hp + 70);
-      player.secondWindCd = time + SECOND_WIND_COOLDOWN;
       burst(player.x, player.y, '#86c99b', 20, 100);
       feedback('drink', 10);
       toast('Восстановлено здоровье');
@@ -1853,40 +1968,51 @@
     considerInteraction(canUsePortal() ? 'portal' : 'portalLocked', z.portal, 135);
     return interactionResult.type ? interactionResult : null;
   }
-  function normalizeContract(id = zoneId) {
-    const c = player.contracts[id], cycle = player.progression.completedCycles;
-    if (!c) return null;
-    if (c.state === 3 && c.cycle < cycle) {
-      c.state = 0; c.progress = 0; c.cycle = cycle;
-    }
+  function refreshLiveContract(id = zoneId) {
+    const c = player.contracts[id];
+    if (!c || !questEngine) return c || null;
+    const result = questEngine.refreshContract(id, c, player.progression.completedCycles);
+    if (result.changed) Object.assign(c, result.state);
     return c;
   }
-  function progressContract(kind, target) {
-    const def = CONTRACTS[zoneId], c = normalizeContract(zoneId);
-    if (!def || !c || c.state !== 1 || def.kind !== kind || def.target !== target) return false;
-    c.progress = Math.min(def.required, c.progress + 1);
-    if (c.progress >= def.required) {
-      c.state = 2;
+  function applyContractEvent(event) {
+    const c = refreshLiveContract(zoneId);
+    if (!c || !questEngine) return false;
+    const result = questEngine.applyContractEvent(zoneId, c, event, player.progression.completedCycles);
+    if (!result.changed) return false;
+    Object.assign(c, result.state);
+    if (result.effects.some(effect => effect.type === 'contractCompleted')) {
       toast('Поручение выполнено · вернитесь в лагерь');
       feedback('quest', 18);
     }
     return true;
   }
+  function progressContract(kind, target) {
+    return applyContractEvent({ type: kind, target, category: kind === 'kill' ? target : undefined, amount: 1 });
+  }
   function acceptContract() {
     if (isInCombat()) return false;
-    const c = normalizeContract(zoneId), def = CONTRACTS[zoneId];
-    if (!c || !def || c.state !== 0) return false;
-    c.state = 1; c.progress = 0; c.cycle = player.progression.completedCycles;
+    const c = refreshLiveContract(zoneId), def = CONTRACTS[zoneId];
+    if (!c || !def || !questEngine) return false;
+    const result = questEngine.acceptContract(zoneId, c, player.progression.completedCycles);
+    if (!result.changed) return false;
+    Object.assign(c, result.state);
     if (!save()) { c.state = 0; return false; }
     openCamp(); toast('Поручение принято: ' + def.title); feedback('quest', 12); return true;
   }
   function claimContract() {
     if (isInCombat()) return false;
-    const c = normalizeContract(zoneId), def = CONTRACTS[zoneId];
-    if (!c || !def || c.state !== 2) return false;
+    const c = refreshLiveContract(zoneId), def = CONTRACTS[zoneId];
+    if (!c || !def || !questEngine) return false;
+    const result = questEngine.claimContract(zoneId, c, player.progression.completedCycles);
+    if (!result.changed) return false;
     const before = JSON.parse(JSON.stringify(player));
-    c.state = 3; c.cycle = player.progression.completedCycles;
-    player.gold += def.gold; player.supplies[def.supply] = Math.min(9999, (player.supplies[def.supply] || 0) + 1);
+    Object.assign(c, result.state);
+    const reward = result.effects.find(effect => effect.type === 'grantContractReward');
+    if (reward) {
+      player.gold += reward.gold;
+      player.supplies[reward.supply] = Math.min(9999, (player.supplies[reward.supply] || 0) + reward.amount);
+    }
     if (!save()) { Object.assign(player, before); return false; }
     openCamp(); toast(`Награда: ${def.gold} золота · ${SUPPLIES[def.supply].name}`); feedback('quest', 20); return true;
   }
@@ -1898,7 +2024,7 @@
   }
   function openCamp() {
     if (isInCombat()) { toast('Лагерь недоступен во время боя'); return false; }
-    const def = CONTRACTS[zoneId], c = normalizeContract(zoneId);
+    const def = CONTRACTS[zoneId], c = refreshLiveContract(zoneId);
     const stateText = c.state === 0 ? 'Доступно новое поручение' : c.state === 1 ? `Прогресс: ${c.progress}/${def.required}` : c.state === 2 ? 'Задание выполнено · заберите награду' : 'Поручение этого цикла завершено';
     const action = c.state === 0 ? `<button class="btn" id="contractAction">Принять поручение</button>` : c.state === 2 ? `<button class="btn" id="contractAction">Забрать награду · ${def.gold} золота</button>` : '';
     openModal('Лагерь · ' + zones[zoneId].name, `<article class="card"><h3>Доска поручений</h3><p><b>${def.title}</b><br>${def.note}</p><p class="note">${stateText}</p>${action}</article><button class="btn" id="campRest">Отдохнуть · восстановить HP и выносливость</button><button class="btn" id="campCustomize">Руны и внешний вид</button><button class="btn" id="campClose">Вернуться в игру</button>`);
@@ -1946,7 +2072,10 @@
     }
     if (hit.type === 'scout') {
       const s = questState();
-      if (s.step === 0) advanceQuest('scout');
+      if (s.step === 0) {
+        applyMainQuestEvent({ type: 'talk', target: 'scout' });
+        save();
+      }
       openNpcDialog();
       return;
     }
@@ -1975,18 +2104,7 @@
     const key = r.type;
     if (!['wood', 'ore', 'herb'].includes(key)) return;
     player.inv[key] = (player.inv[key] || 0) + 1;
-    if (zoneId === 'mistwood' && key === 'herb' && questState().step === 1) {
-      questState().herb++;
-      advanceQuest('resource', false);
-    }
-    if (zoneId === 'stonevale' && key === 'ore' && questState().step === 1) {
-      questState().ore++;
-      advanceQuest('resource', false);
-    }
-    if (zoneId === 'ashfield' && key === 'wood' && questState().step === 1) {
-      questState().wood++;
-      advanceQuest('resource', false);
-    }
+    applyMainQuestEvent({ type: 'gather', target: key, amount: 1 });
     progressContract('gather', key);
     toast('Получено: ' + {
       wood: 'древесина',
@@ -2017,7 +2135,7 @@
         return;
       }
       const cyclesBefore = player.progression.completedCycles;
-      advanceQuest('portal', false);
+      applyMainQuestEvent({ type: 'portal' });
       const cycleCompleted = player.progression.completedCycles > cyclesBefore;
       zoneId = zones[zoneId].next;
       audio.setZone(zoneId);
@@ -2418,15 +2536,36 @@
   function bindTap(el, fn) {
     if (!el) return;
     const action = el.classList.contains('action');
-    // Gameplay fires on contact; modal buttons fire on click so scrolling is safe.
-    el.addEventListener(action ? 'pointerdown' : 'click', event => {
+    if (!action) {
+      el.addEventListener('click', event => {
+        if (el.disabled) return;
+        event.preventDefault();
+        event.stopPropagation();
+        fn(event);
+      }, { passive: false });
+      return;
+    }
+    let tapPointer = null;
+    const clearTapPointer = (event = null, force = false) => {
+      if (!force && event && event.pointerId !== tapPointer) return;
+      tapPointer = null;
+      el.classList.remove('pressed');
+    };
+    const resetTapPointer = () => clearTapPointer(null, true);
+    actionPointerResets.add(resetTapPointer);
+    el.addEventListener('pointerdown', event => {
       if (el.disabled) return;
       event.preventDefault();
       event.stopPropagation();
+      if (tapPointer !== null) return;
+      tapPointer = event.pointerId;
+      el.classList.add('pressed');
+      capture(el, event.pointerId);
       fn(event);
-    }, {
-      passive: false
-    });
+    }, { passive: false });
+    for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) el.addEventListener(type, clearTapPointer, { passive: false });
+    window.addEventListener('pointerup', clearTapPointer, { passive: true });
+    window.addEventListener('pointercancel', clearTapPointer, { passive: true });
   }
   function setJoystickFromPoint(point) {
     const r = joy.bounds || joyEl.getBoundingClientRect();
@@ -2526,11 +2665,10 @@
         passive: false
       });
       const release = e => {
-        if (blockPointer === null || e.pointerId === blockPointer) {
-          blockPointer = null;
-          player.blocking = false;
-          btn.classList.remove('pressed');
-        }
+        if (e.pointerId !== blockPointer) return;
+        blockPointer = null;
+        player.blocking = false;
+        btn.classList.remove('pressed');
       };
       ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => btn.addEventListener(ev, release, {
         passive: false
@@ -2590,22 +2728,17 @@
     for (const e of entities) if (e.kind !== 'enemy' || e.hp > 0 || e._corpseUntil > time) entities[live++] = e;
     entities.length = live;
     time += dt;
-    player.attackCd = Math.max(0, player.attackCd - dt);
-    if (player.attackCd === 0 && player.attackQueuedUntil >= time) performAttack();
-    else if (player.attackQueuedUntil && player.attackQueuedUntil < time) player.attackQueuedUntil = 0;
-    player.comboTimer = Math.max(0, player.comboTimer - dt);
-    if (player.comboTimer === 0) player.combo = 0;
-    if (player.blocking) {
-      player.stamina = clamp(player.stamina - BLOCK_STAMINA_DRAIN * blockDrainMultiplier() * dt, 0, player.maxStamina);
-      if (player.stamina <= 0) cancelBlock();
-    } else player.stamina = clamp(player.stamina + 24 * dt, 0, player.maxStamina);
+    const combatTick = combatEngine.tick(combatStateSnapshot(), { dt, now: time, maxStamina: player.maxStamina, blocking: player.blocking, blockDrainMultiplier: blockDrainMultiplier() });
+    applyCombatState(combatTick.state);
+    if (combatTick.exhausted) cancelBlock();
+    for (const effect of combatTick.effects) if (effect.type === 'executeBufferedAttack') beginPlayerAttack();
     const moving = Math.hypot(joy.x, joy.y) > .06;
     const dodgeUntil = Number.isFinite(player.dodgeUntil) ? player.dodgeUntil : 0;
     player.dodgeUntil = dodgeUntil;
     const speed = player.speed * (player.blocking ? .58 : 1) * (player.dodgeUntil > time ? .9 : 1);
     const dashStep = Math.min(dt, Math.max(0, player.dashRemaining || 0), Math.max(0, dodgeUntil - (time - dt)));
     if (dashStep > 0) {
-      moveActor(player, player.dashX * (125 / .28) * dashStep, player.dashY * (125 / .28) * dashStep);
+      moveActor(player, player.dashX * (COMBAT_RULES.dashDistance / COMBAT_RULES.dashDuration) * dashStep, player.dashY * (COMBAT_RULES.dashDistance / COMBAT_RULES.dashDuration) * dashStep);
       player.dashRemaining = Math.max(0, player.dashRemaining - dashStep);
     }
     const walkStep = dt - dashStep;
@@ -2623,14 +2756,45 @@
     const oldCycle = e.type === 'guardian' ? 1.05 : 1.35;
     return { windup, recovery: Math.max(.35, oldCycle - windup) };
   }
+  function enemyAttackRange(e, playerRadius) {
+    const enemyRadius = Number.isFinite(e?.r) ? Math.max(0, e.r) : 0;
+    const targetRadius = Number.isFinite(playerRadius) ? Math.max(0, playerRadius) : 0;
+    return enemyRadius + targetRadius + 8;
+  }
+  function phaseProgress(elapsed, duration) {
+    if (!Number.isFinite(elapsed) || !Number.isFinite(duration) || duration <= 0) return 0;
+    if (elapsed <= 0) return 0;
+    const epsilon = Number.EPSILON * Math.max(1, Math.abs(duration)) * 8;
+    if (elapsed >= duration - epsilon) return 1;
+    return elapsed / duration;
+  }
+  function enemyRecoveryProgress(e) {
+    const timing = enemyAttackTiming(e);
+    const cd = Number(e?.cd);
+    if (!Number.isFinite(cd) || !Number.isFinite(timing.recovery) || timing.recovery <= 0) return 0;
+    if (cd <= 0) return 1;
+    if (cd >= timing.recovery) return 0;
+    return clamp(1 - cd / timing.recovery, 0, 1);
+  }
+  function enemyAttackPresentation(e, now, playerRadius) {
+    if (!e) return { phase: 'none' };
+    if (e.attackPhase === 'windup') return {
+      phase: 'windup',
+      dangerRadius: enemyAttackRange(e, playerRadius),
+      progress: phaseProgress(Number(now) - Number(e.attackStartedAt), Number(e.attackWindup))
+    };
+    if (e.attackPhase === 'recovery') return { phase: 'recovery', progress: enemyRecoveryProgress(e) };
+    return { phase: 'none' };
+  }
   function resolveEnemyImpact(e) {
-    const range = e.r + player.r + 8;
+    const range = enemyAttackRange(e, player.r);
     if (e.hp <= 0 || e.aiState !== 'chase' || dist(player, e) > range || physics && !physics.clearLine(e.x, e.y, player.x, player.y, 2)) return false;
-    if (time < player.dodgeUntil) return false;
-    const dmg = player.blocking ? Math.ceil(e.damage * (player.loadout.offhand === 'buckler' ? .18 : .26)) : e.damage;
+    const impact = combatEngine.resolveIncomingDamage({ damage: e.damage, blocking: player.blocking, buckler: player.loadout.offhand === 'buckler', dodging: time < player.dodgeUntil });
+    if (!impact.valid || impact.avoided) return false;
+    const dmg = impact.damage;
     player.hp = Math.max(0, player.hp - dmg);
-    animate(player, player.blocking ? 'block' : 'hit', .24);
-    feedback(player.blocking ? 'block' : 'hit', player.blocking ? 7 : 12);
+    animate(player, impact.blocked ? 'block' : 'hit', .24);
+    feedback(impact.blocked ? 'block' : 'hit', impact.blocked ? 7 : 12);
     addFloatingText('−' + dmg, player.x, player.y - 52, '#ff9690');
     burst(player.x, player.y, '#e06d68', 7, 80);
     if (player.hp <= 0) {
@@ -2688,7 +2852,7 @@
       if (e.attackPhase === 'recovery' && e.cd <= 0) e.attackPhase = '';
       const currentDistance = dist(player, e),
         a = Math.atan2(player.y - e.y, player.x - e.x),
-        range = e.r + player.r + 8;
+        range = enemyAttackRange(e, player.r);
       if (currentDistance > range) {
         if (physics) physics.chase(e, player, e.speed * dt, time);else moveActor(e, Math.cos(a) * e.speed * dt, Math.sin(a) * e.speed * dt);
       } else if (!e.attackPhase && e.cd <= 0 && (!physics || physics.clearLine(e.x, e.y, player.x, player.y, 2))) {
@@ -2744,6 +2908,16 @@
       if (floatingTexts[i].life <= 0) floatingTexts.splice(i, 1);
     }
   }
+  function updateActionState(button, view) {
+    if (!button || !view) return;
+    const state = view.interaction !== 'idle' ? view.interaction : view.availability,
+      progress = String(clamp01(view.progress));
+    if (button.dataset.state !== state) button.dataset.state = state;
+    if (button.style.getPropertyValue('--action-progress') !== progress) button.style.setProperty('--action-progress', progress);
+    if (button.disabled !== view.disabled) button.disabled = view.disabled;
+    if (button.title !== view.title) button.title = view.title;
+    if (button.getAttribute('aria-label') !== view.ariaLabel) button.setAttribute('aria-label', view.ariaLabel);
+  }
   function updateUI() {
     setWidth(ui.hp, player.hp / player.maxHp * 100 + '%');
     setWidth(ui.stamina, player.stamina / player.maxStamina * 100 + '%');
@@ -2768,28 +2942,24 @@
     if (ui.supplyBtn.disabled !== supplyDisabled) ui.supplyBtn.disabled = supplyDisabled;
     ui.supplyBtn.title = supplyLeft > 0 ? `Расходник: ${supplyLeft.toFixed(1)} с` : supplyEmpty ? 'Нет выбранного расходника' : 'Использовать быстрый расходник';
     ui.supplyBtn.setAttribute('aria-label', ui.supplyBtn.title);
-    const lowSkillStamina = player.stamina < 20;
-    for (const [btn, name] of [[ui.skill1Btn, 'Разрез ветра'], [ui.skill2Btn, 'Тройной импульс']]) if (btn) {
-      btn.disabled = lowSkillStamina;
-      btn.title = lowSkillStamina ? 'Недостаточно выносливости · нужно 20' : `${name} · 20 выносливости`;
-      btn.setAttribute('aria-label', btn.title);
-    }
+    const actionState = {
+      attackCd: player.attackCd,
+      attackQueuedUntil: player.attackQueuedUntil,
+      stamina: player.stamina,
+      hp: player.hp,
+      maxHp: player.maxHp,
+      dodgeCd: player.dodgeCd,
+      secondWindCd: player.secondWindCd
+    };
+    updateActionState(ui.attackBtn, getActionPresentation('attack', actionState, time, ui.attackBtn?.classList.contains('pressed')));
+    updateActionState(ui.skill1Btn, getActionPresentation('skill1', actionState, time, ui.skill1Btn?.classList.contains('pressed')));
+    updateActionState(ui.skill2Btn, getActionPresentation('skill2', actionState, time, ui.skill2Btn?.classList.contains('pressed')));
     const secondWindLeft = Math.max(0, player.secondWindCd - time);
     if (ui.skill3Meta) setText(ui.skill3Meta, secondWindLeft > 0 ? `${Math.ceil(secondWindLeft)}с` : '20 EN');
-    if (ui.skill3Btn) {
-      const reason = player.hp >= player.maxHp ? 'Здоровье полное' : secondWindLeft > 0 ? `Восстановление: ${Math.ceil(secondWindLeft)} с` : lowSkillStamina ? 'Недостаточно выносливости · нужно 20' : '';
-      ui.skill3Btn.disabled = !!reason;
-      ui.skill3Btn.title = reason || 'Второе дыхание · 20 выносливости · +70 HP';
-      ui.skill3Btn.setAttribute('aria-label', ui.skill3Btn.title);
-    }
+    updateActionState(ui.skill3Btn, getActionPresentation('skill3', actionState, time, ui.skill3Btn?.classList.contains('pressed')));
     const dodgeLeft = Math.max(0, player.dodgeCd - time);
     if (ui.dodgeMeta) setText(ui.dodgeMeta, dodgeLeft > 0 ? `${dodgeLeft.toFixed(1)}с` : '24 EN');
-    if (ui.dodgeBtn) {
-      const reason = dodgeLeft > 0 ? `Уклонение: ${dodgeLeft.toFixed(1)} с` : player.stamina < 24 ? 'Недостаточно выносливости · нужно 24' : '';
-      ui.dodgeBtn.disabled = !!reason;
-      ui.dodgeBtn.title = reason || 'Уклонение · 24 выносливости';
-      ui.dodgeBtn.setAttribute('aria-label', ui.dodgeBtn.title);
-    }
+    updateActionState(ui.dodgeBtn, getActionPresentation('dodge', actionState, time, ui.dodgeBtn?.classList.contains('pressed')));
     refreshSaveHealth();
     const hit = nearbyInteraction();
     ui.actionUse.classList.toggle('available', !!hit);
@@ -3651,22 +3821,48 @@
   }
   function drawCombatTelegraphs() {
     for (const e of entities) {
-      if (e.kind !== 'enemy' || e.hp <= 0 || e.attackPhase !== 'windup') continue;
-      const s = screenPos(e.x, e.y),
-        duration = Math.max(.01, e.attackWindup || .35),
-        progress = clamp((time - (e.attackStartedAt || time)) / duration, 0, 1);
-      ctx.save();
-      ctx.strokeStyle = 'rgba(232,111,96,.78)';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, 30 + progress * 5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
-      ctx.stroke();
-      ctx.globalAlpha = .18 + progress * .28;
-      ctx.fillStyle = '#e86f60';
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, 24, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      if (e.kind !== 'enemy' || e.hp <= 0) continue;
+      const s = screenPos(e.x, e.y), start = -Math.PI / 2;
+      if (e.attackPhase === 'windup') {
+        const dangerRadius = enemyAttackRange(e, player.r),
+          progress = phaseProgress(time - Number(e.attackStartedAt), Number(e.attackWindup)),
+          end = start + Math.PI * 2 * progress;
+        ctx.save();
+        if (profile.detail > 0) {
+          ctx.globalAlpha = .07 + progress * .07;
+          ctx.fillStyle = '#e86f60';
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, dangerRadius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = 'rgba(232,111,96,.62)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, dangerRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,154,126,.96)';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, dangerRadius, start, end);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,190,154,.92)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, e.r + 5, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      } else if (e.attackPhase === 'recovery') {
+        const progress = enemyRecoveryProgress(e), radius = e.r + 7;
+        ctx.save();
+        ctx.globalAlpha = .86;
+        ctx.strokeStyle = 'rgba(134,190,196,.82)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, radius, start, start + Math.PI * 2 * progress);
+        ctx.stroke();
+        ctx.restore();
+      }
     }
   }
   function drawWorld() {
@@ -3962,6 +4158,7 @@
       openCamp,
       acceptContract,
       claimContract,
+      applyContractEvent,
       progressContract,
       checkDiscoveries,
       installRune,
@@ -3981,10 +4178,18 @@
       resume,
       resetFrameLimiter,
       drawWorld,
+      drawCombatTelegraphs,
       drawMap,
       updateUI,
       transitionZone,
+      applyMainQuestEvent,
       advanceQuest,
+      questTransitions: { engineActive: Boolean(questEngine) },
+      combat: { engineActive: Boolean(combatEngine) },
+      actionPresentation: (action, state, now, pressed = false) => getActionPresentation(action, state, now, pressed),
+      enemyAttackRange: (enemy, playerRadius) => enemyAttackRange(enemy, playerRadius),
+      enemyAttackTiming: enemy => enemyAttackTiming(enemy),
+      enemyAttackPresentation: (enemy, now, playerRadius) => enemyAttackPresentation(enemy, now, playerRadius),
       renderFrame,
       applyGraphics,
       update,

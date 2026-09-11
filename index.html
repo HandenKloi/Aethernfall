@@ -8,9 +8,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#101817">
-<title>Aethernfall v4.0.2</title>
-<link rel="manifest" href="manifest.json?v=4.0.2">
-<link rel="stylesheet" href="style.css?v=4.0.2">
+<title>Aethernfall v4.0.4</title>
+<link rel="manifest" href="manifest.json?v=4.0.4">
+<link rel="stylesheet" href="style.css?v=4.0.4">
 <link rel="apple-touch-icon" href="assets/icon-192.png">
 <link rel="icon" href="assets/icon-192.png">
 <meta name="apple-mobile-web-app-title" content="Aethernfall">
@@ -106,7 +106,7 @@
 <small>ДЫХАНИЕ</small><span class="actionMeta" id="skill3Meta">20 EN</span>
 <b>Ⅲ</b>
 </button>
-<button class="action block" data-act="block">
+<button id="blockBtn" class="action block" data-act="block">
 <small>БЛОК</small>
 <b>◈</b>
 </button>
@@ -114,7 +114,7 @@
 <small>УКЛОН</small><span class="actionMeta" id="dodgeMeta">24 EN</span>
 <b>↝</b>
 </button>
-<button class="action attack" data-act="attack">
+<button id="attackBtn" class="action attack" data-act="attack">
 <small>АТАКА</small>
 <b>⚔</b>
 </button>
@@ -146,11 +146,13 @@
 </div>
 </div>
 </div>
-<script src="physics.js?v=4.0.2" defer></script>
-<script src="art.js?v=4.0.2" defer></script>
-<script src="audio.js?v=4.0.2" defer></script>
-<script src="persistence.js?v=4.0.2" defer></script>
-<script src="game.js?v=4.0.2" defer>
+<script src="physics.js?v=4.0.4" defer></script>
+<script src="art.js?v=4.0.4" defer></script>
+<script src="audio.js?v=4.0.4" defer></script>
+<script src="persistence.js?v=4.0.4" defer></script>
+<script src="quests.js?v=4.0.4" defer></script>
+<script src="combat.js?v=4.0.4" defer></script>
+<script src="game.js?v=4.0.4" defer>
 </script>
 <div id="perfMonitor" class="perfMonitor hidden" aria-live="polite">
   <div>
