@@ -3,8 +3,8 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '3.8.3';
-  const SAVE_SCHEMA = 3;
+  const BUILD_VERSION = '4.0.0';
+  const SAVE_SCHEMA = 4;
   const BASE_STATS = Object.freeze({ startLevel: 6, damage: 32, maxHp: 240, maxStamina: 100, speed: 205, damagePerLevel: 3, hpPerLevel: 18 });
   const MAX_UPGRADE_RANK = 5;
   const BLOCK_STAMINA_DRAIN = 12;
@@ -12,6 +12,7 @@
   const SUPPLY_COOLDOWN = 1.2;
   const ATTACK_BUFFER_WINDOW = .13;
   const art = window.AetherArt;
+  const audio = window.AetherAudio || { unlock: async () => false, configure() {}, setZone() {}, sfx() {}, suspend() {}, resume() {}, snapshot: () => ({ available: false }) };
   const GEAR = {
     emptyHand: {
       slot: 'offhand',
@@ -67,6 +68,12 @@
       hp: 0,
       stamina: 60,
       note: 'До 60 выносливости. Не повышает максимум.'
+    },
+    fieldKit: {
+      name: 'Походный эликсир',
+      hp: 70,
+      stamina: 35,
+      note: 'Восстанавливает до 70 здоровья и 35 выносливости.'
     }
   };
   const motions = new WeakMap();
@@ -84,6 +91,7 @@
     healing: 'potion',
     buckler: 'shield',
     tonic: 'potion',
+    fieldKit: 'potion',
     dawnBlade: 'sword',
     wardenArmor: 'armor',
     guardianToken: 'armor',
@@ -208,6 +216,7 @@
     ios: /iPhone|iPad|iPod/i.test(navigator.userAgent),
     android: /Android/i.test(navigator.userAgent)
   };
+  const reduceMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true;
   const QUALITY = {
     low: {
       particles: 12,
@@ -311,11 +320,26 @@
       }
     }
   };
+  function finiteSetting(value, fallback) {
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : fallback;
+  }
   let settings = {
     quality: storage.getItem('aef_quality') || detected,
     fps: Number(storage.getItem('aef_fps') || 60),
     controls: storage.getItem('aef_controls') === 'left' ? 'left' : 'right',
-    questCollapsed: storage.getItem('aef_quest_collapsed') !== '0'
+    controlSize: ['compact', 'normal', 'large'].includes(storage.getItem('aef_control_size')) ? storage.getItem('aef_control_size') : 'normal',
+    questCollapsed: storage.getItem('aef_quest_collapsed') !== '0',
+    brightness: [85, 100, 115].includes(Number(storage.getItem('aef_brightness'))) ? Number(storage.getItem('aef_brightness')) : 100,
+    uiScale: ['normal', 'large'].includes(storage.getItem('aef_ui_scale')) ? storage.getItem('aef_ui_scale') : 'normal',
+    minimapSize: storage.getItem('aef_minimap_size') === 'large' ? 'large' : 'normal',
+    combatNumbers: storage.getItem('aef_combat_numbers') !== '0',
+    haptics: storage.getItem('aef_haptics') !== '0',
+    masterVolume: finiteSetting(storage.getItem('aef_master_volume'), .8),
+    musicVolume: finiteSetting(storage.getItem('aef_music_volume'), .55),
+    ambientVolume: finiteSetting(storage.getItem('aef_ambient_volume'), .65),
+    sfxVolume: finiteSetting(storage.getItem('aef_sfx_volume'), .8),
+    musicEnabled: storage.getItem('aef_music_enabled') !== '0'
   };
   if (!Object.hasOwn(QUALITY, settings.quality)) settings.quality = detected;
   if (!FPS.includes(settings.fps)) settings.fps = 60;
@@ -344,9 +368,9 @@
   const physics = window.AetherPhysics?.create(WORLD.w, WORLD.h);
   let structures = [];
   const LANDMARKS = {
-    mistwood: [[940, 440, 'FOREST'], [1540, 1030, 'RUIN'], [2150, 540, 'SHRINE']],
-    stonevale: [[820, 480, 'VILLAGE'], [1500, 840, 'MINE'], [2180, 520, 'RUIN']],
-    ashfield: [[940, 500, 'OUTPOST'], [1760, 1240, 'BOSS'], [1260, 930, 'SHRINE']]
+    mistwood: [[940, 440, 'FOREST', 'Шепчущая чаща'], [1540, 1030, 'RUIN', 'Затонувшие руины'], [2150, 540, 'SHRINE', 'Святилище росы']],
+    stonevale: [[820, 480, 'VILLAGE', 'Старый дозор'], [1500, 840, 'MINE', 'Серебряный рудник'], [2180, 520, 'RUIN', 'Расколотая арка']],
+    ashfield: [[940, 500, 'OUTPOST', 'Пепельный пост'], [1760, 1240, 'BOSS', 'Обугленная арена'], [1260, 930, 'SHRINE', 'Святилище искры']]
   };
   const SAVE = 'aethernfall_save_v30';
   const SAVE_BACKUP = SAVE + '_backup';
@@ -435,6 +459,27 @@
       resources: ['wood', 'ore']
     }
   };
+  const CONTRACTS = Object.freeze({
+    mistwood: { title: 'Травы для дозора', kind: 'gather', target: 'herb', required: 4, gold: 45, supply: 'potion', note: 'Соберите 4 травы для походной аптечки дозора.' },
+    stonevale: { title: 'Серебро для укреплений', kind: 'gather', target: 'ore', required: 3, gold: 70, supply: 'tonic', note: 'Добудьте 3 единицы руды у старых выработок.' },
+    ashfield: { title: 'Зачистка пепельной тропы', kind: 'kill', target: 'enemy', required: 5, gold: 100, supply: 'fieldKit', note: 'Победите 5 противников в Пепельных полях.' }
+  });
+  const COSMETICS = Object.freeze({
+    accents: { teal: '#7ef1e1', gold: '#f0d58e', ember: '#ff8e5c' },
+    trails: { steel: '#91c6cc', aether: '#b7a8ff', ember: '#ff9b63' }
+  });
+  const RUNES = Object.freeze({
+    weapon: {
+      none: { name: 'Без руны' },
+      edge: { name: 'Руна кромки', damage: 5, note: '+5 к итоговому урону.' },
+      aether: { name: 'Руна эфира', skill: .10, note: '+10% урона навыков.' }
+    },
+    armor: {
+      none: { name: 'Без руны' },
+      vigor: { name: 'Руна стойкости', health: 18, note: '+18 к максимальному здоровью.' },
+      guard: { name: 'Руна стража', block: .90, note: 'Расход выносливости блока −10%.' }
+    }
+  });
   const player = {
     x: 360,
     y: 500,
@@ -477,8 +522,17 @@
     },
     supplies: {
       potion: 0,
-      tonic: 0
+      tonic: 0,
+      fieldKit: 0
     },
+    runes: { weapon: 'none', armor: 'none' },
+    cosmetics: { accent: 'teal', trail: 'steel' },
+    contracts: {
+      mistwood: { state: 0, progress: 0, cycle: 0 },
+      stonevale: { state: 0, progress: 0, cycle: 0 },
+      ashfield: { state: 0, progress: 0, cycle: 0 }
+    },
+    discoveries: [],
     progression: {
       forgeRank: 0,
       vitalityRank: 0,
@@ -554,6 +608,7 @@
     nextMapAt = 0,
     nextUIAt = 0,
     nextSaveAt = 15000,
+    nextDiscoveryAt = 0,
     atmosphereGradient = null;
   let blockPointer = null;
   const joy = {
@@ -610,6 +665,7 @@
   function suspend() {
     resetInput();
     if (suspended) return;
+    audio.suspend();
     suspended = true;
     cancelAnimationFrame(rafId);
     rafId = 0;
@@ -622,6 +678,7 @@
   function resume() {
     if (document.hidden) return;
     suspended = false;
+    audio.resume();
     applyGraphics();
     resetFrameLimiter();
     if (started && !rafId) if (!globalThis.__AETHER_TEST__) rafId = requestAnimationFrame(renderFrame);
@@ -813,6 +870,15 @@
       if (!finiteFields(progression, ['forgeRank', 'vitalityRank', 'legacyDamageBonus', 'legacyHpBonus', 'completedCycles'])) return false;
       if (!finiteFields(object(quests.mist), ['step', 'herb', 'kills']) || !finiteFields(object(quests.stone), ['step', 'ore', 'guardian']) || !finiteFields(object(quests.ash), ['step', 'wood', 'kills'])) return false;
       if (typeof config.quality !== 'string' || typeof config.fps !== 'number' || !Number.isFinite(config.fps) || typeof config.controls !== 'string' || typeof config.questCollapsed !== 'boolean') return false;
+      if (schema >= 4) {
+        const runes = object(p.runes), cosmetics = object(p.cosmetics), contracts = object(p.contracts);
+        if (!finiteFields(supplies, ['fieldKit'])) return false;
+        if (!stringFields(runes, ['weapon', 'armor']) || !stringFields(cosmetics, ['accent', 'trail'])) return false;
+        for (const id of Object.keys(CONTRACTS)) if (!finiteFields(object(contracts[id]), ['state', 'progress', 'cycle'])) return false;
+        if (!Array.isArray(p.discoveries) || p.discoveries.some(id => typeof id !== 'string')) return false;
+        if (typeof config.controlSize !== 'string' || typeof config.brightness !== 'number' || !Number.isFinite(config.brightness) || typeof config.uiScale !== 'string' || typeof config.minimapSize !== 'string' || typeof config.combatNumbers !== 'boolean' || typeof config.haptics !== 'boolean') return false;
+        if (!finiteFields(config, ['masterVolume', 'musicVolume', 'ambientVolume', 'sfxVolume']) || typeof config.musicEnabled !== 'boolean') return false;
+      }
       return true;
     }
     // Historical saves were less explicit, but these core values have existed throughout
@@ -854,13 +920,21 @@
     const weapon = GEAR[player.loadout.weapon] || GEAR.starterBlade,
       armor = GEAR[player.loadout.armor] || GEAR.starterArmor,
       progression = player.progression;
-    player.damage = Math.max(1, BASE_STATS.damage + levelSteps() * BASE_STATS.damagePerLevel + progression.forgeRank * 5 + progression.legacyDamageBonus + (weapon.damage || 0));
-    player.maxHp = Math.max(1, BASE_STATS.maxHp + levelSteps() * BASE_STATS.hpPerLevel + progression.vitalityRank * 12 + progression.legacyHpBonus + (armor.health || 0));
+    const weaponRune = RUNES.weapon[player.runes?.weapon] || RUNES.weapon.none,
+      armorRune = RUNES.armor[player.runes?.armor] || RUNES.armor.none;
+    player.damage = Math.max(1, BASE_STATS.damage + levelSteps() * BASE_STATS.damagePerLevel + progression.forgeRank * 5 + progression.legacyDamageBonus + (weapon.damage || 0) + (weaponRune.damage || 0));
+    player.maxHp = Math.max(1, BASE_STATS.maxHp + levelSteps() * BASE_STATS.hpPerLevel + progression.vitalityRank * 12 + progression.legacyHpBonus + (armor.health || 0) + (armorRune.health || 0));
     player.maxStamina = BASE_STATS.maxStamina;
     player.speed = BASE_STATS.speed;
     player.hp = Math.min(player.hp, player.maxHp);
     player.equipment.weapon = player.loadout.weapon === 'starterBlade' && progression.forgeRank > 0 ? 'Закалённый меч следопыта' : weapon.name;
     player.equipment.armor = armor.name;
+  }
+  function skillDamageMultiplier() {
+    return 1 + (RUNES.weapon[player.runes?.weapon]?.skill || 0);
+  }
+  function blockDrainMultiplier() {
+    return (GEAR[player.loadout.armor]?.blockDrainMultiplier || 1) * (RUNES.armor[player.runes?.armor]?.block || 1);
   }
   function restoreEquipment(saved) {
     const previous = object(saved.loadout);
@@ -919,6 +993,25 @@
     restoreEquipment(saved);
     player.supplies = {};
     for (const id of Object.keys(SUPPLIES)) player.supplies[id] = Math.floor(finite(object(saved.supplies)[id], 0, 0, 9999));
+    const savedRunes = object(saved.runes), savedCosmetics = object(saved.cosmetics), savedContracts = object(saved.contracts);
+    player.runes = {
+      weapon: Object.hasOwn(RUNES.weapon, savedRunes.weapon) ? savedRunes.weapon : 'none',
+      armor: Object.hasOwn(RUNES.armor, savedRunes.armor) ? savedRunes.armor : 'none'
+    };
+    player.cosmetics = {
+      accent: Object.hasOwn(COSMETICS.accents, savedCosmetics.accent) ? savedCosmetics.accent : 'teal',
+      trail: Object.hasOwn(COSMETICS.trails, savedCosmetics.trail) ? savedCosmetics.trail : 'steel'
+    };
+    player.contracts = {};
+    for (const id of Object.keys(CONTRACTS)) {
+      const c = object(savedContracts[id]);
+      player.contracts[id] = {
+        state: Math.floor(finite(c.state, 0, 0, 3)),
+        progress: Math.floor(finite(c.progress, 0, 0, CONTRACTS[id].required)),
+        cycle: Math.floor(finite(c.cycle, 0, 0, 1e9))
+      };
+    }
+    player.discoveries = Array.isArray(saved.discoveries) ? [...new Set(saved.discoveries.filter(id => typeof id === 'string' && /^\w+:\d+$/.test(id)))].slice(0, 128) : [];
     for (const [key, fields] of Object.entries(defaults.quests)) {
       player.quests[key] = {};
       for (const field of Object.keys(fields)) player.quests[key][field] = Math.floor(finite(object(object(saved.quests)[key])[field], 0, 0, field === 'step' ? 3 : 1e9));
@@ -937,7 +1030,18 @@
     if (Object.hasOwn(QUALITY, config.quality)) settings.quality = config.quality;
     if (FPS.includes(Number(config.fps))) settings.fps = Number(config.fps);
     settings.controls = config.controls === 'left' ? 'left' : 'right';
+    settings.controlSize = ['compact', 'normal', 'large'].includes(config.controlSize) ? config.controlSize : 'normal';
     settings.questCollapsed = config.questCollapsed !== false;
+    settings.brightness = [85, 100, 115].includes(Number(config.brightness)) ? Number(config.brightness) : 100;
+    settings.uiScale = config.uiScale === 'large' ? 'large' : 'normal';
+    settings.minimapSize = config.minimapSize === 'large' ? 'large' : 'normal';
+    settings.combatNumbers = config.combatNumbers !== false;
+    settings.haptics = config.haptics !== false;
+    settings.masterVolume = finiteSetting(config.masterVolume, .8);
+    settings.musicVolume = finiteSetting(config.musicVolume, .55);
+    settings.ambientVolume = finiteSetting(config.ambientVolume, .65);
+    settings.sfxVolume = finiteSetting(config.sfxVolume, .8);
+    settings.musicEnabled = config.musicEnabled !== false;
     player.attackCd = player.attackQueuedUntil = player.secondWindCd = player.supplyCd = player.dodgeCd = player.dodgeUntil = player.combo = player.comboTimer = 0;
     player.dashRemaining = 0;
     player.blocking = false;
@@ -980,8 +1084,13 @@
         },
         supplies: {
           potion: player.supplies.potion || 0,
-          tonic: player.supplies.tonic || 0
+          tonic: player.supplies.tonic || 0,
+          fieldKit: player.supplies.fieldKit || 0
         },
+        runes: { weapon: player.runes.weapon, armor: player.runes.armor },
+        cosmetics: { accent: player.cosmetics.accent, trail: player.cosmetics.trail },
+        contracts: Object.fromEntries(Object.entries(player.contracts).map(([id, c]) => [id, { state: c.state, progress: c.progress, cycle: c.cycle }])),
+        discoveries: player.discoveries.slice(),
         progression: {
           forgeRank: player.progression.forgeRank,
           vitalityRank: player.progression.vitalityRank,
@@ -999,7 +1108,18 @@
         quality: settings.quality,
         fps: settings.fps,
         controls: settings.controls,
-        questCollapsed: settings.questCollapsed
+        controlSize: settings.controlSize,
+        questCollapsed: settings.questCollapsed,
+        brightness: settings.brightness,
+        uiScale: settings.uiScale,
+        minimapSize: settings.minimapSize,
+        combatNumbers: settings.combatNumbers,
+        haptics: settings.haptics,
+        masterVolume: settings.masterVolume,
+        musicVolume: settings.musicVolume,
+        ambientVolume: settings.ambientVolume,
+        sfxVolume: settings.sfxVolume,
+        musicEnabled: settings.musicEnabled
       }
     };
   }
@@ -1129,20 +1249,23 @@
     openEquipment();
     return true;
   }
-  function useSupply() {
-    if (isPaused()) return false;
-    const id = player.loadout.quick,
-      supply = SUPPLIES[id];
-    if (!supply || !(player.supplies[id] > 0)) {
-      toast('Нет расходника: выберите его в экипировке');
-      return false;
-    }
-    if (player.supplyCd > time) {
-      toast(`Расходник: ${(player.supplyCd - time).toFixed(1)} с`);
-      return false;
-    }
-    if (supply.hp && player.hp >= player.maxHp || supply.stamina && player.stamina >= player.maxStamina) {
-      toast('Восстановление не требуется');
+  function supplyUseReason(id) {
+    const supply = SUPPLIES[id];
+    if (!supply) return 'Расходник не выбран';
+    if (!(player.supplies[id] > 0)) return 'Нет в сумке';
+    if (player.supplyCd > time) return `Перезарядка: ${(player.supplyCd - time).toFixed(1)} с`;
+    const hpNeeded = supply.hp > 0 && player.hp < player.maxHp;
+    const staminaNeeded = supply.stamina > 0 && player.stamina < player.maxStamina;
+    if (!hpNeeded && !staminaNeeded) return 'Восстановление не требуется';
+    return '';
+  }
+  function useSupply(id = player.loadout.quick, menuContext = '') {
+    const fromMenu = menuContext === 'inventory' || menuContext === 'equipment';
+    if (isPaused() && !fromMenu) return false;
+    if (fromMenu && isInCombat()) { toast('Недоступно во время боя'); return false; }
+    const supply = SUPPLIES[id], reason = supplyUseReason(id);
+    if (!supply || reason) {
+      toast(reason || 'Расходник недоступен');
       return false;
     }
     if (!equipmentTransaction(() => {
@@ -1153,8 +1276,11 @@
     cancelBlock();
     player.supplyCd = time + SUPPLY_COOLDOWN;
     animate(player, 'drink', .65);
-    burst(player.x, player.y, '#92dcc3', 12, 65);
+    burst(player.x, player.y, player.cosmetics?.trail ? COSMETICS.trails[player.cosmetics.trail] : '#92dcc3', 12, 65);
+    feedback('drink');
     toast(supply.name);
+    if (menuContext === 'inventory') openInventory();
+    else if (menuContext === 'equipment') openEquipment();
     return true;
   }
   function statSources() {
@@ -1162,8 +1288,8 @@
       weapon = GEAR[player.loadout.weapon] || GEAR.starterBlade,
       armor = GEAR[player.loadout.armor] || GEAR.starterArmor;
     return {
-      damage: { base: BASE_STATS.damage, level: steps * BASE_STATS.damagePerLevel, permanent: player.progression.forgeRank * 5 + player.progression.legacyDamageBonus, gear: weapon.damage || 0, total: player.damage },
-      hp: { base: BASE_STATS.maxHp, level: steps * BASE_STATS.hpPerLevel, permanent: player.progression.vitalityRank * 12 + player.progression.legacyHpBonus, gear: armor.health || 0, total: player.maxHp }
+      damage: { base: BASE_STATS.damage, level: steps * BASE_STATS.damagePerLevel, permanent: player.progression.forgeRank * 5 + player.progression.legacyDamageBonus, gear: weapon.damage || 0, rune: RUNES.weapon[player.runes.weapon]?.damage || 0, total: player.damage },
+      hp: { base: BASE_STATS.maxHp, level: steps * BASE_STATS.hpPerLevel, permanent: player.progression.vitalityRank * 12 + player.progression.legacyHpBonus, gear: armor.health || 0, rune: RUNES.armor[player.runes.armor]?.health || 0, total: player.maxHp }
     };
   }
   function signed(n) {
@@ -1174,8 +1300,7 @@
     const currentWeapon = GEAR[player.loadout.weapon] || GEAR.starterBlade,
       currentArmor = GEAR[player.loadout.armor] || GEAR.starterArmor;
     const gearCards = Object.entries(GEAR).map(([id, item]) => {
-      const owned = ownsGear(id),
-        worn = player.loadout[item.slot] === id;
+      const owned = ownsGear(id), worn = player.loadout[item.slot] === id;
       let stats = '';
       if (item.slot === 'offhand') {
         stats = id === 'buckler' ? 'Блок: входящий урон ×0,18 вместо ×0,26 с оружием.' : 'Блок оружием: входящий урон ×0,26.';
@@ -1192,11 +1317,66 @@
       const label = worn ? 'Надето' : !owned ? 'Не получено' : inCombat ? 'Недоступно во время боя' : 'Надеть';
       return `<article class="card">${itemArt(item.icon)}<h3>${item.name}</h3><p>${stats}</p><button class="btn" id="equip-${id}" ${disabled ? 'disabled' : ''}>${label}</button></article>`;
     }).join('');
-    openModal('Экипировка персонажа', `<p class="note">Смена снаряжения не изменяет постоянные усиления. Во время активного боя экипировку менять нельзя.</p><div class="shopList">${gearCards}</div><div class="sectionTitle">БЫСТРЫЙ РАСХОДНИК</div><div class="shopList">${Object.entries(SUPPLIES).map(([id, item]) => `<article class="card">${itemArt('potion')}<h3>${item.name} · ${player.supplies[id]} шт.</h3><p>${item.note}<br>Расход: 1 шт. за применение.</p><button class="btn" id="supply-${id}" ${player.loadout.quick === id || inCombat ? 'disabled' : ''}>${player.loadout.quick === id ? 'В быстром слоте' : inCombat ? 'Недоступно во время боя' : 'В быстрый слот'}</button></article>`).join('')}</div><button class="btn" id="supply-clear" ${inCombat ? 'disabled' : ''}>${inCombat ? 'Недоступно во время боя' : 'Освободить быстрый слот'}</button><button class="btn" id="equipmentBack">Вернуться в сумку</button>`);
+    const supplyCards = Object.entries(SUPPLIES).map(([id, item]) => {
+      const useReason = inCombat ? 'Недоступно во время боя' : supplyUseReason(id);
+      return `<article class="card">${itemArt('potion')}<h3>${item.name} · ${player.supplies[id]} шт.</h3><p>${item.note}<br>Расход: 1 шт. за применение.</p><div class="cardActions"><button class="btn" id="supply-${id}" ${player.loadout.quick === id || inCombat ? 'disabled' : ''}>${player.loadout.quick === id ? 'В быстром слоте' : inCombat ? 'Недоступно во время боя' : 'В быстрый слот'}</button><button class="btn secondary" id="use-supply-${id}" ${useReason ? 'disabled' : ''}>${useReason || 'Использовать сейчас'}</button></div></article>`;
+    }).join('');
+    openModal('Экипировка персонажа', `<p class="note">Смена снаряжения не изменяет постоянные усиления. Расходники можно применить прямо отсюда или назначить в быстрый слот.</p><div class="shopList">${gearCards}</div><div class="sectionTitle">БЫСТРЫЙ РАСХОДНИК</div><div class="shopList">${supplyCards}</div><button class="btn" id="supply-clear" ${inCombat ? 'disabled' : ''}>${inCombat ? 'Недоступно во время боя' : 'Освободить быстрый слот'}</button><button class="btn" id="customizationEntry" ${inCombat ? 'disabled' : ''}>Руны и внешний вид</button><button class="btn" id="equipmentBack">Вернуться в сумку</button>`);
     for (const id of Object.keys(GEAR)) bindTap($('equip-' + id), () => equipItem(id));
-    for (const id of Object.keys(SUPPLIES)) bindTap($('supply-' + id), () => selectSupply(id));
+    for (const id of Object.keys(SUPPLIES)) {
+      bindTap($('supply-' + id), () => selectSupply(id));
+      bindTap($('use-supply-' + id), () => useSupply(id, 'equipment'));
+    }
     bindTap($('supply-clear'), () => selectSupply(''));
+    bindTap($('customizationEntry'), openCustomization);
     bindTap($('equipmentBack'), openInventory);
+  }
+  function feedback(name, vibration = 0) {
+    audio.sfx(name);
+    if (settings.haptics && vibration && navigator.vibrate) navigator.vibrate(vibration);
+  }
+  function syncAudioSettings() {
+    audio.configure({ master: settings.masterVolume, music: settings.musicVolume, ambient: settings.ambientVolume, sfx: settings.sfxVolume, musicEnabled: settings.musicEnabled });
+    audio.setZone(zoneId);
+  }
+  function applyInterfaceSettings() {
+    document.body.classList.toggle('ui-large', settings.uiScale === 'large');
+    document.body.classList.toggle('minimap-large', settings.minimapSize === 'large');
+    document.body.dataset.controlSize = settings.controlSize;
+    document.documentElement.style.setProperty('--world-brightness', String(settings.brightness / 100));
+    syncAudioSettings();
+  }
+  function setCosmetic(kind, id) {
+    const table = kind === 'accent' ? COSMETICS.accents : kind === 'trail' ? COSMETICS.trails : null;
+    if (!table || !Object.hasOwn(table, id) || isInCombat()) return false;
+    if (!equipmentTransaction(() => { player.cosmetics[kind] = id; })) return false;
+    openCustomization();
+    return true;
+  }
+  function installRune(slot, id) {
+    const table = RUNES[slot];
+    if (!table || !Object.hasOwn(table, id) || isInCombat()) return false;
+    if (player.runes[slot] === id) return false;
+    const cost = id === 'none' ? 0 : 1;
+    if ((player.inv.emberShard || 0) < cost) { toast('Нужен Осколок пламени'); return false; }
+    if (!equipmentTransaction(() => {
+      player.inv.emberShard -= cost;
+      player.runes[slot] = id;
+      recomputeDerivedStats();
+    })) return false;
+    openCustomization();
+    toast(table[id].name + (cost ? ' установлена' : ' снята'));
+    return true;
+  }
+  function openCustomization() {
+    const inCombat = isInCombat(), shards = player.inv.emberShard || 0;
+    const runeCards = ['weapon', 'armor'].map(slot => `<div class="card"><h3>${slot === 'weapon' ? 'Руна оружия' : 'Руна брони'}</h3>${Object.entries(RUNES[slot]).map(([id, rune]) => `<button class="btn runeChoice ${player.runes[slot] === id ? 'active' : ''}" id="rune-${slot}-${id}" ${inCombat || player.runes[slot] === id || (id !== 'none' && shards < 1) ? 'disabled' : ''}>${rune.name}${rune.note ? ' · ' + rune.note : ''}${id !== 'none' ? ' · 1 осколок' : ''}</button>`).join('')}</div>`).join('');
+    const accentNames = { teal: 'Бирюза', gold: 'Золото', ember: 'Уголь' }, trailNames = { steel: 'Сталь', aether: 'Эфир', ember: 'Пепел' };
+    openModal('Руны и внешний вид', `<p class="note">Руны дают небольшие специализации и стоят по 1 Осколку пламени. Внешний вид характеристик не меняет.</p><div class="stats"><div class="stat"><b>${shards}</b>Осколков</div><div class="stat"><b>${player.damage}</b>Урон</div><div class="stat"><b>${player.maxHp}</b>HP</div></div>${runeCards}<div class="sectionTitle">ЦВЕТ ГЕРОЯ</div><div class="seg cosmeticSeg">${Object.keys(COSMETICS.accents).map(id => `<button id="accent-${id}" class="${player.cosmetics.accent === id ? 'active' : ''}">${accentNames[id]}</button>`).join('')}</div><div class="sectionTitle">СЛЕД ЭФФЕКТОВ</div><div class="seg cosmeticSeg">${Object.keys(COSMETICS.trails).map(id => `<button id="trail-${id}" class="${player.cosmetics.trail === id ? 'active' : ''}">${trailNames[id]}</button>`).join('')}</div><button class="btn" id="customBack">Назад к экипировке</button>`);
+    for (const slot of ['weapon', 'armor']) for (const id of Object.keys(RUNES[slot])) bindTap($(`rune-${slot}-${id}`), () => installRune(slot, id));
+    for (const id of Object.keys(COSMETICS.accents)) bindTap($('accent-' + id), () => setCosmetic('accent', id));
+    for (const id of Object.keys(COSMETICS.trails)) bindTap($('trail-' + id), () => setCosmetic('trail', id));
+    bindTap($('customBack'), openEquipment);
   }
   function toast(t) {
     if (!ui.toast) return;
@@ -1319,7 +1499,8 @@
         complete = index < state.step;
       return `<li class="${current ? 'current' : complete ? 'complete' : ''}" ${current ? 'aria-current="step"' : ''}>${complete ? '✓ ' : ''}${escapeHTML(current ? currentObjective() : text)}${current ? ' · Сейчас' : ''}</li>`;
     }).join('');
-    openModal('Задания', `<article class="card"><p class="note">${escapeHTML(zones[zoneId].name)} · этап ${state.step + 1} из ${q.steps.length}</p><h3>${escapeHTML(q.title)}</h3><ol class="questSteps">${steps}</ol></article><p class="note">Задание продвигается во время игры: разговор, сбор ресурсов, бой и переход в следующую зону. Покупка материалов не засчитывается как сбор.</p><button class="btn" id="questsClose">Вернуться в игру</button>`);
+    const def = CONTRACTS[zoneId], c = normalizeContract(zoneId), contractText = c.state === 0 ? 'Доступно в лагере' : c.state === 1 ? `Выполняется · ${c.progress}/${def.required}` : c.state === 2 ? 'Выполнено · заберите награду в лагере' : 'Завершено в этом цикле';
+    openModal('Задания', `<article class="card"><p class="note">${escapeHTML(zones[zoneId].name)} · этап ${state.step + 1} из ${q.steps.length}</p><h3>${escapeHTML(q.title)}</h3><ol class="questSteps">${steps}</ol></article><article class="card"><p class="note">ПОРУЧЕНИЕ ЛАГЕРЯ</p><h3>${escapeHTML(def.title)}</h3><p>${escapeHTML(def.note)}</p><p><b>${contractText}</b></p></article><p class="note">Основное задание продвигается во время игры. Материалы из магазина не засчитываются как сбор. Поручения принимаются у доски в лагере.</p><button class="btn" id="questsClose">Вернуться в игру</button>`);
     bindTap($('questsClose'), closeModal);
   }
   function advanceQuest(reason, persist = true) {
@@ -1341,7 +1522,7 @@
         for (const key of Object.keys(s)) s[key] = 0;
       }
     }
-    if (s.step !== previousStep) ensureQuestTargets();
+    if (s.step !== previousStep) { ensureQuestTargets(); feedback('quest', 10); }
     if (persist) save();
   }
   function ensureQuestTargets() {
@@ -1562,6 +1743,7 @@
     }
   }
   function addFloatingText(text, x, y, color = '#fff2bf') {
+    if (!settings.combatNumbers) return;
     if (floatingTexts.length >= 48) floatingTexts.shift();
     floatingTexts.push({
       text,
@@ -1614,6 +1796,7 @@
   }
   function kill(e) {
     e.hp = 0;
+    feedback('kill', e.type === 'guardian' ? 24 : 10);
     e._corpseUntil = time + 0.75;
     gainXP(e.type === 'guardian' ? 120 : 18);
     player.gold += e.type === 'guardian' ? 90 : 4 + Math.floor(Math.random() * 5);
@@ -1636,6 +1819,7 @@
       s.kills++;
       advanceQuest('kill', false);
     }
+    progressContract('kill', 'enemy');
     burst(e.x, e.y, e.type === 'guardian' ? '#ceb1ea' : '#e27677', 24, 155);
     save();
   }
@@ -1646,6 +1830,7 @@
     const playerFromHome = Math.hypot(player.x - (e.homeX ?? e.x), player.y - (e.homeY ?? e.y));
     if (dist(player, e) < 440 && homeDistance <= 420 && playerFromHome <= 480) e.aiState = 'chase';
     e.hp -= dmg;
+    feedback('hit', 5);
     e.hit = .16;
     animate(e, 'hit', .2);
     burst(e.x, e.y, '#efcfa8', 9, 118);
@@ -1653,6 +1838,7 @@
   }
   function performAttack() {
     player.attackCd = .42;
+    feedback('attack', 6);
     player.attackQueuedUntil = 0;
     animate(player, 'attack', .42);
     player.combo = player.comboTimer > 0 ? Math.min(3, player.combo + 1) : 1;
@@ -1686,7 +1872,7 @@
       addFloatingText(crit ? 'КРИТ!' : String(amount), e.x, e.y - e.r - 18, crit ? '#ffe08a' : '#f4d3a3');
       hits++;
     }
-    burst(player.x + Math.cos(a) * 36, player.y + Math.sin(a) * 36, '#e4bf69', hits ? 12 + player.combo * 2 : 5, 95);
+    burst(player.x + Math.cos(a) * 36, player.y + Math.sin(a) * 36, COSMETICS.trails[player.cosmetics.trail] || '#e4bf69', hits ? 12 + player.combo * 2 : 5, 95);
     return true;
   }
   function attack() {
@@ -1716,7 +1902,8 @@
     player.dashX = mx / mag;
     player.dashY = my / mag;
     player.dashRemaining = .28;
-    burst(player.x, player.y, '#91c6cc', 16, 145);
+    burst(player.x, player.y, COSMETICS.trails[player.cosmetics.trail] || '#91c6cc', 16, 145);
+    feedback('dodge', 10);
     toast('Уклонение');
     return true;
   }
@@ -1745,11 +1932,12 @@
         const d = dist(player, e),
           ea = Math.atan2(e.y - player.y, e.x - player.x);
         if (d < 165 && Math.abs(angleDiff(ea, a)) < 1.3 && (!physics || physics.clearLine(player.x, player.y, e.x, e.y, 2))) {
-          hitTarget(e, Math.round(player.damage * 1.85));
+          hitTarget(e, Math.round(player.damage * 1.85 * skillDamageMultiplier()));
           hits++;
         }
       }
-      burst(player.x, player.y, '#8fc4e3', 26, 160);
+      burst(player.x, player.y, COSMETICS.trails[player.cosmetics.trail] || '#8fc4e3', 26, 160);
+      feedback('attack', 8);
       toast(hits ? `Разрез ветра: ${hits} попад.` : 'Разрез ветра — мимо');
     } else if (n === 2) {
       for (let i = 0; i < 3; i++) {
@@ -1759,16 +1947,18 @@
           y: player.y + Math.sin(a) * 24,
           vx: Math.cos(aa) * 480,
           vy: Math.sin(aa) * 480,
-          damage: Math.round(player.damage * .9),
+          damage: Math.round(player.damage * .9 * skillDamageMultiplier()),
           life: .82,
-          color: '#bfe9ee'
+          color: COSMETICS.trails[player.cosmetics.trail] || '#bfe9ee'
         });
       }
+      feedback('attack', 8);
       toast('Тройной импульс');
     } else {
       player.hp = Math.min(player.maxHp, player.hp + 70);
       player.secondWindCd = time + SECOND_WIND_COOLDOWN;
       burst(player.x, player.y, '#86c99b', 20, 100);
+      feedback('drink', 10);
       toast('Восстановлено здоровье');
     }
     return true;
@@ -1781,6 +1971,7 @@
   const interactionPriority = {
     loot: 0,
     scout: 1,
+    camp: 1.5,
     resource: 2,
     portal: 3,
     portalLocked: 4
@@ -1800,10 +1991,75 @@
     interactionResult.d = Infinity;
     const z = zones[zoneId];
     considerInteraction('scout', z.scout, 120);
+    considerInteraction('camp', z.camp, 145);
     for (const loot of lootDrops) if (loot.life > 0) considerInteraction('loot', loot, 105);
     for (const e of entities) if (e.kind === 'resource' && e.hp > 0) considerInteraction('resource', e, 105);
     considerInteraction(canUsePortal() ? 'portal' : 'portalLocked', z.portal, 135);
     return interactionResult.type ? interactionResult : null;
+  }
+  function normalizeContract(id = zoneId) {
+    const c = player.contracts[id], cycle = player.progression.completedCycles;
+    if (!c) return null;
+    if (c.state === 3 && c.cycle < cycle) {
+      c.state = 0; c.progress = 0; c.cycle = cycle;
+    }
+    return c;
+  }
+  function progressContract(kind, target) {
+    const def = CONTRACTS[zoneId], c = normalizeContract(zoneId);
+    if (!def || !c || c.state !== 1 || def.kind !== kind || def.target !== target) return false;
+    c.progress = Math.min(def.required, c.progress + 1);
+    if (c.progress >= def.required) {
+      c.state = 2;
+      toast('Поручение выполнено · вернитесь в лагерь');
+      feedback('quest', 18);
+    }
+    return true;
+  }
+  function acceptContract() {
+    if (isInCombat()) return false;
+    const c = normalizeContract(zoneId), def = CONTRACTS[zoneId];
+    if (!c || !def || c.state !== 0) return false;
+    c.state = 1; c.progress = 0; c.cycle = player.progression.completedCycles;
+    if (!save()) { c.state = 0; return false; }
+    openCamp(); toast('Поручение принято: ' + def.title); feedback('quest', 12); return true;
+  }
+  function claimContract() {
+    if (isInCombat()) return false;
+    const c = normalizeContract(zoneId), def = CONTRACTS[zoneId];
+    if (!c || !def || c.state !== 2) return false;
+    const before = JSON.parse(JSON.stringify(player));
+    c.state = 3; c.cycle = player.progression.completedCycles;
+    player.gold += def.gold; player.supplies[def.supply] = Math.min(9999, (player.supplies[def.supply] || 0) + 1);
+    if (!save()) { Object.assign(player, before); return false; }
+    openCamp(); toast(`Награда: ${def.gold} золота · ${SUPPLIES[def.supply].name}`); feedback('quest', 20); return true;
+  }
+  function restAtCamp() {
+    if (isInCombat()) { toast('Сначала выйдите из боя'); return false; }
+    if (player.hp >= player.maxHp && player.stamina >= player.maxStamina) { toast('Вы уже готовы к пути'); return false; }
+    player.hp = player.maxHp; player.stamina = player.maxStamina; player.supplyCd = 0; player.secondWindCd = 0;
+    save(); updateUI(); openCamp(); toast('Отдых восстановил силы'); return true;
+  }
+  function openCamp() {
+    if (isInCombat()) { toast('Лагерь недоступен во время боя'); return false; }
+    const def = CONTRACTS[zoneId], c = normalizeContract(zoneId);
+    const stateText = c.state === 0 ? 'Доступно новое поручение' : c.state === 1 ? `Прогресс: ${c.progress}/${def.required}` : c.state === 2 ? 'Задание выполнено · заберите награду' : 'Поручение этого цикла завершено';
+    const action = c.state === 0 ? `<button class="btn" id="contractAction">Принять поручение</button>` : c.state === 2 ? `<button class="btn" id="contractAction">Забрать награду · ${def.gold} золота</button>` : '';
+    openModal('Лагерь · ' + zones[zoneId].name, `<article class="card"><h3>Доска поручений</h3><p><b>${def.title}</b><br>${def.note}</p><p class="note">${stateText}</p>${action}</article><button class="btn" id="campRest">Отдохнуть · восстановить HP и выносливость</button><button class="btn" id="campCustomize">Руны и внешний вид</button><button class="btn" id="campClose">Вернуться в игру</button>`);
+    if (c.state === 0) bindTap($('contractAction'), acceptContract); else if (c.state === 2) bindTap($('contractAction'), claimContract);
+    bindTap($('campRest'), restAtCamp); bindTap($('campCustomize'), openCustomization); bindTap($('campClose'), closeModal);
+    return true;
+  }
+  function checkDiscoveries() {
+    if (time < nextDiscoveryAt) return;
+    nextDiscoveryAt = time + .35;
+    const list = LANDMARKS[zoneId] || [];
+    for (let i = 0; i < list.length; i++) {
+      const [x, y, , name] = list[i], id = `${zoneId}:${i}`;
+      if (player.discoveries.includes(id) || Math.hypot(player.x - x, player.y - y) > 135) continue;
+      player.discoveries.push(id); player.gold += 10; gainXP(10); save();
+      toast(`Открыто место: ${name} · +10 золота`); feedback('discovery', 15); break;
+    }
   }
   function openNpcDialog() {
     const z = zones[zoneId];
@@ -1822,11 +2078,13 @@
     const hit = nearbyInteraction();
     if (!hit) return;
     animate(player, 'gather', .5);
+    if (hit.type === 'camp') { openCamp(); return; }
     if (hit.type === 'portal' || hit.type === 'portalLocked') {
       if (!canUsePortal()) {
         toast('Сначала завершите текущую задачу');
         return;
       }
+      feedback('portal', 14);
       transitionZone();
       return;
     }
@@ -1842,6 +2100,7 @@
       if (l.id === 'coin') player.gold += l.count;else player.inv[l.id] = (player.inv[l.id] || 0) + l.count;
       const text = l.id === 'coin' ? `Золото +${l.count}` : `Получено: ${l.label} ×${l.count}`;
       toast(text);
+      feedback('pickup', 6);
       if (ui.lootTicker) {
         setText(ui.lootTicker, text);
         ui.lootTicker.classList.add('show');
@@ -1872,12 +2131,14 @@
       questState().wood++;
       advanceQuest('resource', false);
     }
+    progressContract('gather', key);
     toast('Получено: ' + {
       wood: 'древесина',
       ore: 'руда',
       herb: 'трава'
     }[key]);
     burst(r.x, r.y, '#d6c274', 12, 105);
+    feedback('pickup', 5);
     r.hp = 0;
     const idx = entities.indexOf(r);
     if (idx >= 0) entities.splice(idx, 1);
@@ -1903,6 +2164,7 @@
       advanceQuest('portal', false);
       const cycleCompleted = player.progression.completedCycles > cyclesBefore;
       zoneId = zones[zoneId].next;
+      audio.setZone(zoneId);
       resetZone();
       save();
       setTimeout(() => {
@@ -1962,12 +2224,22 @@
     const stats = statSources(), inCombat = isInCombat();
     const bladeReason = inCombat ? 'Недоступно во время боя' : player.progression.forgeRank >= MAX_UPGRADE_RANK ? 'Максимальный ранг' : player.inv.wood < 3 || player.inv.ore < 2 ? `Нужно: ${Math.max(0, 3 - player.inv.wood)} древесины, ${Math.max(0, 2 - player.inv.ore)} руды` : '';
     const vitalityReason = inCombat ? 'Недоступно во время боя' : player.progression.vitalityRank >= MAX_UPGRADE_RANK ? 'Максимальный ранг' : player.inv.herb < 3 || player.inv.wood < 1 ? `Нужно: ${Math.max(0, 3 - player.inv.herb)} травы, ${Math.max(0, 1 - player.inv.wood)} древесины` : '';
-    const brewReason = inCombat ? 'Недоступно во время боя' : player.inv.herb < 3 || player.inv.wood < 1 ? `Нужно: ${Math.max(0, 3 - player.inv.herb)} травы, ${Math.max(0, 1 - player.inv.wood)} древесины` : player.supplies.potion >= 9999 ? 'Сумка полна' : '';
-    openModal('Сумка и экипировка', `<button class="btn" id="equipmentEntry">Экипировка и расходники</button><div class="grid"><div class="card">${itemArt('sword')}<h3>Оружие</h3><p>${escapeHTML(player.equipment.weapon)}<br>Урон: <b>${player.damage}</b></p></div><div class="card">${itemArt('armor')}<h3>Броня</h3><p>${escapeHTML(player.equipment.armor)}<br>Макс. здоровье: <b>${player.maxHp}</b></p></div><div class="card"><h3>Ресурсы</h3><p>Древесина: ${player.inv.wood}<br>Руда: ${player.inv.ore}<br>Трава: ${player.inv.herb}</p></div><div class="card"><h3>Прогресс</h3><p>Золото: <b>${player.gold}</b><br>Знаки: ${player.inv.guardianToken || 0}<br>Осколки: ${player.inv.emberShard || 0}<br>Завершённые циклы: ${player.progression.completedCycles}</p></div></div><div class="card"><h3>Источники характеристик</h3><p>Урон: ${stats.damage.base} база + ${stats.damage.level} уровни + ${stats.damage.permanent} постоянные + ${stats.damage.gear} оружие = <b>${stats.damage.total}</b><br>HP: ${stats.hp.base} база + ${stats.hp.level} уровни + ${stats.hp.permanent} постоянные + ${stats.hp.gear} броня = <b>${stats.hp.total}</b></p></div><div class="sectionTitle">КРАФТ</div><button class="btn" id="brewBtn" ${brewReason ? 'disabled' : ''}>${brewReason || 'Зелье лечения · 3 травы + 1 древесина'}</button><button class="btn" id="craftBtn" ${bladeReason ? 'disabled' : ''}>${bladeReason || `Закалить меч · ранг ${player.progression.forgeRank + 1}/${MAX_UPGRADE_RANK} · 3 древесины + 2 руды`}</button><button class="btn" id="potionBtn" ${vitalityReason ? 'disabled' : ''}>${vitalityReason || `Эликсир жизни · ранг ${player.progression.vitalityRank + 1}/${MAX_UPGRADE_RANK} · +12 HP · 3 травы + 1 древесина`}</button>`);
+    const recipeReason = id => {
+      if (inCombat) return 'Недоступно во время боя';
+      if (player.supplies[id] >= 9999) return 'Сумка полна';
+      const r = SUPPLY_RECIPES[id];
+      const missing = Object.entries(r).filter(([k]) => k !== 'label').filter(([k, n]) => (player.inv[k] || 0) < n).map(([k, n]) => `${{herb:'трава',wood:'древесина',ore:'руда'}[k]} ${n - (player.inv[k] || 0)}`);
+      return missing.length ? 'Нужно: ' + missing.join(', ') : '';
+    };
+    const discovered = player.discoveries.filter(id => id.startsWith(zoneId + ':')).length;
+    openModal('Сумка и экипировка', `<button class="btn" id="equipmentEntry">Экипировка, расходники и руны</button><div class="grid"><div class="card">${itemArt('sword')}<h3>Оружие</h3><p>${escapeHTML(player.equipment.weapon)}<br>Урон: <b>${player.damage}</b></p></div><div class="card">${itemArt('armor')}<h3>Броня</h3><p>${escapeHTML(player.equipment.armor)}<br>Макс. здоровье: <b>${player.maxHp}</b></p></div><div class="card"><h3>Ресурсы</h3><p>Древесина: ${player.inv.wood}<br>Руда: ${player.inv.ore}<br>Трава: ${player.inv.herb}</p></div><div class="card"><h3>Прогресс</h3><p>Золото: <b>${player.gold}</b><br>Знаки: ${player.inv.guardianToken || 0}<br>Осколки: ${player.inv.emberShard || 0}<br>Циклы: ${player.progression.completedCycles}<br>Открыто мест: ${discovered}/${LANDMARKS[zoneId].length}</p></div></div><div class="card"><h3>Источники характеристик</h3><p>Урон: ${stats.damage.base} база + ${stats.damage.level} уровни + ${stats.damage.permanent} постоянные + ${stats.damage.gear} оружие + ${stats.damage.rune} руна = <b>${stats.damage.total}</b><br>HP: ${stats.hp.base} база + ${stats.hp.level} уровни + ${stats.hp.permanent} постоянные + ${stats.hp.gear} броня + ${stats.hp.rune} руна = <b>${stats.hp.total}</b></p></div><div class="sectionTitle">РАСХОДНИКИ</div><div class="shopList">${Object.entries(SUPPLIES).map(([id,item]) => `<article class="card">${itemArt('potion')}<h3>${item.name} · ${player.supplies[id]} шт.</h3><p>${item.note}</p><button class="btn" id="inv-use-${id}" ${supplyUseReason(id) || inCombat ? 'disabled' : ''}>${inCombat ? 'Недоступно во время боя' : supplyUseReason(id) || 'Использовать сейчас'}</button></article>`).join('')}</div><div class="sectionTitle">КРАФТ РАСХОДНИКОВ</div><button class="btn" id="brew-potion" ${recipeReason('potion') ? 'disabled' : ''}>${recipeReason('potion') || 'Зелье лечения · 3 травы + 1 древесина'}</button><button class="btn" id="brew-tonic" ${recipeReason('tonic') ? 'disabled' : ''}>${recipeReason('tonic') || 'Тоник выносливости · 1 трава + 1 руда'}</button><button class="btn" id="brew-fieldKit" ${recipeReason('fieldKit') ? 'disabled' : ''}>${recipeReason('fieldKit') || 'Походный эликсир · 2 травы + 1 древесина + 1 руда'}</button><div class="sectionTitle">ПОСТОЯННЫЕ УСИЛЕНИЯ</div><button class="btn" id="craftBtn" ${bladeReason ? 'disabled' : ''}>${bladeReason || `Закалить меч · ранг ${player.progression.forgeRank + 1}/${MAX_UPGRADE_RANK} · 3 древесины + 2 руды`}</button><button class="btn" id="potionBtn" ${vitalityReason ? 'disabled' : ''}>${vitalityReason || `Эликсир жизни · ранг ${player.progression.vitalityRank + 1}/${MAX_UPGRADE_RANK} · +12 HP · 3 травы + 1 древесина`}</button>`);
     bindTap($('craftBtn'), () => craft('blade'));
     bindTap($('potionBtn'), () => craft('potion'));
     bindTap($('equipmentEntry'), openEquipment);
-    bindTap($('brewBtn'), brewSupply);
+    for (const id of Object.keys(SUPPLIES)) {
+      bindTap($('brew-' + id), () => brewSupply(id));
+      bindTap($('inv-use-' + id), () => useSupply(id, 'inventory'));
+    }
   }
   const SHOP_ITEMS = [{
     id: 'buckler',
@@ -2008,6 +2280,12 @@
     note: 'В сумку: до 60 выносливости при применении. Расход 1 шт.',
     price: 30,
     supply: 'tonic'
+  }, {
+    id: 'fieldKit',
+    name: 'Походный эликсир',
+    note: 'В сумку: до 70 здоровья и 35 выносливости. Расход 1 шт.',
+    price: 55,
+    supply: 'fieldKit'
   }, {
     id: 'healing',
     name: 'Лечение у торговца',
@@ -2181,56 +2459,87 @@
     }
     return false;
   }
-  function brewSupply() {
-    if (ui.modal.classList.contains('hidden') || player.inv.herb < 3 || player.inv.wood < 1 || player.supplies.potion >= 9999) return false;
+  const SUPPLY_RECIPES = Object.freeze({
+    potion: { herb: 3, wood: 1, label: 'Зелье лечения' },
+    tonic: { herb: 1, ore: 1, label: 'Тоник выносливости' },
+    fieldKit: { herb: 2, wood: 1, ore: 1, label: 'Походный эликсир' }
+  });
+  function recipeMissing(recipe) {
+    return Object.entries(recipe).filter(([key]) => key !== 'label').map(([key, need]) => Math.max(0, need - (player.inv[key] || 0))).some(Boolean);
+  }
+  function brewSupply(id = 'potion') {
+    const recipe = SUPPLY_RECIPES[id];
+    if (ui.modal.classList.contains('hidden') || !recipe || player.supplies[id] >= 9999) return false;
     if (isInCombat()) { toast('Недоступно во время боя'); return false; }
+    if (recipeMissing(recipe)) { toast('Недостаточно ресурсов'); return false; }
     if (!equipmentTransaction(() => {
-      player.inv.herb -= 3;
-      player.inv.wood--;
-      player.supplies.potion++;
+      for (const [key, need] of Object.entries(recipe)) if (key !== 'label') player.inv[key] -= need;
+      player.supplies[id]++;
     })) return false;
     openInventory();
-    toast('Зелье лечения добавлено в сумку');
+    toast(recipe.label + ' добавлен в сумку');
     return true;
   }
   function applyControlLayout() {
     document.body.classList.toggle('left-handed', settings.controls === 'left');
+    document.body.dataset.controlSize = settings.controlSize;
+  }
+  function persistSetting(key, value) {
+    storage.setItem('aef_' + key, String(value));
   }
   function setControls(side) {
     settings.controls = side === 'left' ? 'left' : 'right';
-    storage.setItem('aef_controls', settings.controls);
-    applyControlLayout();
-    save();
-    openMenu();
+    persistSetting('controls', settings.controls);
+    applyControlLayout(); save(); openMenu();
+  }
+  function setUiSetting(key, value) {
+    settings[key] = value;
+    const storageKeys = { controlSize:'control_size', brightness:'brightness', uiScale:'ui_scale', minimapSize:'minimap_size', combatNumbers:'combat_numbers', haptics:'haptics', musicEnabled:'music_enabled' };
+    persistSetting(storageKeys[key] || key, typeof value === 'boolean' ? (value ? '1' : '0') : value);
+    applyInterfaceSettings(); save(); openMenu();
+  }
+  function setVolume(key, value) {
+    const n = Math.max(0, Math.min(1, Number(value) / 100));
+    settings[key] = n;
+    const storageKeys = { masterVolume:'master_volume', musicVolume:'music_volume', ambientVolume:'ambient_volume', sfxVolume:'sfx_volume' };
+    persistSetting(storageKeys[key], n);
+    syncAudioSettings();
+  }
+  function volumeRow(id, label, value) {
+    return `<label class="rangeRow" for="${id}"><span>${label}</span><input id="${id}" type="range" min="0" max="100" step="5" value="${Math.round(value * 100)}"><b id="${id}Value">${Math.round(value * 100)}%</b></label>`;
   }
   function openMenu() {
-    openModal('Настройки · v' + BUILD_VERSION, `<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><div class="sectionTitle">УПРАВЛЕНИЕ</div><div class="seg" id="controlsSeg"><button id="control-right" class="${settings.controls === 'right' ? 'active' : ''}">Правша</button><button id="control-left" class="${settings.controls === 'left' ? 'active' : ''}">Левша</button></div><p class="note">Меняет местами зоны джойстика и боевых кнопок.</p><div class="sectionTitle">КАЧЕСТВО ГРАФИКИ</div><div class="settingRow"><div class="seg" id="qualitySeg">${['low', 'medium', 'high', 'very-high', 'ultra'].map(q => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}">${q === 'very-high' ? 'Very High' : q === 'ultra' ? 'Ultra' : q[0].toUpperCase() + q.slice(1)}</button>`).join('')}</div><div class="note">Low–Very High сохраняют прежний бюджет разрешения. Ultra повышает pixel budget, детализацию материалов, мягкость теней и добавляет лёгкое локальное освещение/свечение без изменения физики.</div></div><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="settingRow"><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div></div><div class="sectionTitle">МОНИТОР ПРОИЗВОДИТЕЛЬНОСТИ</div><button class="btn" id="perfBtn">${perfMonitorEnabled ? 'Выключить frame-time monitor' : 'Включить frame-time monitor'}</button>${devicePanel()}<div class="sectionTitle">СОХРАНЕНИЕ</div>${saveStatusText() ? `<p class="saveWarningText">${escapeHTML(saveStatusText())}</p>` : ''}<button class="btn" id="saveBtn">Сохранить прогресс</button>`);
-    document.querySelectorAll('#qualitySeg button').forEach(b => bindTap(b, () => {
-      settings.quality = b.dataset.q;
-      storage.setItem('aef_quality', settings.quality);
-      applyGraphics();
-      save();
-      openMenu();
-    }));
-    document.querySelectorAll('#fpsSeg button').forEach(b => bindTap(b, () => {
-      settings.fps = Number(b.dataset.f);
-      storage.setItem('aef_fps', String(settings.fps));
-      resetFrameLimiter();
-      save();
-      openMenu();
-    }));
-    bindTap($('control-right'), () => setControls('right'));
-    bindTap($('control-left'), () => setControls('left'));
+    openModal('Настройки · v' + BUILD_VERSION, `<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div>
+      <div class="sectionTitle">ЗВУК</div>
+      <button class="btn" id="musicToggle">${settings.musicEnabled ? 'Музыка: включена' : 'Музыка: выключена'}</button>
+      ${volumeRow('masterVolume','Общая громкость',settings.masterVolume)}${volumeRow('musicVolume','Музыка',settings.musicVolume)}${volumeRow('ambientVolume','Окружение',settings.ambientVolume)}${volumeRow('sfxVolume','Эффекты',settings.sfxVolume)}
+      <div class="sectionTitle">УПРАВЛЕНИЕ</div><div class="seg" id="controlsSeg"><button id="control-right" class="${settings.controls === 'right' ? 'active' : ''}">Правша</button><button id="control-left" class="${settings.controls === 'left' ? 'active' : ''}">Левша</button></div>
+      <p class="note">Расположение зон управления можно зеркалить. Размер меняется без изменения игровой физики.</p><div class="seg"><button id="controlSize-compact" class="${settings.controlSize === 'compact' ? 'active' : ''}">Компактно</button><button id="controlSize-normal" class="${settings.controlSize === 'normal' ? 'active' : ''}">Обычно</button><button id="controlSize-large" class="${settings.controlSize === 'large' ? 'active' : ''}">Крупно</button></div>
+      <div class="sectionTitle">ИНТЕРФЕЙС</div><div class="seg"><button id="bright-85" class="${settings.brightness === 85 ? 'active' : ''}">Темнее</button><button id="bright-100" class="${settings.brightness === 100 ? 'active' : ''}">Обычно</button><button id="bright-115" class="${settings.brightness === 115 ? 'active' : ''}">Ярче</button></div><div class="seg"><button id="ui-normal" class="${settings.uiScale === 'normal' ? 'active' : ''}">Текст 100%</button><button id="ui-large" class="${settings.uiScale === 'large' ? 'active' : ''}">Текст 115%</button></div><div class="seg"><button id="map-normal" class="${settings.minimapSize === 'normal' ? 'active' : ''}">Карта обычная</button><button id="map-large" class="${settings.minimapSize === 'large' ? 'active' : ''}">Карта крупная</button></div><button class="btn" id="numbersToggle">Цифры урона: ${settings.combatNumbers ? 'включены' : 'выключены'}</button><button class="btn" id="hapticsToggle">Виброотклик: ${settings.haptics ? 'включён' : 'выключен'}</button>
+      <div class="sectionTitle">КАЧЕСТВО ГРАФИКИ</div><div class="settingRow"><div class="seg" id="qualitySeg">${['low', 'medium', 'high', 'very-high', 'ultra'].map(q => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}">${q === 'very-high' ? 'Very High' : q === 'ultra' ? 'Ultra' : q[0].toUpperCase() + q.slice(1)}</button>`).join('')}</div><div class="note">Ultra повышает детализацию, освещение и эффекты; яркость мира настраивается отдельно выше.</div></div>
+      <div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="settingRow"><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div></div>
+      <div class="sectionTitle">МОНИТОР ПРОИЗВОДИТЕЛЬНОСТИ</div><button class="btn" id="perfBtn">${perfMonitorEnabled ? 'Выключить frame-time monitor' : 'Включить frame-time monitor'}</button>${devicePanel()}<div class="sectionTitle">СОХРАНЕНИЕ</div>${saveStatusText() ? `<p class="saveWarningText">${escapeHTML(saveStatusText())}</p>` : ''}<button class="btn" id="saveBtn">Сохранить прогресс</button>`);
+    document.querySelectorAll('#qualitySeg button').forEach(b => bindTap(b, () => { settings.quality = b.dataset.q; persistSetting('quality', settings.quality); applyGraphics(); save(); openMenu(); }));
+    document.querySelectorAll('#fpsSeg button').forEach(b => bindTap(b, () => { settings.fps = Number(b.dataset.f); persistSetting('fps', settings.fps); resetFrameLimiter(); save(); openMenu(); }));
+    bindTap($('control-right'), () => setControls('right')); bindTap($('control-left'), () => setControls('left'));
+    for (const size of ['compact','normal','large']) bindTap($('controlSize-' + size), () => setUiSetting('controlSize', size));
+    for (const b of [85,100,115]) bindTap($('bright-' + b), () => setUiSetting('brightness', b));
+    bindTap($('ui-normal'), () => setUiSetting('uiScale', 'normal')); bindTap($('ui-large'), () => setUiSetting('uiScale', 'large'));
+    bindTap($('map-normal'), () => setUiSetting('minimapSize', 'normal')); bindTap($('map-large'), () => setUiSetting('minimapSize', 'large'));
+    bindTap($('numbersToggle'), () => setUiSetting('combatNumbers', !settings.combatNumbers)); bindTap($('hapticsToggle'), () => setUiSetting('haptics', !settings.haptics));
+    bindTap($('musicToggle'), () => { audio.unlock(); setUiSetting('musicEnabled', !settings.musicEnabled); });
+    for (const [id,key] of [['masterVolume','masterVolume'],['musicVolume','musicVolume'],['ambientVolume','ambientVolume'],['sfxVolume','sfxVolume']]) {
+      const input = $(id); if (!input) continue;
+      input.addEventListener('input', () => { const value = Math.round(Number(input.value) || 0); setText($(id + 'Value'), value + '%'); setVolume(key, value); }, { passive: true });
+      input.addEventListener('change', () => save(), { passive: true });
+    }
     bindTap($('saveBtn'), () => toast(save() ? 'Прогресс сохранён' : saveStatusText() || 'Не удалось сохранить: хранилище недоступно'));
-    bindTap($('perfBtn'), () => {
-      perfMonitorEnabled = !perfMonitorEnabled;
-      storage.setItem('aef_perf_monitor', perfMonitorEnabled ? '1' : '0');
-      refreshPerformanceMonitorVisibility();
-      openMenu();
-    });
-    bindTap($('economyBtn'), () => applyPreset('low', 30));
-    bindTap($('balancedBtn'), () => applyPreset('medium', 60));
+    bindTap($('perfBtn'), () => { perfMonitorEnabled = !perfMonitorEnabled; storage.setItem('aef_perf_monitor', perfMonitorEnabled ? '1' : '0'); refreshPerformanceMonitorVisibility(); openMenu(); });
+    bindTap($('economyBtn'), () => applyPreset('low', 30)); bindTap($('balancedBtn'), () => applyPreset('medium', 60));
   }
+  const unlockAudio = () => { audio.unlock().then?.(() => syncAudioSettings()); };
+  document.addEventListener('pointerdown', unlockAudio, { passive: true, once: true });
+  document.addEventListener('keydown', unlockAudio, { passive: true, once: true });
   function bindTap(el, fn) {
     if (!el) return;
     const action = el.classList.contains('action');
@@ -2412,8 +2721,7 @@
     player.comboTimer = Math.max(0, player.comboTimer - dt);
     if (player.comboTimer === 0) player.combo = 0;
     if (player.blocking) {
-      const armorMultiplier = GEAR[player.loadout.armor]?.blockDrainMultiplier || 1;
-      player.stamina = clamp(player.stamina - BLOCK_STAMINA_DRAIN * armorMultiplier * dt, 0, player.maxStamina);
+      player.stamina = clamp(player.stamina - BLOCK_STAMINA_DRAIN * blockDrainMultiplier() * dt, 0, player.maxStamina);
       if (player.stamina <= 0) cancelBlock();
     } else player.stamina = clamp(player.stamina + 24 * dt, 0, player.maxStamina);
     const moving = Math.hypot(joy.x, joy.y) > .06;
@@ -2433,6 +2741,7 @@
     updateEnemies(dt);
     updateProjectiles(dt);
     updateEffects(dt);
+    checkDiscoveries();
   }
   function enemyAttackTiming(e) {
     const windup = e.type === 'guardian' ? .52 : e.type === 'boar' ? .30 : .35;
@@ -2446,6 +2755,7 @@
     const dmg = player.blocking ? Math.ceil(e.damage * (player.loadout.offhand === 'buckler' ? .18 : .26)) : e.damage;
     player.hp = Math.max(0, player.hp - dmg);
     animate(player, player.blocking ? 'block' : 'hit', .24);
+    feedback(player.blocking ? 'block' : 'hit', player.blocking ? 7 : 12);
     addFloatingText('−' + dmg, player.x, player.y - 52, '#ff9690');
     burst(player.x, player.y, '#e06d68', 7, 80);
     if (player.hp <= 0) {
@@ -2577,7 +2887,7 @@
     setText(ui.gold, player.gold);
     const supplyId = player.loadout.quick;
     const supplyLeft = Math.max(0, player.supplyCd - time);
-    const supplyName = supplyId === 'tonic' ? 'ТОНИК' : supplyId ? 'ЗЕЛЬЕ' : 'ПУСТО';
+    const supplyName = supplyId === 'tonic' ? 'ТОНИК' : supplyId === 'fieldKit' ? 'ЭЛИКСИР' : supplyId ? 'ЗЕЛЬЕ' : 'ПУСТО';
     setText(ui.supplyLabel, supplyName + ' · ' + (supplyLeft > 0 ? `${supplyLeft.toFixed(1)}с` : player.supplies[supplyId] || 0));
     const supplyEmpty = !player.supplies[supplyId], supplyDisabled = supplyEmpty || supplyLeft > 0;
     if (ui.supplyBtn.disabled !== supplyDisabled) ui.supplyBtn.disabled = supplyDisabled;
@@ -2612,6 +2922,7 @@
       portal: 'ПЕРЕЙТИ',
       portalLocked: 'ЗАКРЫТО',
       scout: 'ГОВОРИТЬ',
+      camp: 'ЛАГЕРЬ',
       loot: 'ПОДОБРАТЬ',
       resource: 'СОБРАТЬ'
     }[hit.type] : 'ДЕЙСТВИЕ');
@@ -2792,11 +3103,22 @@
     }
     ctx.restore();
   }
+  function drawCampBoard(z) {
+    const p = screenPos(z.camp.x + 72, z.camp.y - 26);
+    ctx.save(); ctx.translate(p.x, p.y); ctx.scale(1, .82);
+    ctx.strokeStyle = '#6b4b31'; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(-24, 18); ctx.lineTo(-24, -34); ctx.moveTo(24, 18); ctx.lineTo(24, -34); ctx.stroke();
+    ctx.fillStyle = '#6f5238'; ctx.fillRect(-37, -48, 74, 38);
+    ctx.strokeStyle = '#c8aa72'; ctx.lineWidth = 2; ctx.strokeRect(-37, -48, 74, 38);
+    ctx.fillStyle = '#e9d79a'; ctx.fillRect(-20, -38, 27, 4); ctx.fillRect(-20, -28, 40, 3);
+    ctx.restore();
+  }
   function drawCamp(z) {
     if (art?.has('house')) {
       const p = screenPos(z.camp.x, z.camp.y - 100);
       groundShadow(p.x, p.y + 14, 55);
       art.draw(ctx, 'house', p.x, p.y + 20, 130);
+      drawCampBoard(z);
       return;
     }
     const s = screenPos(z.camp.x, z.camp.y - 100);
@@ -2842,6 +3164,7 @@
     ctx.arc(17, 8, 9 + Math.sin(time * 7) * 2, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+    drawCampBoard(z);
   }
   function drawScout(z) {
     if (art?.has('scout')) {
@@ -3033,6 +3356,8 @@
         art.actor(ctx, 'hero', fallen.x, fallen.y + 18, 88, time, 0, 'idle', 1, false, progress);
         ctx.restore();
       }
+      const accent = COSMETICS.accents[player.cosmetics.accent] || COSMETICS.accents.teal;
+      ctx.save(); ctx.globalAlpha = .20 + Math.sin(time * 2.2) * .04; ctx.strokeStyle = accent; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(p.x, p.y + 13, 27, 10, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
       groundShadow(p.x, p.y + 15, 24);
       ctx.save();
       if (time < player.dodgeUntil) ctx.globalAlpha = .68;
@@ -3333,17 +3658,41 @@
     }
   }
   function drawAtmosphere() {
-    const z = zones[zoneId];
     ctx.save();
     const grad = atmosphereGradient || ctx.createLinearGradient(0, 0, 0, H);
     if (!atmosphereGradient) {
-      grad.addColorStop(0, 'rgba(223,224,205,.06)');
-      grad.addColorStop(.38, 'rgba(20,28,23,0)');
-      grad.addColorStop(1, 'rgba(7,11,9,.16)');
-      atmosphereGradient = grad;
+      grad.addColorStop(0, 'rgba(223,224,205,.06)'); grad.addColorStop(.38, 'rgba(20,28,23,0)'); grad.addColorStop(1, 'rgba(7,11,9,.16)'); atmosphereGradient = grad;
     }
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+    if (profile.detail >= 2 && !reduceMotion) {
+      const count = profile.detail >= 4 ? 26 : profile.detail >= 3 ? 18 : 10;
+      for (let i = 0; i < count; i++) {
+        const seed = rng(i * 37 + zoneId.length * 91), phase = time * (zoneId === 'ashfield' ? .34 : .12) + seed * 12;
+        const x = (seed * W + Math.sin(phase + i) * 80 + W) % W;
+        const y0 = rng(i * 71 + 29) * H;
+        if (zoneId === 'mistwood') {
+          const y = (y0 + Math.sin(phase * .7) * 18 + H) % H;
+          ctx.globalAlpha = .12 + .14 * (Math.sin(phase * 2) * .5 + .5); ctx.fillStyle = '#c8f0b4'; ctx.beginPath(); ctx.arc(x, y, 1.2 + (i % 3) * .35, 0, Math.PI * 2); ctx.fill();
+        } else if (zoneId === 'stonevale') {
+          const y = (y0 + time * (4 + i % 3)) % H;
+          ctx.globalAlpha = .09; ctx.strokeStyle = '#d8ccb0'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 5, y + 1.5); ctx.stroke();
+        } else {
+          const y = (y0 - time * (10 + i % 5) + H * 4) % H;
+          ctx.globalAlpha = .18 + (i % 3) * .05; ctx.fillStyle = i % 2 ? '#ff9b63' : '#e26e4f'; ctx.fillRect(x, y, 1.5, 3 + i % 3);
+        }
+      }
+    }
+    ctx.globalAlpha = 1; ctx.restore();
+  }
+  function drawDiscoveryLabels() {
+    const list = LANDMARKS[zoneId] || [];
+    ctx.save(); ctx.font = '700 11px system-ui'; ctx.textAlign = 'center';
+    for (let i = 0; i < list.length; i++) {
+      const [x, y, , name] = list[i], id = `${zoneId}:${i}`;
+      if (!player.discoveries.includes(id) || Math.hypot(player.x - x, player.y - y) > 280) continue;
+      const p = screenPos(x, y - 75), w = ctx.measureText(name).width + 18;
+      ctx.fillStyle = 'rgba(8,14,12,.72)'; ctx.fillRect(p.x - w / 2, p.y - 14, w, 20); ctx.fillStyle = '#e9d79a'; ctx.fillText(name, p.x, p.y + 1);
+    }
     ctx.restore();
   }
   function lightHole(x, y, radius, intensity = 1) {
@@ -3475,6 +3824,7 @@
     drawBloom(z);
     drawFloatingTexts();
     drawNpcLabels();
+    drawDiscoveryLabels();
   }
   function objectiveTarget() {
     const q = quest(), state = questState(), z = zones[zoneId];
@@ -3534,11 +3884,10 @@
     mctx.beginPath();
     mctx.arc(player.x / WORLD.w * 240, player.y / WORLD.h * 240, 4, 0, Math.PI * 2);
     mctx.fill();
-    mctx.fillStyle = 'rgba(255,225,150,.55)';
-    for (const lm of LANDMARKS[zoneId] || []) {
-      mctx.beginPath();
-      mctx.arc(lm[0] / WORLD.w * 240, lm[1] / WORLD.h * 240, 2, 0, Math.PI * 2);
-      mctx.fill();
+    for (let i = 0; i < (LANDMARKS[zoneId] || []).length; i++) {
+      const lm = LANDMARKS[zoneId][i], known = player.discoveries.includes(`${zoneId}:${i}`);
+      mctx.fillStyle = known ? 'rgba(255,225,150,.82)' : 'rgba(255,225,150,.18)';
+      mctx.beginPath(); mctx.arc(lm[0] / WORLD.w * 240, lm[1] / WORLD.h * 240, known ? 2.5 : 1.4, 0, Math.PI * 2); mctx.fill();
     }
   }
   function updatePerformanceMonitor(nowTime, renderMs, frameTimeMs) {
@@ -3635,6 +3984,7 @@
     started = true;
     updateNetworkStatus();
     applyControlLayout();
+    applyInterfaceSettings();
     const tracker = $('questTracker');
     tracker.classList.toggle('collapsed', settings.questCollapsed);
     $('questToggle').setAttribute('aria-expanded', String(!settings.questCollapsed));
@@ -3732,12 +4082,24 @@
       openShop,
       buyItem,
       openEquipment,
+      openCustomization,
+      openCamp,
+      acceptContract,
+      claimContract,
+      progressContract,
+      checkDiscoveries,
+      installRune,
+      setCosmetic,
       equipItem,
       switchGear,
       recomputeDerivedStats,
       selectSupply,
       useSupply,
+      supplyUseReason,
       brewSupply,
+      setUiSetting,
+      setVolume,
+      applyInterfaceSettings,
       applyPreset,
       suspend,
       resume,
@@ -3755,8 +4117,11 @@
       statSources,
       objectiveTarget,
       zones,
+      CONTRACTS,
+      RUNES,
+      COSMETICS,
       player,
-      setZone: id => { if (Object.hasOwn(zones, id)) { zoneId = id; resetZone(); updateUI(); return true; } return false; },
+      setZone: id => { if (Object.hasOwn(zones, id)) { zoneId = id; audio.setZone(zoneId); resetZone(); updateUI(); return true; } return false; },
       setFps: f => {
         settings.fps = FPS.includes(Number(f)) ? Number(f) : 60;
         resetFrameLimiter();

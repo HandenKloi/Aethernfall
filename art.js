@@ -1,6 +1,6 @@
 "use strict";
 
-/* Aethernfall 3.8.3 — shared raster atlases; all rectangles use source pixels. */
+/* Aethernfall 4.0.0 — shared raster atlases; all rectangles use source pixels. */
 (() => {
   'use strict';
 
@@ -114,6 +114,21 @@
           if (level >= 2 && n % 9 === 0 && name === 'grass') {
             c.fillStyle = '#d7cd95';
             c.fillRect(x, y - 4, 2, 2);
+          }
+          if (level >= 4 && n % 19 === 0) {
+            c.save();
+            c.globalAlpha = .55;
+            if (name === 'grass') {
+              c.fillStyle = n % 38 ? '#d8b6db' : '#f1d278';
+              c.beginPath(); c.arc(x + 4, y - 8, 1.7, 0, Math.PI * 2); c.fill();
+            } else if (name === 'stone') {
+              c.strokeStyle = '#4a4b45'; c.lineWidth = 1; c.beginPath(); c.moveTo(x - 7, y + 4); c.lineTo(x - 2, y - 2); c.lineTo(x + 5, y + 1); c.stroke();
+            } else if (name === 'dirt') {
+              c.fillStyle = '#6f5742'; c.fillRect(x - 1, y - 1, 2, 2);
+            } else if (name === 'water') {
+              c.fillStyle = '#d6fff3'; c.fillRect(x - 5, y - 2, 10, 1);
+            }
+            c.restore();
           }
           if (level >= 4 && n % 7 === 0) {
             c.save();

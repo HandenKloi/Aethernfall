@@ -947,3 +947,31 @@ body.left-handed .actions { right:auto; left:calc(var(--left) + 12px); }
   #qualitySeg { gap:5px; }
   #qualitySeg button { font-size:10px; padding-inline:2px; }
 }
+
+/* 4.0.0 accessibility, control comfort and settings UI. */
+:root { --world-brightness:1; }
+#game { filter:brightness(var(--world-brightness)); }
+body.ui-large .modalBody, body.ui-large #questTracker, body.ui-large .zonePanel { font-size:1.15em; }
+body.minimap-large #minimapFrame { transform:scale(1.18); transform-origin:top right; }
+body[data-control-size="compact"] .joystick { transform:scale(.88); transform-origin:bottom left; }
+body[data-control-size="compact"] .actions { transform:scale(.88); transform-origin:bottom right; }
+body[data-control-size="large"] .joystick { transform:scale(1.10); transform-origin:bottom left; }
+body[data-control-size="large"] .actions { transform:scale(1.10); transform-origin:bottom right; }
+body.left-handed[data-control-size="compact"] .joystick, body.left-handed[data-control-size="large"] .joystick { transform-origin:bottom right; }
+body.left-handed[data-control-size="compact"] .actions, body.left-handed[data-control-size="large"] .actions { transform-origin:bottom left; }
+.rangeRow { display:grid; grid-template-columns:minmax(120px,1fr) minmax(120px,2fr) 48px; align-items:center; gap:10px; margin:10px 0; font-size:13px; color:#d9e3dc; }
+.rangeRow input[type="range"] { width:100%; accent-color:#9fcbb3; min-height:34px; touch-action:pan-x; }
+.rangeRow b { text-align:right; color:#f0d58e; font-variant-numeric:tabular-nums; }
+.cardActions { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.btn.secondary { background:rgba(74,102,91,.45); border-color:rgba(188,219,204,.20); }
+.runeChoice.active, .cosmeticSeg .active { outline:1px solid #e0c77c; box-shadow:inset 0 0 0 1px #e0c77c55; }
+.runeChoice { position:relative; overflow:hidden; isolation:isolate; }
+.runeChoice::before { content:""; position:absolute; inset:0; z-index:-1; background:url("./assets/textures/rune.png") center/cover repeat; opacity:.11; pointer-events:none; }
+.runeChoice.active::before { opacity:.20; }
+@media (max-width:520px) {
+  .rangeRow { grid-template-columns:1fr 48px; }
+  .rangeRow span { grid-column:1/-1; }
+  .cardActions { grid-template-columns:1fr; }
+  body[data-control-size="large"] .actions { transform:scale(1.04); }
+  body[data-control-size="large"] .joystick { transform:scale(1.04); }
+}
