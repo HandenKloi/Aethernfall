@@ -3,7 +3,7 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '4.0.0';
+  const BUILD_VERSION = '4.0.1';
   const SAVE_SCHEMA = 4;
   const BASE_STATS = Object.freeze({ startLevel: 6, damage: 32, maxHp: 240, maxStamina: 100, speed: 205, damagePerLevel: 3, hpPerLevel: 18 });
   const MAX_UPGRADE_RANK = 5;
@@ -1331,9 +1331,18 @@
     bindTap($('customizationEntry'), openCustomization);
     bindTap($('equipmentBack'), openInventory);
   }
+  const hapticsAvailable = typeof navigator.vibrate === 'function';
   function feedback(name, vibration = 0) {
     audio.sfx(name);
-    if (settings.haptics && vibration && navigator.vibrate) navigator.vibrate(vibration);
+    if (!settings.haptics || !vibration || !hapticsAvailable) return false;
+    try { return navigator.vibrate(vibration) !== false; } catch { return false; }
+  }
+  function audioStatusText() {
+    const snap = audio.snapshot();
+    if (!snap.available) return 'Аудио: Web Audio недоступно в этом браузере';
+    if (snap.unlocked && snap.contextState === 'running') return 'Аудио: активно';
+    if (snap.contextState === 'interrupted') return 'Аудио: прервано системой · нажмите «Проверить звук»';
+    return 'Аудио: ожидает пользовательского касания';
   }
   function syncAudioSettings() {
     audio.configure({ master: settings.masterVolume, music: settings.musicVolume, ambient: settings.ambientVolume, sfx: settings.sfxVolume, musicEnabled: settings.musicEnabled });
@@ -2512,10 +2521,11 @@
     openModal('Настройки · v' + BUILD_VERSION, `<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div>
       <div class="sectionTitle">ЗВУК</div>
       <button class="btn" id="musicToggle">${settings.musicEnabled ? 'Музыка: включена' : 'Музыка: выключена'}</button>
+      <button class="btn secondary" id="audioTestBtn">Проверить звук</button><p class="note" id="audioStatus">${audioStatusText()}</p>
       ${volumeRow('masterVolume','Общая громкость',settings.masterVolume)}${volumeRow('musicVolume','Музыка',settings.musicVolume)}${volumeRow('ambientVolume','Окружение',settings.ambientVolume)}${volumeRow('sfxVolume','Эффекты',settings.sfxVolume)}
       <div class="sectionTitle">УПРАВЛЕНИЕ</div><div class="seg" id="controlsSeg"><button id="control-right" class="${settings.controls === 'right' ? 'active' : ''}">Правша</button><button id="control-left" class="${settings.controls === 'left' ? 'active' : ''}">Левша</button></div>
       <p class="note">Расположение зон управления можно зеркалить. Размер меняется без изменения игровой физики.</p><div class="seg"><button id="controlSize-compact" class="${settings.controlSize === 'compact' ? 'active' : ''}">Компактно</button><button id="controlSize-normal" class="${settings.controlSize === 'normal' ? 'active' : ''}">Обычно</button><button id="controlSize-large" class="${settings.controlSize === 'large' ? 'active' : ''}">Крупно</button></div>
-      <div class="sectionTitle">ИНТЕРФЕЙС</div><div class="seg"><button id="bright-85" class="${settings.brightness === 85 ? 'active' : ''}">Темнее</button><button id="bright-100" class="${settings.brightness === 100 ? 'active' : ''}">Обычно</button><button id="bright-115" class="${settings.brightness === 115 ? 'active' : ''}">Ярче</button></div><div class="seg"><button id="ui-normal" class="${settings.uiScale === 'normal' ? 'active' : ''}">Текст 100%</button><button id="ui-large" class="${settings.uiScale === 'large' ? 'active' : ''}">Текст 115%</button></div><div class="seg"><button id="map-normal" class="${settings.minimapSize === 'normal' ? 'active' : ''}">Карта обычная</button><button id="map-large" class="${settings.minimapSize === 'large' ? 'active' : ''}">Карта крупная</button></div><button class="btn" id="numbersToggle">Цифры урона: ${settings.combatNumbers ? 'включены' : 'выключены'}</button><button class="btn" id="hapticsToggle">Виброотклик: ${settings.haptics ? 'включён' : 'выключен'}</button>
+      <div class="sectionTitle">ИНТЕРФЕЙС</div><div class="seg"><button id="bright-85" class="${settings.brightness === 85 ? 'active' : ''}">Темнее</button><button id="bright-100" class="${settings.brightness === 100 ? 'active' : ''}">Обычно</button><button id="bright-115" class="${settings.brightness === 115 ? 'active' : ''}">Ярче</button></div><div class="seg"><button id="ui-normal" class="${settings.uiScale === 'normal' ? 'active' : ''}">Текст 100%</button><button id="ui-large" class="${settings.uiScale === 'large' ? 'active' : ''}">Текст 115%</button></div><div class="seg"><button id="map-normal" class="${settings.minimapSize === 'normal' ? 'active' : ''}">Карта обычная</button><button id="map-large" class="${settings.minimapSize === 'large' ? 'active' : ''}">Карта крупная</button></div><button class="btn" id="numbersToggle">Цифры урона: ${settings.combatNumbers ? 'включены' : 'выключены'}</button><button class="btn" id="hapticsToggle" ${hapticsAvailable ? '' : 'disabled'}>${hapticsAvailable ? `Виброотклик: ${settings.haptics ? 'включён' : 'выключен'}` : 'Виброотклик: недоступен в браузере'}</button>${hapticsAvailable ? '' : '<p class="note">Safari/iOS не предоставляет веб-страницам Vibration API. На поддерживаемых Android-браузерах виброотклик работает.</p>'}
       <div class="sectionTitle">КАЧЕСТВО ГРАФИКИ</div><div class="settingRow"><div class="seg" id="qualitySeg">${['low', 'medium', 'high', 'very-high', 'ultra'].map(q => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}">${q === 'very-high' ? 'Very High' : q === 'ultra' ? 'Ultra' : q[0].toUpperCase() + q.slice(1)}</button>`).join('')}</div><div class="note">Ultra повышает детализацию, освещение и эффекты; яркость мира настраивается отдельно выше.</div></div>
       <div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="settingRow"><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div></div>
       <div class="sectionTitle">МОНИТОР ПРОИЗВОДИТЕЛЬНОСТИ</div><button class="btn" id="perfBtn">${perfMonitorEnabled ? 'Выключить frame-time monitor' : 'Включить frame-time monitor'}</button>${devicePanel()}<div class="sectionTitle">СОХРАНЕНИЕ</div>${saveStatusText() ? `<p class="saveWarningText">${escapeHTML(saveStatusText())}</p>` : ''}<button class="btn" id="saveBtn">Сохранить прогресс</button>`);
@@ -2526,8 +2536,15 @@
     for (const b of [85,100,115]) bindTap($('bright-' + b), () => setUiSetting('brightness', b));
     bindTap($('ui-normal'), () => setUiSetting('uiScale', 'normal')); bindTap($('ui-large'), () => setUiSetting('uiScale', 'large'));
     bindTap($('map-normal'), () => setUiSetting('minimapSize', 'normal')); bindTap($('map-large'), () => setUiSetting('minimapSize', 'large'));
-    bindTap($('numbersToggle'), () => setUiSetting('combatNumbers', !settings.combatNumbers)); bindTap($('hapticsToggle'), () => setUiSetting('haptics', !settings.haptics));
+    bindTap($('numbersToggle'), () => setUiSetting('combatNumbers', !settings.combatNumbers));
+    if (hapticsAvailable) bindTap($('hapticsToggle'), () => setUiSetting('haptics', !settings.haptics));
     bindTap($('musicToggle'), () => { audio.unlock(); setUiSetting('musicEnabled', !settings.musicEnabled); });
+    bindTap($('audioTestBtn'), async () => {
+      const ok = await audio.unlock();
+      syncAudioSettings();
+      if (ok) { audio.sfx('test'); setText($('audioStatus'), 'Аудио: активно'); toast('Тестовый звук воспроизведён'); }
+      else { setText($('audioStatus'), audioStatusText()); toast('Браузер не разблокировал аудио. Коснитесь кнопки ещё раз.'); }
+    });
     for (const [id,key] of [['masterVolume','masterVolume'],['musicVolume','musicVolume'],['ambientVolume','ambientVolume'],['sfxVolume','sfxVolume']]) {
       const input = $(id); if (!input) continue;
       input.addEventListener('input', () => { const value = Math.round(Number(input.value) || 0); setText($(id + 'Value'), value + '%'); setVolume(key, value); }, { passive: true });
@@ -2537,9 +2554,20 @@
     bindTap($('perfBtn'), () => { perfMonitorEnabled = !perfMonitorEnabled; storage.setItem('aef_perf_monitor', perfMonitorEnabled ? '1' : '0'); refreshPerformanceMonitorVisibility(); openMenu(); });
     bindTap($('economyBtn'), () => applyPreset('low', 30)); bindTap($('balancedBtn'), () => applyPreset('medium', 60));
   }
-  const unlockAudio = () => { audio.unlock().then?.(() => syncAudioSettings()); };
-  document.addEventListener('pointerdown', unlockAudio, { passive: true, once: true });
-  document.addEventListener('keydown', unlockAudio, { passive: true, once: true });
+  let audioGestureUnlocked = false;
+  const AUDIO_UNLOCK_EVENTS = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'];
+  const unlockAudio = () => {
+    if (audioGestureUnlocked) return;
+    Promise.resolve(audio.unlock()).then(ok => {
+      if (!ok) return;
+      audioGestureUnlocked = true;
+      syncAudioSettings();
+      for (const type of AUDIO_UNLOCK_EVENTS) document.removeEventListener(type, unlockAudio, true);
+    });
+  };
+  // Capture phase is intentional: gameplay buttons stop propagation in bindTap().
+  // Without capture, the global audio unlock never saw the user's tap.
+  for (const type of AUDIO_UNLOCK_EVENTS) document.addEventListener(type, unlockAudio, { passive: true, capture: true });
   function bindTap(el, fn) {
     if (!el) return;
     const action = el.classList.contains('action');
