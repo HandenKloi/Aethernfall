@@ -3,7 +3,7 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '4.0.5';
+  const BUILD_VERSION = '4.0.6';
   const SAVE_SCHEMA = 4;
   const BASE_STATS = Object.freeze({ startLevel: 6, damage: 32, maxHp: 240, maxStamina: 100, speed: 205, damagePerLevel: 3, hpPerLevel: 18 });
   const MAX_UPGRADE_RANK = 5;
@@ -1653,6 +1653,14 @@
       speed: 108,
       damage: 9
     });
+    if (type === 'marksman') Object.assign(e, {
+      r: 20,
+      hp: 110,
+      maxHp: 110,
+      speed: 86,
+      retreatSpeed: 88,
+      damage: 14
+    });
     if (type === 'guardian') Object.assign(e, {
       r: 40,
       hp: 620,
@@ -1746,6 +1754,11 @@
     actor.x = clamp(actor.x, edge, WORLD.w - edge);
     actor.y = clamp(actor.y, edge, WORLD.h - edge);
   }
+  const ENEMY_SPAWN_TYPES = Object.freeze({
+    mistwood: Object.freeze(['boar','raider','raider','raider','boar','raider','raider','raider','boar','raider','raider','raider','boar','raider','raider','raider','boar']),
+    stonevale: Object.freeze(['boar','raider','raider','marksman','boar','raider','raider','marksman','boar','raider','raider','marksman','boar','raider','raider','raider','boar']),
+    ashfield: Object.freeze(['boar','raider','marksman','raider','boar','marksman','raider','marksman','boar','raider','marksman','raider','boar','raider','raider','marksman','boar'])
+  });
   function resetZone() {
     resetImpactFeedback();
     physics?.set([]);
@@ -1776,12 +1789,11 @@
     player.x = z.camp.x;
     player.y = z.camp.y;
     player.dir = 0;
-    for (let i = 0; i < 58; i++) {
+    const enemySpawnTypes = ENEMY_SPAWN_TYPES[zoneId] || ENEMY_SPAWN_TYPES.mistwood;
+    for (let i = 0; i < enemySpawnTypes.length; i++) {
       const x = 150 + rng(i + 300 + zoneId.length) * (WORLD.w - 300),
         y = 150 + rng(i + 620 + zoneId.length * 7) * (WORLD.h - 300);
-      let type = i % 4 ? 'raider' : 'boar';
-      if (zoneId === 'ashfield' && i % 5 === 0) type = 'boar';
-      addEnemy(type, x, y);
+      addEnemy(enemySpawnTypes[i], x, y);
     }
     for (let i = 0; i < 32; i++) {
       const x = 150 + rng(i + 1200 + zoneId.length) * (WORLD.w - 300),
@@ -2003,6 +2015,7 @@
       for (let i = 0; i < action.count; i++) {
         const aa = a + (i - 1) * action.spread;
         projectiles.push({
+          owner: 'player',
           x: player.x + Math.cos(a) * 24,
           y: player.y + Math.sin(a) * 24,
           vx: Math.cos(aa) * action.speed,
@@ -2848,7 +2861,25 @@
     checkDiscoveries();
     flushImpactFeedback();
   }
+  function enemyDetectionRange(e) {
+    return e?.type === 'marksman' ? 420 : 220;
+  }
+  function enemyActivationHomeRange(e) {
+    return e?.type === 'marksman' ? 420 : 300;
+  }
+  function enemyDisengageDistance(e) {
+    return e?.type === 'marksman' ? 520 : 440;
+  }
+  function marksmanDistanceIntent(distance, phase = '') {
+    if (!Number.isFinite(distance)) return 'approach';
+    if (distance < 210) return 'retreat';
+    if (distance < 280) return phase === 'recovery' ? 'retreat' : 'near';
+    if (distance <= 360) return 'hold';
+    if (distance <= 460) return phase === 'recovery' ? 'approach' : 'far';
+    return 'approach';
+  }
   function enemyAttackTiming(e) {
+    if (e.type === 'marksman') return { windup: .55, recovery: 1.15 };
     const windup = e.type === 'guardian' ? .52 : e.type === 'boar' ? .30 : .35;
     const oldCycle = e.type === 'guardian' ? 1.05 : 1.35;
     return { windup, recovery: Math.max(.35, oldCycle - windup) };
@@ -2883,22 +2914,49 @@
     if (e.attackPhase === 'recovery') return { phase: 'recovery', progress: enemyRecoveryProgress(e) };
     return { phase: 'none' };
   }
-  function resolveEnemyImpact(e) {
-    const range = enemyAttackRange(e, player.r);
-    if (e.hp <= 0 || e.aiState !== 'chase' || dist(player, e) > range || physics && !physics.clearLine(e.x, e.y, player.x, player.y, 2)) return false;
-    const impact = combatEngine.resolveIncomingDamage({ damage: e.damage, blocking: player.blocking, buckler: player.loadout.offhand === 'buckler', dodging: time < player.dodgeUntil });
-    if (!impact.valid) return false;
+  function moveMarksman(e, intent, dt) {
+    if (intent === 'hold') return;
+    const a = Math.atan2(player.y - e.y, player.x - e.x);
+    if (intent === 'retreat') {
+      const speed = Number.isFinite(e.retreatSpeed) ? e.retreatSpeed : 88;
+      moveActor(e, -Math.cos(a) * speed * dt, -Math.sin(a) * speed * dt);
+      return;
+    }
+    if (physics) physics.chase(e, player, e.speed * dt, time);
+    else moveActor(e, Math.cos(a) * e.speed * dt, Math.sin(a) * e.speed * dt);
+  }
+  function releaseMarksmanBolt(e) {
+    const dx = player.x - e.x, dy = player.y - e.y, len = Math.hypot(dx, dy);
+    if (!Number.isFinite(len) || len <= 0) return false;
+    const nx = dx / len, ny = dy / len;
+    projectiles.push({
+      owner: 'enemy',
+      x: e.x + nx * (e.r + 8),
+      y: e.y + ny * (e.r + 8),
+      vx: nx * 280,
+      vy: ny * 280,
+      damage: e.damage,
+      life: 2,
+      r: 5,
+      collisionPad: 7,
+      color: '#e5b86a'
+    });
+    return true;
+  }
+  function applyIncomingCombatImpact({ damage, sourceX, sourceY }) {
+    const impact = combatEngine.resolveIncomingDamage({ damage, blocking: player.blocking, buckler: player.loadout.offhand === 'buckler', dodging: time < player.dodgeUntil });
+    if (!impact.valid) return impact;
     if (impact.avoided) {
       burst(player.x, player.y, '#91c6cc', 5, 105);
-      queueImpactFeedback('evade', e.x, e.y, player.x, player.y);
-      return false;
+      queueImpactFeedback('evade', sourceX, sourceY, player.x, player.y);
+      return impact;
     }
     const dmg = impact.damage;
     player.hp = Math.max(0, player.hp - dmg);
     animate(player, impact.blocked ? 'block' : 'hit', .24);
     addFloatingText('−' + dmg, player.x, player.y - 52, '#ff9690');
     burst(player.x, player.y, impact.blocked ? '#e8d08a' : '#e06d68', 7, 80);
-    queueImpactFeedback(impact.blocked ? 'block' : 'playerHit', e.x, e.y, player.x, player.y);
+    queueImpactFeedback(impact.blocked ? 'block' : 'playerHit', sourceX, sourceY, player.x, player.y);
     if (player.hp <= 0) {
       animate(player, 'death', .75);
       flushImpactFeedback();
@@ -2914,7 +2972,13 @@
       toast('Вы возвращены к лагерю');
       resetImpactFeedback();
     }
-    return true;
+    return impact;
+  }
+  function resolveEnemyImpact(e) {
+    const range = enemyAttackRange(e, player.r);
+    if (e.hp <= 0 || e.aiState !== 'chase' || dist(player, e) > range || physics && !physics.clearLine(e.x, e.y, player.x, player.y, 2)) return false;
+    const impact = applyIncomingCombatImpact({ damage: e.damage, sourceX: e.x, sourceY: e.y });
+    return !!impact?.valid && !impact.avoided;
   }
   function updateEnemies(dt) {
     for (const e of entities) {
@@ -2930,7 +2994,7 @@
       }
       const homeDistance = Math.hypot(e.x - e.homeX, e.y - e.homeY);
       const playerFromHome = Math.hypot(player.x - e.homeX, player.y - e.homeY);
-      if (e.aiState === 'chase' && (d > 440 || homeDistance > 420 || playerFromHome > 480)) {
+      if (e.aiState === 'chase' && (d > enemyDisengageDistance(e) || homeDistance > 420 || playerFromHome > 480)) {
         e.aiState = 'return';
         e.attackPhase = '';
       }
@@ -2942,8 +3006,53 @@
         continue;
       }
       if (e.aiState === 'idle' && e.hp === e.maxHp && e.level !== clamp(Math.floor(Number(player.level) || 1), 1, 100)) scaleEnemy(e);
-      if (e.aiState === 'idle' && d < 220 && playerFromHome < 300 && (!physics || physics.clearLine(e.x, e.y, player.x, player.y, 2))) e.aiState = 'chase';
+      if (e.aiState === 'idle' && d < enemyDetectionRange(e) && playerFromHome < enemyActivationHomeRange(e) && (!physics || physics.clearLine(e.x, e.y, player.x, player.y, 2))) e.aiState = 'chase';
       if (e.aiState !== 'chase') continue;
+
+      if (e.type === 'marksman') {
+        const currentDistance = dist(player, e);
+        const hasLos = !physics || physics.clearLine(e.x, e.y, player.x, player.y, 2);
+        if (e.attackPhase === 'windup') {
+          if (!hasLos || currentDistance > 460) {
+            e.attackPhase = '';
+            e.attackStartedAt = 0;
+            e.attackImpactAt = 0;
+            e.attackWindup = 0;
+          } else if (time >= e.attackImpactAt) {
+            releaseMarksmanBolt(e);
+            const timing = enemyAttackTiming(e);
+            e.attackPhase = 'recovery';
+            e.cd = timing.recovery;
+          }
+          continue;
+        }
+        if (e.attackPhase === 'recovery') {
+          if (e.cd <= 0) e.attackPhase = '';
+          else {
+            moveMarksman(e, marksmanDistanceIntent(currentDistance, 'recovery'), dt);
+            continue;
+          }
+        }
+        if (!hasLos) {
+          moveMarksman(e, 'approach', dt);
+          continue;
+        }
+        const intent = marksmanDistanceIntent(currentDistance, '');
+        if (intent === 'retreat' || intent === 'approach') {
+          moveMarksman(e, intent, dt);
+          continue;
+        }
+        if (e.cd <= 0 && currentDistance >= 210 && currentDistance <= 460) {
+          const timing = enemyAttackTiming(e);
+          e.attackPhase = 'windup';
+          e.attackStartedAt = time;
+          e.attackImpactAt = time + timing.windup;
+          e.attackWindup = timing.windup;
+          animate(e, 'attack', timing.windup + .12);
+        }
+        continue;
+      }
+
       if (e.attackPhase === 'windup') {
         if (time >= e.attackImpactAt) {
           resolveEnemyImpact(e);
@@ -2981,11 +3090,19 @@
       p.y += p.vy * dt;
       p.life -= dt;
       let hit = false;
-      for (const e of entities) {
-        if (e.hp > 0 && e.kind === 'enemy' && dist(p, e) < e.r + 7) {
-          hitTarget(e, p.damage);
+      if (p.owner === 'enemy') {
+        const collisionPad = Number.isFinite(p.collisionPad) ? p.collisionPad : 7;
+        if (dist(p, player) < player.r + collisionPad) {
+          applyIncomingCombatImpact({ damage: p.damage, sourceX: p.x, sourceY: p.y });
           hit = true;
-          break;
+        }
+      } else {
+        for (const e of entities) {
+          if (e.hp > 0 && e.kind === 'enemy' && dist(p, e) < e.r + 7) {
+            hitTarget(e, p.damage);
+            hit = true;
+            break;
+          }
         }
       }
       if (hit || p.life <= 0) projectiles.splice(i, 1);
@@ -3431,7 +3548,8 @@
     ctx.restore();
   }
   function drawEntity(e) {
-    if (art?.has(e.type)) {
+    const artType = e.type === 'marksman' ? 'raider' : e.type;
+    if (art?.has(artType)) {
       const p = screenPos(e.x, e.y),
         height = e.type === 'guardian' ? 122 : e.type === 'boar' ? 54 : 80;
       groundShadow(p.x, p.y + 14, e.r * 1.15);
@@ -3441,13 +3559,27 @@
       const motion = motions.get(e),
         progress = motion ? clamp((time - motion.start) / motion.duration, 0, 1) : 1;
       const death = e.hp <= 0 ? clamp(1 - (e._corpseUntil - time) / .75, 0, 1) : 0;
-      art.actor(ctx, e.type, p.x, p.y + 17 + bob, height, time + e.seed * 6, e.hp > 0 && dist(player, e) > e.r + player.r + 8 ? 1 : 0, progress < 1 ? motion.action : 'idle', progress, player.x < e.x, death);
+      art.actor(ctx, artType, p.x, p.y + 17 + bob, height, time + e.seed * 6, e.hp > 0 && dist(player, e) > e.r + player.r + 8 ? 1 : 0, progress < 1 ? motion.action : 'idle', progress, player.x < e.x, death);
       ctx.restore();
+      if (e.type === 'marksman' && e.hp > 0) {
+        ctx.save();
+        ctx.strokeStyle = '#e5b86a';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(p.x + 17, p.y - 18, 9, -1.15, 1.15);
+        ctx.stroke();
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(p.x - 13, p.y - 35);
+        ctx.lineTo(p.x - 7, p.y - 8);
+        ctx.stroke();
+        ctx.restore();
+      }
       if (e.hp > 0) {
         const width = e.r * 2.1;
         ctx.fillStyle = '#111b19';
         ctx.fillRect(p.x - width / 2, p.y - height + 10, width, 5);
-        ctx.fillStyle = e.type === 'guardian' ? '#d5b077' : '#dc7772';
+        ctx.fillStyle = e.type === 'guardian' ? '#d5b077' : e.type === 'marksman' ? '#d5aa68' : '#dc7772';
         ctx.fillRect(p.x - width / 2, p.y - height + 10, width * clamp(e.hp / e.maxHp, 0, 1), 5);
       }
       return;
@@ -3573,11 +3705,20 @@
       const s = screenPos(p.x, p.y);
       ctx.save();
       ctx.translate(s.x, s.y);
+      if (p.owner === 'enemy') {
+        ctx.rotate(Math.atan2(p.vy, p.vx));
+        ctx.strokeStyle = p.color || '#e5b86a';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-10, 0);
+        ctx.lineTo(8, 0);
+        ctx.stroke();
+      }
       ctx.fillStyle = p.color;
       ctx.shadowColor = p.color;
       ctx.shadowBlur = profile.detail >= 2 ? 6 : 0;
       ctx.beginPath();
-      ctx.arc(0, 0, 5, 0, Math.PI * 2);
+      ctx.arc(0, 0, Number.isFinite(p.r) ? p.r : 5, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
@@ -3928,9 +4069,33 @@
       if (e.kind !== 'enemy' || e.hp <= 0) continue;
       const s = screenPos(e.x, e.y), start = -Math.PI / 2;
       if (e.attackPhase === 'windup') {
-        const dangerRadius = enemyAttackRange(e, player.r),
-          progress = phaseProgress(time - Number(e.attackStartedAt), Number(e.attackWindup)),
+        const progress = phaseProgress(time - Number(e.attackStartedAt), Number(e.attackWindup)),
           end = start + Math.PI * 2 * progress;
+        if (e.type === 'marksman') {
+          const target = screenPos(player.x, player.y), sourceRadius = e.r + 5, timingRadius = e.r + 10;
+          ctx.save();
+          ctx.globalAlpha = .72;
+          ctx.strokeStyle = 'rgba(229,184,106,.72)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(s.x, s.y);
+          ctx.lineTo(target.x, target.y);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = 'rgba(229,184,106,.88)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, sourceRadius, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.strokeStyle = 'rgba(255,218,143,.98)';
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, timingRadius, start, end);
+          ctx.stroke();
+          ctx.restore();
+          continue;
+        }
+        const dangerRadius = enemyAttackRange(e, player.r);
         ctx.save();
         if (profile.detail > 0) {
           ctx.globalAlpha = .07 + progress * .07;
@@ -4301,6 +4466,8 @@
       resume,
       resetFrameLimiter,
       drawWorld,
+      drawEntity,
+      drawProjectiles,
       drawCombatTelegraphs,
       drawMap,
       updateUI,
@@ -4311,6 +4478,10 @@
       combat: { engineActive: Boolean(combatEngine) },
       actionPresentation: (action, state, now, pressed = false) => getActionPresentation(action, state, now, pressed),
       enemyAttackRange: (enemy, playerRadius) => enemyAttackRange(enemy, playerRadius),
+      enemyDetectionRange: enemy => enemyDetectionRange(enemy),
+      enemyActivationHomeRange: enemy => enemyActivationHomeRange(enemy),
+      enemyDisengageDistance: enemy => enemyDisengageDistance(enemy),
+      marksmanDistanceIntent: (distance, phase = '') => marksmanDistanceIntent(distance, phase),
       enemyAttackTiming: enemy => enemyAttackTiming(enemy),
       enemyAttackPresentation: (enemy, now, playerRadius) => enemyAttackPresentation(enemy, now, playerRadius),
       renderFrame,
