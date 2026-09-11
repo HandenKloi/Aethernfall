@@ -3,7 +3,7 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '3.7.1';
+  const BUILD_VERSION = '3.8.1';
   const SAVE_SCHEMA = 3;
   const BASE_STATS = Object.freeze({ startLevel: 6, damage: 32, maxHp: 240, maxStamina: 100, speed: 205, damagePerLevel: 3, hpPerLevel: 18 });
   const MAX_UPGRADE_RANK = 5;
@@ -99,6 +99,55 @@
     mctx = mcanvas.getContext('2d', {
       alpha: false
     });
+  // Auxiliary low-resolution lighting target. It stays local/offline and is
+  // deliberately cheaper than rendering a second full-resolution scene.
+  const lightCanvas = document.createElement('canvas'),
+    lightCtx = lightCanvas.getContext('2d', {
+      alpha: true
+    });
+
+  // Small pre-rendered radial masks remove repeated createRadialGradient() work
+  // from the Ultra render loop. They are resolution-independent because drawImage
+  // scales them to the requested world-space radius.
+  function makeRadialMask(stops, size = 128) {
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const cctx = c.getContext('2d', { alpha: true });
+    if (!cctx) return null;
+    const r = size / 2,
+      g = cctx.createRadialGradient(r, r, 0, r, r, r);
+    for (const [offset, color] of stops) g.addColorStop(offset, color);
+    cctx.fillStyle = g;
+    cctx.fillRect(0, 0, size, size);
+    return c;
+  }
+  const FX_CACHE = {
+    light: makeRadialMask([
+      [0, 'rgba(0,0,0,1)'],
+      [.48, 'rgba(0,0,0,.62)'],
+      [1, 'rgba(0,0,0,0)']
+    ]),
+    glowPortal: makeRadialMask([
+      [0, 'rgba(126,241,225,1)'],
+      [.35, 'rgba(126,241,225,.45)'],
+      [1, 'rgba(126,241,225,0)']
+    ]),
+    glowPortalAsh: makeRadialMask([
+      [0, 'rgba(255,142,92,1)'],
+      [.35, 'rgba(255,142,92,.45)'],
+      [1, 'rgba(255,142,92,0)']
+    ]),
+    glowCamp: makeRadialMask([
+      [0, 'rgba(255,178,82,1)'],
+      [.35, 'rgba(255,178,82,.45)'],
+      [1, 'rgba(255,178,82,0)']
+    ]),
+    glowProjectile: makeRadialMask([
+      [0, 'rgba(156,220,255,1)'],
+      [.35, 'rgba(156,220,255,.45)'],
+      [1, 'rgba(156,220,255,0)']
+    ])
+  };
   const ui = {
     hp: $('hpFill'),
     stamina: $('staminaFill'),
@@ -165,28 +214,61 @@
       textureScale: .44,
       shadow: .06,
       fog: .07,
-      detail: 0
+      detail: 0,
+      dprCap: 2,
+      pixelBudget: 1500000,
+      lighting: 0,
+      bloom: 0,
+      softShadows: false
     },
     medium: {
       particles: 20,
       textureScale: .60,
       shadow: .16,
       fog: .12,
-      detail: 1
+      detail: 1,
+      dprCap: 2,
+      pixelBudget: 1500000,
+      lighting: 0,
+      bloom: 0,
+      softShadows: false
     },
     high: {
       particles: 30,
       textureScale: .76,
       shadow: .26,
       fog: .17,
-      detail: 2
+      detail: 2,
+      dprCap: 2,
+      pixelBudget: 1500000,
+      lighting: 0,
+      bloom: 0,
+      softShadows: false
     },
     'very-high': {
       particles: 42,
       textureScale: .88,
       shadow: .36,
       fog: .21,
-      detail: 3
+      detail: 3,
+      dprCap: 2,
+      pixelBudget: 1500000,
+      lighting: 0,
+      bloom: 0,
+      softShadows: false
+    },
+    ultra: {
+      particles: 52,
+      textureScale: 1,
+      shadow: .46,
+      fog: .23,
+      detail: 4,
+      dprCap: 2.5,
+      pixelBudget: 2400000,
+      lighting: .12,
+      lightmapScale: .5,
+      bloom: .28,
+      softShadows: true
     }
   };
   const FPS = [30, 40, 45, 60];
@@ -524,12 +606,17 @@
     player.blocking = false;
     document.querySelectorAll('.pressed').forEach(el => el.classList.remove('pressed'));
   }
+  let viewportResizeRaf = 0;
   function suspend() {
     resetInput();
     if (suspended) return;
     suspended = true;
     cancelAnimationFrame(rafId);
     rafId = 0;
+    if (viewportResizeRaf) {
+      cancelAnimationFrame(viewportResizeRaf);
+      viewportResizeRaf = 0;
+    }
     save();
   }
   function resume() {
@@ -542,8 +629,15 @@
   function resizeViewport() {
     if ((window.visualViewport?.scale || 1) > 1.01) return;
     resetInput();
-    applyGraphics();
-    resetFrameLimiter();
+    const apply = () => {
+      viewportResizeRaf = 0;
+      applyGraphics();
+      resetFrameLimiter();
+    };
+    // Window and VisualViewport often emit resize together. Coalesce them into
+    // one graphics resize per animation frame without the visible lag of a long debounce.
+    if (globalThis.__AETHER_TEST__) return apply();
+    if (!viewportResizeRaf) viewportResizeRaf = requestAnimationFrame(apply);
   }
   addEventListener('resize', resizeViewport, {
     passive: true
@@ -1117,7 +1211,9 @@
     const viewportScale = window.visualViewport?.scale || 1;
     W = Math.round((window.visualViewport?.width || innerWidth) * viewportScale);
     H = Math.round((window.visualViewport?.height || innerHeight) * viewportScale);
-    DPR = Math.min(device.dpr, 2, Math.sqrt(1500000 / (W * H)));
+    const dprCap = profile.dprCap || 2,
+      pixelBudget = profile.pixelBudget || 1500000;
+    DPR = Math.min(device.dpr, dprCap, Math.sqrt(pixelBudget / Math.max(1, W * H)));
     document.documentElement.style.setProperty('--app-height', H + 'px');
     const renderWidth = Math.max(1, Math.floor(W * DPR)),
       renderHeight = Math.max(1, Math.floor(H * DPR));
@@ -1127,6 +1223,17 @@
     canvas.style.height = H + 'px';
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     ctx.imageSmoothingEnabled = true;
+    if (profile.lighting > 0 && lightCtx) {
+      const lightScale = clamp(profile.lightmapScale || .5, .25, 1),
+        lightWidth = Math.max(1, Math.floor(W * lightScale)),
+        lightHeight = Math.max(1, Math.floor(H * lightScale));
+      if (lightCanvas.width !== lightWidth) lightCanvas.width = lightWidth;
+      if (lightCanvas.height !== lightHeight) lightCanvas.height = lightHeight;
+      lightCtx.setTransform(lightScale, 0, 0, lightScale, 0, 0);
+      lightCtx.imageSmoothingEnabled = true;
+    } else if (lightCanvas.width !== 1 || lightCanvas.height !== 1) {
+      lightCanvas.width = lightCanvas.height = 1;
+    }
     patterns = {};
     for (const [k, img] of Object.entries(textureImages)) {
       if (img.complete) patterns[k] = ctx.createPattern(img, 'repeat');
@@ -1989,11 +2096,12 @@
       low: 'Низкое',
       medium: 'Среднее',
       high: 'Высокое',
-      'very-high': 'Очень высокое'
+      'very-high': 'Очень высокое',
+      ultra: 'Ультра'
     };
     return `<div class="sectionTitle">ИГРА НА УСТРОЙСТВЕ</div>
       <div class="card"><p>Текущее качество: <b>${names[settings.quality]}</b><br>
-      Лимит отрисовки: <b>${settings.fps} FPS</b><br>Разрешение игры: ${canvas.width} × ${canvas.height}</p></div>
+      Лимит отрисовки: <b>${settings.fps} FPS</b><br>DPR: <b>${DPR.toFixed(2)}</b><br>Разрешение игры: ${canvas.width} × ${canvas.height}</p></div>
       <p class="note">Если телефон нагревается или игра дёргается, включите экономию. Баланс вернёт среднее качество и 60 FPS.</p>
       <div class="devicePresets"><button class="btn" id="economyBtn">Экономия · 30 FPS</button><button class="btn" id="balancedBtn">Баланс · 60 FPS</button></div>`;
   }
@@ -2083,7 +2191,7 @@
     openMenu();
   }
   function openMenu() {
-    openModal('Настройки · v' + BUILD_VERSION, `<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><div class="sectionTitle">УПРАВЛЕНИЕ</div><div class="seg" id="controlsSeg"><button id="control-right" class="${settings.controls === 'right' ? 'active' : ''}">Правша</button><button id="control-left" class="${settings.controls === 'left' ? 'active' : ''}">Левша</button></div><p class="note">Меняет местами зоны джойстика и боевых кнопок.</p><div class="sectionTitle">КАЧЕСТВО ГРАФИКИ</div><div class="settingRow"><div class="seg" id="qualitySeg">${['low', 'medium', 'high', 'very-high'].map(q => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}">${q === 'very-high' ? 'Very High' : q[0].toUpperCase() + q.slice(1)}</button>`).join('')}</div><div class="note">Меняет материалы земли, мелкие детали, тени, оформление порталов и лимит частиц. Разрешение и препятствия не меняются.</div></div><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="settingRow"><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div></div><div class="sectionTitle">МОНИТОР ПРОИЗВОДИТЕЛЬНОСТИ</div><button class="btn" id="perfBtn">${perfMonitorEnabled ? 'Выключить frame-time monitor' : 'Включить frame-time monitor'}</button>${devicePanel()}<div class="sectionTitle">СОХРАНЕНИЕ</div>${saveStatusText() ? `<p class="saveWarningText">${escapeHTML(saveStatusText())}</p>` : ''}<button class="btn" id="saveBtn">Сохранить прогресс</button>`);
+    openModal('Настройки · v' + BUILD_VERSION, `<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><div class="sectionTitle">УПРАВЛЕНИЕ</div><div class="seg" id="controlsSeg"><button id="control-right" class="${settings.controls === 'right' ? 'active' : ''}">Правша</button><button id="control-left" class="${settings.controls === 'left' ? 'active' : ''}">Левша</button></div><p class="note">Меняет местами зоны джойстика и боевых кнопок.</p><div class="sectionTitle">КАЧЕСТВО ГРАФИКИ</div><div class="settingRow"><div class="seg" id="qualitySeg">${['low', 'medium', 'high', 'very-high', 'ultra'].map(q => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}">${q === 'very-high' ? 'Very High' : q === 'ultra' ? 'Ultra' : q[0].toUpperCase() + q.slice(1)}</button>`).join('')}</div><div class="note">Low–Very High сохраняют прежний бюджет разрешения. Ultra повышает pixel budget, детализацию материалов, мягкость теней и добавляет лёгкое локальное освещение/свечение без изменения физики.</div></div><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="settingRow"><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div></div><div class="sectionTitle">МОНИТОР ПРОИЗВОДИТЕЛЬНОСТИ</div><button class="btn" id="perfBtn">${perfMonitorEnabled ? 'Выключить frame-time monitor' : 'Включить frame-time monitor'}</button>${devicePanel()}<div class="sectionTitle">СОХРАНЕНИЕ</div>${saveStatusText() ? `<p class="saveWarningText">${escapeHTML(saveStatusText())}</p>` : ''}<button class="btn" id="saveBtn">Сохранить прогресс</button>`);
     document.querySelectorAll('#qualitySeg button').forEach(b => bindTap(b, () => {
       settings.quality = b.dataset.q;
       storage.setItem('aef_quality', settings.quality);
@@ -2503,6 +2611,17 @@
   }
   function groundShadow(x, y, width) {
     ctx.save();
+    if (profile.softShadows) {
+      const sway = Math.sin(time * .09) * .7;
+      ctx.fillStyle = shadowColor(.12);
+      ctx.beginPath();
+      ctx.ellipse(x + 4 + sway, y + 3, width * 1.18, width * .36, -.06, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = shadowColor(.19);
+      ctx.beginPath();
+      ctx.ellipse(x + 2 + sway * .5, y + 1.5, width * 1.05, width * .31, -.04, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.fillStyle = shadowColor(.3);
     ctx.beginPath();
     ctx.ellipse(x, y, width, width * .28, 0, 0, Math.PI * 2);
@@ -2543,7 +2662,8 @@
     const basePattern = zoneId === 'mistwood' ? patterns.grass : zoneId === 'stonevale' ? patterns.stone : patterns.dirt;
     texturedRect(basePattern, z.ground, -160, -160, WORLD.w + 320, WORLD.h * .82 + 320, .42 + profile.textureScale * .3);
     ctx.globalAlpha = .2 + profile.detail * .06;
-    for (let i = 0; !art?.terrainReady && i < 24 + profile.detail * 10; i++) {
+    const fallbackSpots = Math.min(groundSpots.length, 24 + profile.detail * 10);
+    for (let i = 0; !art?.terrainReady && i < fallbackSpots; i++) {
       const {
         x,
         y,
@@ -3213,6 +3333,85 @@
     ctx.fillRect(0, 0, W, H);
     ctx.restore();
   }
+  function lightHole(x, y, radius, intensity = 1) {
+    if (!FX_CACHE.light || radius <= 0) return;
+    const alpha = clamp(intensity, 0, 1),
+      previousAlpha = lightCtx.globalAlpha;
+    lightCtx.globalAlpha = previousAlpha * alpha;
+    lightCtx.drawImage(FX_CACHE.light, x - radius, y - radius, radius * 2, radius * 2);
+    lightCtx.globalAlpha = previousAlpha;
+  }
+  function drawLighting(z) {
+    if (!(profile.lighting > 0) || !lightCtx || lightCanvas.width <= 1) return;
+    const lightScale = clamp(profile.lightmapScale || .5, .25, 1);
+    lightCtx.setTransform(1, 0, 0, 1, 0, 0);
+    lightCtx.clearRect(0, 0, lightCanvas.width, lightCanvas.height);
+    lightCtx.setTransform(lightScale, 0, 0, lightScale, 0, 0);
+    lightCtx.globalCompositeOperation = 'source-over';
+    const tint = zoneId === 'ashfield' ? '73,31,24' : zoneId === 'stonevale' ? '24,35,39' : '18,38,34';
+    lightCtx.fillStyle = `rgba(${tint},${profile.lighting})`;
+    lightCtx.fillRect(0, 0, W, H);
+    lightCtx.globalCompositeOperation = 'destination-out';
+    const hero = screenPos(player.x, player.y),
+      camp = screenPos(z.camp.x, z.camp.y - 100),
+      portal = screenPos(z.portal.x, z.portal.y);
+    lightHole(hero.x, hero.y - 18, 105, .48);
+    lightHole(camp.x + 17, camp.y + 8, 145, .78);
+    if (canUsePortal()) lightHole(portal.x, portal.y - 28, 155, .88);
+    let projectileLights = 0;
+    for (const p of projectiles) {
+      if (projectileLights >= 8) break;
+      const s = screenPos(p.x, p.y);
+      if (s.x < -80 || s.x > W + 80 || s.y < -80 || s.y > H + 80) continue;
+      lightHole(s.x, s.y, 54, .56);
+      projectileLights++;
+    }
+    // Only a sparse deterministic subset of particles contributes to lighting;
+    // this avoids the random lightmap flicker and fill-rate spike of the prototype.
+    for (let i = 0, lit = 0; i < particles.length && lit < 8; i += 4) {
+      const p = particles[i], s = screenPos(p.x, p.y);
+      if (s.x < -40 || s.x > W + 40 || s.y < -40 || s.y > H + 40) continue;
+      lightHole(s.x, s.y, 24 + p.size * 2, clamp(p.life / p.max, 0, 1) * .22);
+      lit++;
+    }
+    lightCtx.globalCompositeOperation = 'source-over';
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.drawImage(lightCanvas, 0, 0, lightCanvas.width, lightCanvas.height, 0, 0, W, H);
+    ctx.restore();
+  }
+  function glowCircle(x, y, radius, sprite, alpha) {
+    if (!sprite || radius <= 0 || alpha <= 0) return;
+    const previousAlpha = ctx.globalAlpha;
+    ctx.globalAlpha = previousAlpha * clamp(alpha, 0, 1);
+    ctx.drawImage(sprite, x - radius, y - radius, radius * 2, radius * 2);
+    ctx.globalAlpha = previousAlpha;
+  }
+  function drawBloom(z) {
+    if (!(profile.bloom > 0)) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const portal = screenPos(z.portal.x, z.portal.y), camp = screenPos(z.camp.x, z.camp.y - 100);
+    if (canUsePortal()) glowCircle(portal.x, portal.y - 26, 95, zoneId === 'ashfield' ? FX_CACHE.glowPortalAsh : FX_CACHE.glowPortal, profile.bloom * .34);
+    glowCircle(camp.x + 17, camp.y + 8, 52, FX_CACHE.glowCamp, profile.bloom * .28);
+    let count = 0;
+    for (const p of projectiles) {
+      if (count++ >= 8) break;
+      const s = screenPos(p.x, p.y);
+      glowCircle(s.x, s.y, 30, FX_CACHE.glowProjectile, profile.bloom * .18);
+    }
+    // Cheap secondary halos for a small particle subset, no per-particle blur pass.
+    ctx.globalAlpha = profile.bloom * .18;
+    for (let i = 0, drawn = 0; i < particles.length && drawn < 10; i += 5) {
+      const p = particles[i], s = screenPos(p.x, p.y);
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, p.size * 2.8, 0, Math.PI * 2);
+      ctx.fill();
+      drawn++;
+    }
+    ctx.restore();
+  }
   function drawCombatTelegraphs() {
     for (const e of entities) {
       if (e.kind !== 'enemy' || e.hp <= 0 || e.attackPhase !== 'windup') continue;
@@ -3254,11 +3453,13 @@
         art.draw(ctx, e.asset, p.x, p.y + 20, e.height);
       } else if (e.kind === 'enemy') drawEntity(e);else if (e.kind === 'resource') drawResource(e);else if (e.kind === 'player') drawPlayer();else if (typeof e.scale === 'number') drawAmbientItem(e);else if (e.kind === 'camp') drawCamp(z);else if (e.kind === 'scout') drawScout(z);else drawPortal(z);
     }
+    drawLighting(z);
     drawCombatTelegraphs();
     drawCombatFeedback();
     drawLoot();
     drawProjectiles();
     drawParticles();
+    drawBloom(z);
     drawFloatingTexts();
     drawNpcLabels();
   }
@@ -3548,9 +3749,26 @@
         resetFrameLimiter();
       },
       setQuality: q => {
+        if (!Object.hasOwn(QUALITY, q)) return false;
         settings.quality = q;
         applyGraphics();
+        return true;
       },
+      graphics: () => ({
+        quality: settings.quality,
+        DPR,
+        dprCap: profile.dprCap || 2,
+        pixelBudget: profile.pixelBudget || 1500000,
+        detail: profile.detail,
+        lighting: profile.lighting || 0,
+        bloom: profile.bloom || 0,
+        softShadows: !!profile.softShadows,
+        lightmap: { width: lightCanvas.width, height: lightCanvas.height },
+        effectCache: {
+          light: !!FX_CACHE.light,
+          bloom: !!(FX_CACHE.glowPortal && FX_CACHE.glowPortalAsh && FX_CACHE.glowCamp && FX_CACHE.glowProjectile)
+        }
+      }),
       getPerf: () => ({
         fps: perfActualFps,
         frameMs: perfAvgFrameMs,

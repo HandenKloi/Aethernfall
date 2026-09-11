@@ -1,6 +1,6 @@
 "use strict";
 
-/* Aethernfall 3.7.1 — shared raster atlases; all rectangles use source pixels. */
+/* Aethernfall 3.8.1 — shared raster atlases; all rectangles use source pixels. */
 (() => {
   'use strict';
 
@@ -49,7 +49,7 @@
   };
   const images = {},
     surfaces = {};
-  const materials = [{}, {}, {}, {}];
+  const materials = [{}, {}, {}, {}, {}];
   let loading;
   function makeSurfaces(image) {
     // Mirrored repetitions share edge pixels, avoiding hard terrain tile seams.
@@ -65,13 +65,13 @@
         c.restore();
       }
       surfaces[name] = tile;
-      for (let level = 0; level < 4; level++) {
+      for (let level = 0; level < 5; level++) {
         const variant = document.createElement('canvas');
         variant.width = variant.height = 384;
         const c = variant.getContext('2d');
         c.drawImage(tile, 0, 0);
         // Keep the photographic base in every preset; add readable material features.
-        const density = [0, 35, 90, 180][level];
+        const density = [0, 35, 90, 180, 280][level];
         for (let n = 0; n < density; n++) {
           const noise = v => {
             const k = Math.sin(v * 127.1 + index * 311.7) * 43758.5453;
@@ -115,6 +115,22 @@
           if (level >= 2 && n % 9 === 0 && name === 'grass') {
             c.fillStyle = '#d7cd95';
             c.fillRect(x, y - 4, 2, 2);
+          }
+          if (level >= 4 && n % 7 === 0) {
+            c.save();
+            c.globalAlpha = .42;
+            c.strokeStyle = name === 'water' ? '#d8fff0' : name === 'stone' ? '#d6d1ba' : name === 'dirt' ? '#dac49b' : '#dce4a4';
+            c.lineWidth = 1;
+            c.beginPath();
+            if (name === 'water') {
+              c.moveTo(x - 7, y);
+              c.quadraticCurveTo(x, y - 2, x + 8, y);
+            } else {
+              c.moveTo(x - 2, y + 1);
+              c.lineTo(x + 3, y - 2);
+            }
+            c.stroke();
+            c.restore();
           }
         }
         materials[level][name] = variant;

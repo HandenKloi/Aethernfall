@@ -935,3 +935,11 @@ body.left-handed .actions { right:auto; left:calc(var(--left) + 12px); }
   body.left-handed .joystick { left:auto; right:calc(var(--right) + 14px); }
   body.left-handed .actions { right:auto; left:calc(var(--left) + 12px); }
 }
+
+/* 3.8.1 graphics: five explicit quality tiers without compressing other segmented controls. */
+#qualitySeg { grid-template-columns:repeat(5,minmax(0,1fr)); }
+#qualitySeg button { min-width:0; padding-inline:4px; font-size:11px; }
+@media(max-width:390px) and (orientation:portrait) {
+  #qualitySeg { gap:5px; }
+  #qualitySeg button { font-size:10px; padding-inline:2px; }
+}
