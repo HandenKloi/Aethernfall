@@ -814,21 +814,57 @@
     passive: true
   });
   const defaults = JSON.parse(JSON.stringify(player));
+  const persistenceCodec = window.AetherPersistence?.createCodec({
+    saveSchema: SAVE_SCHEMA,
+    defaultZoneId: 'mistwood',
+    zoneIds: Object.keys(zones),
+    zones,
+    world: WORLD,
+    baseStats: BASE_STATS,
+    maxUpgradeRank: MAX_UPGRADE_RANK,
+    inventoryKeys: ['wood', 'ore', 'herb', 'guardianToken', 'emberShard'],
+    shopOwnedIds: ['dawnBlade', 'wardenArmor', 'buckler'],
+    gear: GEAR,
+    supplies: SUPPLIES,
+    runes: RUNES,
+    cosmetics: COSMETICS,
+    contracts: CONTRACTS,
+    contractIds: Object.keys(CONTRACTS),
+    qualityIds: Object.keys(QUALITY),
+    fpsValues: FPS,
+    settingsOptions: {
+      controlSizes: ['compact', 'normal', 'large'],
+      brightness: [85, 100, 115],
+      uiScales: ['normal', 'large'],
+      minimapSizes: ['normal', 'large']
+    },
+    defaults: {
+      player: defaults,
+      settings: {
+        quality: detected,
+        fps: 60,
+        controls: 'right',
+        controlSize: 'normal',
+        questCollapsed: true,
+        brightness: 100,
+        uiScale: 'normal',
+        minimapSize: 'normal',
+        combatNumbers: true,
+        haptics: true,
+        masterVolume: .8,
+        musicVolume: .55,
+        ambientVolume: .65,
+        sfxVolume: .8,
+        musicEnabled: true
+      }
+    }
+  });
   const SESSION_ID = globalThis.crypto?.randomUUID?.() || `session-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   let saveRevision = 0,
     saveDirty = false,
     saveBlockedReason = '',
     restoredPosition = false,
     pendingLoadNotice = '';
-  function object(value) {
-    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-  }
-  function finite(value, fallback, min = 0, max = 1e9) {
-    return typeof value === 'number' && Number.isFinite(value) ? clamp(value, min, max) : fallback;
-  }
-  function finiteSigned(value, fallback = 0, min = -1e9, max = 1e9) {
-    return typeof value === 'number' && Number.isFinite(value) ? clamp(value, min, max) : fallback;
-  }
   function saveStatusText() {
     if (saveBlockedReason === 'newer') return 'Сохранение создано более новой версией игры';
     if (saveBlockedReason === 'conflict') return 'Открыта более новая игровая сессия · перезагрузите игру';
@@ -851,52 +887,6 @@
     saveDirty = false;
     if (saveBlockedReason !== 'newer' && saveBlockedReason !== 'conflict') saveBlockedReason = '';
     refreshSaveHealth();
-  }
-  function validSaveShape(data, schema) {
-    if (!data || typeof data !== 'object' || Array.isArray(data) || !data.player || typeof data.player !== 'object' || Array.isArray(data.player)) return false;
-    const p = data.player;
-    const finiteFields = (value, fields) => fields.every(key => typeof value[key] === 'number' && Number.isFinite(value[key]));
-    const stringFields = (value, fields) => fields.every(key => typeof value[key] === 'string');
-    const booleanFields = (value, fields) => fields.every(key => typeof value[key] === 'boolean');
-    if (schema >= 3) {
-      const meta = object(data.meta), inv = object(p.inv), shopOwned = object(p.shopOwned), loadout = object(p.loadout), supplies = object(p.supplies), progression = object(p.progression), quests = object(p.quests), config = object(data.settings);
-      if (!finiteFields(p, ['x', 'y', 'hp', 'stamina', 'level', 'xp', 'xpNeed', 'gold', 'dir'])) return false;
-      if (!finiteFields(meta, ['revision', 'updatedAt']) || typeof meta.sessionId !== 'string' || !meta.sessionId) return false;
-      if (!Object.hasOwn(zones, data.zoneId)) return false;
-      if (!finiteFields(inv, ['wood', 'ore', 'herb', 'guardianToken', 'emberShard'])) return false;
-      if (!booleanFields(shopOwned, ['dawnBlade', 'wardenArmor', 'buckler'])) return false;
-      if (!stringFields(loadout, ['weapon', 'armor', 'offhand', 'quick'])) return false;
-      if (!finiteFields(supplies, ['potion', 'tonic'])) return false;
-      if (!finiteFields(progression, ['forgeRank', 'vitalityRank', 'legacyDamageBonus', 'legacyHpBonus', 'completedCycles'])) return false;
-      if (!finiteFields(object(quests.mist), ['step', 'herb', 'kills']) || !finiteFields(object(quests.stone), ['step', 'ore', 'guardian']) || !finiteFields(object(quests.ash), ['step', 'wood', 'kills'])) return false;
-      if (typeof config.quality !== 'string' || typeof config.fps !== 'number' || !Number.isFinite(config.fps) || typeof config.controls !== 'string' || typeof config.questCollapsed !== 'boolean') return false;
-      if (schema >= 4) {
-        const runes = object(p.runes), cosmetics = object(p.cosmetics), contracts = object(p.contracts);
-        if (!finiteFields(supplies, ['fieldKit'])) return false;
-        if (!stringFields(runes, ['weapon', 'armor']) || !stringFields(cosmetics, ['accent', 'trail'])) return false;
-        for (const id of Object.keys(CONTRACTS)) if (!finiteFields(object(contracts[id]), ['state', 'progress', 'cycle'])) return false;
-        if (!Array.isArray(p.discoveries) || p.discoveries.some(id => typeof id !== 'string')) return false;
-        if (typeof config.controlSize !== 'string' || typeof config.brightness !== 'number' || !Number.isFinite(config.brightness) || typeof config.uiScale !== 'string' || typeof config.minimapSize !== 'string' || typeof config.combatNumbers !== 'boolean' || typeof config.haptics !== 'boolean') return false;
-        if (!finiteFields(config, ['masterVolume', 'musicVolume', 'ambientVolume', 'sfxVolume']) || typeof config.musicEnabled !== 'boolean') return false;
-      }
-      return true;
-    }
-    // Historical saves were less explicit, but these core values have existed throughout
-    // the supported legacy line and distinguish a real save from syntactically valid junk.
-    return finiteFields(p, ['x', 'y', 'hp', 'maxHp', 'stamina', 'level', 'gold', 'damage']) && object(p.inv) === p.inv && object(p.quests) === p.quests;
-  }
-  function parseSave(raw) {
-    if (!raw || typeof raw !== 'string') return { ok: false, reason: 'empty' };
-    try {
-      const data = JSON.parse(raw);
-      if (!data || typeof data !== 'object' || Array.isArray(data)) return { ok: false, reason: 'shape' };
-      const schema = Number.isFinite(Number(data.schemaVersion)) ? Number(data.schemaVersion) : 1;
-      if (schema > SAVE_SCHEMA) return { ok: false, newer: true, schema };
-      if (!validSaveShape(data, schema)) return { ok: false, reason: 'shape' };
-      return { ok: true, data, schema };
-    } catch {
-      return { ok: false, reason: 'json' };
-    }
   }
   let recoveryNonce = 0;
   function preserveRecovery(raw) {
@@ -936,192 +926,42 @@
   function blockDrainMultiplier() {
     return (GEAR[player.loadout.armor]?.blockDrainMultiplier || 1) * (RUNES.armor[player.runes?.armor]?.block || 1);
   }
-  function restoreEquipment(saved) {
-    const previous = object(saved.loadout);
-    const savedEquipment = object(saved.equipment);
-    const weapon = player.shopOwned.dawnBlade ? 'dawnBlade' : 'starterBlade';
-    const armor = savedEquipment.armor === GEAR.guardianArmor.name && player.inv.guardianToken > 0 ? 'guardianArmor' : player.shopOwned.wardenArmor ? 'wardenArmor' : 'starterArmor';
-    player.loadout = { weapon, armor, offhand: 'emptyHand', quick: 'potion' };
-    for (const slot of ['weapon', 'armor', 'offhand']) if (Object.hasOwn(GEAR, previous[slot]) && GEAR[previous[slot]].slot === slot && ownsGear(previous[slot])) player.loadout[slot] = previous[slot];
-    if (previous.quick === '' || Object.hasOwn(SUPPLIES, previous.quick)) player.loadout.quick = previous.quick;
-  }
-  function inferLegacyProgression(saved) {
-    const weaponBonus = GEAR[player.loadout.weapon]?.damage || 0,
-      armorBonus = GEAR[player.loadout.armor]?.health || 0,
-      baseDamage = BASE_STATS.damage + levelSteps() * BASE_STATS.damagePerLevel + weaponBonus,
-      baseHp = BASE_STATS.maxHp + levelSteps() * BASE_STATS.hpPerLevel + armorBonus,
-      oldDamage = finiteSigned(saved.damage, baseDamage, 1, 1e9),
-      oldMaxHp = finiteSigned(saved.maxHp, baseHp, 1, 1e9),
-      damageExtra = oldDamage - baseDamage,
-      hpExtra = oldMaxHp - baseHp,
-      forgeRank = clamp(Math.floor(Math.max(0, damageExtra) / 5), 0, MAX_UPGRADE_RANK),
-      vitalityRank = clamp(Math.floor(Math.max(0, hpExtra) / 12), 0, MAX_UPGRADE_RANK);
-    player.progression = {
-      forgeRank,
-      vitalityRank,
-      legacyDamageBonus: damageExtra - forgeRank * 5,
-      legacyHpBonus: hpExtra - vitalityRank * 12,
-      completedCycles: 0
-    };
-  }
-  function restoreProgression(saved, schema) {
-    if (schema >= 3) {
-      const p = object(saved.progression);
-      player.progression = {
-        forgeRank: Math.floor(finite(p.forgeRank, 0, 0, MAX_UPGRADE_RANK)),
-        vitalityRank: Math.floor(finite(p.vitalityRank, 0, 0, MAX_UPGRADE_RANK)),
-        legacyDamageBonus: finiteSigned(p.legacyDamageBonus, 0),
-        legacyHpBonus: finiteSigned(p.legacyHpBonus, 0),
-        completedCycles: Math.floor(finite(p.completedCycles, 0, 0, 1e9))
-      };
-    } else inferLegacyProgression(saved);
-  }
-  function applySaveData(parsed, schema) {
-    const saved = object(parsed.player);
-    zoneId = Object.hasOwn(zones, parsed.zoneId) ? parsed.zoneId : 'mistwood';
-    player.level = Math.max(1, Math.floor(finite(saved.level, defaults.level, 1, 1e6)));
-    player.xp = finite(saved.xp, defaults.xp, 0, 1e12);
-    player.xpNeed = Math.max(1, finite(saved.xpNeed, defaults.xpNeed, 1, 1e12));
-    player.gold = Math.floor(finite(saved.gold, defaults.gold, 0, 1e12));
-    player.x = finite(saved.x, zones[zoneId].camp.x, 70, WORLD.w - 70);
-    player.y = finite(saved.y, zones[zoneId].camp.y, 70, WORLD.h - 70);
-    player.dir = finiteSigned(saved.dir, 0, -Math.PI * 2, Math.PI * 2);
-    player.inv = {};
-    for (const key of ['wood', 'ore', 'herb', 'guardianToken', 'emberShard']) player.inv[key] = Math.floor(finite(object(saved.inv)[key], 0, 0, 1e9));
+  function applyCanonicalSave(snapshot) {
+    zoneId = snapshot.zoneId;
+    const saved = snapshot.player;
+    player.level = saved.level;
+    player.xp = saved.xp;
+    player.xpNeed = saved.xpNeed;
+    player.gold = saved.gold;
+    player.x = saved.x;
+    player.y = saved.y;
+    player.dir = saved.dir;
+    player.inv = { ...saved.inv };
     player.shopOwned = {};
-    for (const id of ['dawnBlade', 'wardenArmor', 'buckler']) if (object(saved.shopOwned)[id] === true) player.shopOwned[id] = true;
-    restoreEquipment(saved);
-    player.supplies = {};
-    for (const id of Object.keys(SUPPLIES)) player.supplies[id] = Math.floor(finite(object(saved.supplies)[id], 0, 0, 9999));
-    const savedRunes = object(saved.runes), savedCosmetics = object(saved.cosmetics), savedContracts = object(saved.contracts);
-    player.runes = {
-      weapon: Object.hasOwn(RUNES.weapon, savedRunes.weapon) ? savedRunes.weapon : 'none',
-      armor: Object.hasOwn(RUNES.armor, savedRunes.armor) ? savedRunes.armor : 'none'
-    };
-    player.cosmetics = {
-      accent: Object.hasOwn(COSMETICS.accents, savedCosmetics.accent) ? savedCosmetics.accent : 'teal',
-      trail: Object.hasOwn(COSMETICS.trails, savedCosmetics.trail) ? savedCosmetics.trail : 'steel'
-    };
-    player.contracts = {};
-    for (const id of Object.keys(CONTRACTS)) {
-      const c = object(savedContracts[id]);
-      player.contracts[id] = {
-        state: Math.floor(finite(c.state, 0, 0, 3)),
-        progress: Math.floor(finite(c.progress, 0, 0, CONTRACTS[id].required)),
-        cycle: Math.floor(finite(c.cycle, 0, 0, 1e9))
-      };
-    }
-    player.discoveries = Array.isArray(saved.discoveries) ? [...new Set(saved.discoveries.filter(id => typeof id === 'string' && /^\w+:\d+$/.test(id)))].slice(0, 128) : [];
-    for (const [key, fields] of Object.entries(defaults.quests)) {
-      player.quests[key] = {};
-      for (const field of Object.keys(fields)) player.quests[key][field] = Math.floor(finite(object(object(saved.quests)[key])[field], 0, 0, field === 'step' ? 3 : 1e9));
-    }
-    // A 3.6.2 player already past the Stone guardian cannot be made to repeat the
-    // completed objective merely because the old reward used RNG. Grant only when
-    // the save itself proves that objective was completed in the current route.
-    if (schema < 3 && player.inv.guardianToken === 0 && (player.quests.stone.step >= 3 || zoneId === 'ashfield')) player.inv.guardianToken = 1;
-    restoreProgression(saved, schema);
-    player.hp = finite(saved.hp, defaults.hp, 0, 1e12);
-    player.stamina = finite(saved.stamina, defaults.stamina, 0, BASE_STATS.maxStamina);
+    for (const [id, owned] of Object.entries(saved.shopOwned)) if (owned === true) player.shopOwned[id] = true;
+    player.loadout = { ...saved.loadout };
+    player.supplies = { ...saved.supplies };
+    player.runes = { ...saved.runes };
+    player.cosmetics = { ...saved.cosmetics };
+    player.contracts = Object.fromEntries(Object.entries(saved.contracts).map(([id, contract]) => [id, { ...contract }]));
+    player.discoveries = saved.discoveries.slice();
+    player.progression = { ...saved.progression };
+    player.quests = Object.fromEntries(Object.entries(saved.quests).map(([id, quest]) => [id, { ...quest }]));
+    player.hp = saved.hp;
+    player.stamina = saved.stamina;
     recomputeDerivedStats();
     player.hp = clamp(player.hp, 1, player.maxHp);
     player.stamina = clamp(player.stamina, 0, player.maxStamina);
-    const config = object(parsed.settings);
-    if (Object.hasOwn(QUALITY, config.quality)) settings.quality = config.quality;
-    if (FPS.includes(Number(config.fps))) settings.fps = Number(config.fps);
-    settings.controls = config.controls === 'left' ? 'left' : 'right';
-    settings.controlSize = ['compact', 'normal', 'large'].includes(config.controlSize) ? config.controlSize : 'normal';
-    settings.questCollapsed = config.questCollapsed !== false;
-    settings.brightness = [85, 100, 115].includes(Number(config.brightness)) ? Number(config.brightness) : 100;
-    settings.uiScale = config.uiScale === 'large' ? 'large' : 'normal';
-    settings.minimapSize = config.minimapSize === 'large' ? 'large' : 'normal';
-    settings.combatNumbers = config.combatNumbers !== false;
-    settings.haptics = config.haptics !== false;
-    settings.masterVolume = finiteSetting(config.masterVolume, .8);
-    settings.musicVolume = finiteSetting(config.musicVolume, .55);
-    settings.ambientVolume = finiteSetting(config.ambientVolume, .65);
-    settings.sfxVolume = finiteSetting(config.sfxVolume, .8);
-    settings.musicEnabled = config.musicEnabled !== false;
+    Object.assign(settings, snapshot.settings);
     player.attackCd = player.attackQueuedUntil = player.secondWindCd = player.supplyCd = player.dodgeCd = player.dodgeUntil = player.combo = player.comboTimer = 0;
     player.dashRemaining = 0;
     player.blocking = false;
-    saveRevision = Math.floor(finite(object(parsed.meta).revision, 0, 0, Number.MAX_SAFE_INTEGER));
+    saveRevision = snapshot.meta.revision;
     restoredPosition = true;
   }
-  function serializeSave(revision) {
-    return {
-      schemaVersion: SAVE_SCHEMA,
-      version: BUILD_VERSION,
-      meta: { revision, updatedAt: Date.now(), sessionId: SESSION_ID },
-      zoneId,
-      player: {
-        x: player.x,
-        y: player.y,
-        hp: player.hp,
-        stamina: player.stamina,
-        level: player.level,
-        xp: player.xp,
-        xpNeed: player.xpNeed,
-        gold: player.gold,
-        dir: player.dir,
-        inv: {
-          wood: player.inv.wood || 0,
-          ore: player.inv.ore || 0,
-          herb: player.inv.herb || 0,
-          guardianToken: player.inv.guardianToken || 0,
-          emberShard: player.inv.emberShard || 0
-        },
-        shopOwned: {
-          dawnBlade: player.shopOwned.dawnBlade === true,
-          wardenArmor: player.shopOwned.wardenArmor === true,
-          buckler: player.shopOwned.buckler === true
-        },
-        loadout: {
-          weapon: player.loadout.weapon,
-          armor: player.loadout.armor,
-          offhand: player.loadout.offhand,
-          quick: player.loadout.quick
-        },
-        supplies: {
-          potion: player.supplies.potion || 0,
-          tonic: player.supplies.tonic || 0,
-          fieldKit: player.supplies.fieldKit || 0
-        },
-        runes: { weapon: player.runes.weapon, armor: player.runes.armor },
-        cosmetics: { accent: player.cosmetics.accent, trail: player.cosmetics.trail },
-        contracts: Object.fromEntries(Object.entries(player.contracts).map(([id, c]) => [id, { state: c.state, progress: c.progress, cycle: c.cycle }])),
-        discoveries: player.discoveries.slice(),
-        progression: {
-          forgeRank: player.progression.forgeRank,
-          vitalityRank: player.progression.vitalityRank,
-          legacyDamageBonus: player.progression.legacyDamageBonus,
-          legacyHpBonus: player.progression.legacyHpBonus,
-          completedCycles: player.progression.completedCycles
-        },
-        quests: {
-          mist: { step: player.quests.mist.step, herb: player.quests.mist.herb, kills: player.quests.mist.kills },
-          stone: { step: player.quests.stone.step, ore: player.quests.stone.ore, guardian: player.quests.stone.guardian },
-          ash: { step: player.quests.ash.step, wood: player.quests.ash.wood, kills: player.quests.ash.kills }
-        }
-      },
-      settings: {
-        quality: settings.quality,
-        fps: settings.fps,
-        controls: settings.controls,
-        controlSize: settings.controlSize,
-        questCollapsed: settings.questCollapsed,
-        brightness: settings.brightness,
-        uiScale: settings.uiScale,
-        minimapSize: settings.minimapSize,
-        combatNumbers: settings.combatNumbers,
-        haptics: settings.haptics,
-        masterVolume: settings.masterVolume,
-        musicVolume: settings.musicVolume,
-        ambientVolume: settings.ambientVolume,
-        sfxVolume: settings.sfxVolume,
-        musicEnabled: settings.musicEnabled
-      }
-    };
+  function applyParsedSave(data, schema) {
+    const snapshot = persistenceCodec.normalize(data, schema, { settings: { quality: settings.quality, fps: settings.fps } });
+    applyCanonicalSave(snapshot);
   }
   function save() {
     if (saveBlockedReason === 'newer' || saveBlockedReason === 'conflict') {
@@ -1129,8 +969,8 @@
       return false;
     }
     const currentRaw = storage.getItem(SAVE);
-    const current = parseSave(currentRaw);
-    if (current.newer) {
+    const current = persistenceCodec.parse(currentRaw);
+    if (current.reason === 'newer') {
       markSaveFailure('newer');
       return false;
     }
@@ -1138,15 +978,15 @@
       markSaveFailure();
       return false;
     }
-    const currentMeta = object(current.data?.meta);
-    const currentRevision = current.ok ? Math.floor(finite(currentMeta.revision, 0, 0, Number.MAX_SAFE_INTEGER)) : 0;
-    const currentSession = typeof currentMeta.sessionId === 'string' ? currentMeta.sessionId : '';
+    const currentMeta = current.ok ? persistenceCodec.readMeta(current.data) : { revision: 0, sessionId: '' };
+    const currentRevision = currentMeta.revision;
+    const currentSession = currentMeta.sessionId;
     if (current.ok && currentRevision > saveRevision && currentSession && currentSession !== SESSION_ID) {
       markSaveFailure('conflict');
       return false;
     }
     const nextRevision = Math.max(saveRevision, currentRevision) + 1;
-    const nextRaw = JSON.stringify(serializeSave(nextRevision));
+    const nextRaw = JSON.stringify(persistenceCodec.serialize({ zoneId, player, settings }, { revision: nextRevision, updatedAt: Date.now(), sessionId: SESSION_ID, buildVersion: BUILD_VERSION }));
     if (current.ok && currentRaw && currentRaw !== nextRaw && !storage.setItem(SAVE_BACKUP, currentRaw)) {
       markSaveFailure();
       return false;
@@ -1165,30 +1005,30 @@
     pendingLoadNotice = '';
     const primaryRaw = storage.getItem(SAVE);
     if (primaryRaw) {
-      const primary = parseSave(primaryRaw);
-      if (primary.newer) {
+      const primary = persistenceCodec.parse(primaryRaw);
+      if (primary.reason === 'newer') {
         saveBlockedReason = 'newer';
         saveDirty = true;
         refreshSaveHealth();
         return false;
       }
       if (primary.ok) {
-        applySaveData(primary.data, primary.schema);
+        applyParsedSave(primary.data, primary.schema);
         refreshSaveHealth();
         return true;
       }
       if (!preserveRecovery(primaryRaw)) markSaveFailure();
     }
     const backupRaw = storage.getItem(SAVE_BACKUP);
-    const backup = parseSave(backupRaw);
-    if (backup.newer) {
+    const backup = persistenceCodec.parse(backupRaw);
+    if (backup.reason === 'newer') {
       saveBlockedReason = 'newer';
       saveDirty = true;
       refreshSaveHealth();
       return false;
     }
     if (backup.ok) {
-      applySaveData(backup.data, backup.schema);
+      applyParsedSave(backup.data, backup.schema);
       saveDirty = true;
       pendingLoadNotice = 'Восстановлена резервная копия прогресса';
       refreshSaveHealth();
@@ -1196,9 +1036,9 @@
     }
     for (const key of LEGACY_SAVES) {
       const raw = storage.getItem(key);
-      const legacy = parseSave(raw);
+      const legacy = persistenceCodec.parse(raw);
       if (!legacy.ok) continue;
-      applySaveData(legacy.data, legacy.schema);
+      applyParsedSave(legacy.data, legacy.schema);
       saveDirty = true;
       pendingLoadNotice = 'Старое сохранение подготовлено к обновлению';
       refreshSaveHealth();
@@ -1210,11 +1050,10 @@
   load();
   addEventListener('storage', event => {
     if (event.key !== SAVE || !event.newValue) return;
-    const incoming = parseSave(event.newValue);
+    const incoming = persistenceCodec.parse(event.newValue);
     if (!incoming.ok) return;
-    const meta = object(incoming.data.meta),
-      revision = Math.floor(finite(meta.revision, 0, 0, Number.MAX_SAFE_INTEGER));
-    if (revision > saveRevision && meta.sessionId && meta.sessionId !== SESSION_ID) markSaveFailure('conflict');
+    const meta = persistenceCodec.readMeta(incoming.data);
+    if (meta.revision > saveRevision && meta.sessionId && meta.sessionId !== SESSION_ID) markSaveFailure('conflict');
   });
   function switchGear(id) {
     const next = GEAR[id];
@@ -4091,6 +3930,7 @@
           renderMs: perfAvgRenderMs
         }
       }),
+      persistence: { codecActive: true },
       recoveryCopies: () => [...testStorage.entries()].filter(([key]) => key.startsWith(RECOVERY_PREFIX)),
       saveHealth: () => ({ dirty: saveDirty, blockedReason: saveBlockedReason, revision: saveRevision }),
       storage,
