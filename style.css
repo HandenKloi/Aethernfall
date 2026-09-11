@@ -8,7 +8,7 @@ html,body {
   background:#08100f;
   color:#eef4ef;
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif;
-  touch-action:pan-x pan-y pinch-zoom;
+  touch-action:manipulation;
   user-select:none;
   -webkit-user-select:none;
   -webkit-touch-callout:none;
@@ -36,6 +36,10 @@ button {
   height:100%;
   display:block;
   background:#17251f;
+}
+body.browser-zoomed #game {
+  /* Recovery path: if browser zoom was entered before/around an update, allow pinch-out on the playfield. */
+  touch-action:pinch-zoom;
 }
 #vignette {
   position:fixed;
@@ -723,15 +727,15 @@ html,body {
 .modalBody {
   max-height:none;
   overflow:auto;
-  touch-action:pan-y pinch-zoom;
+  touch-action:manipulation;
   overscroll-behavior:contain;
   padding:16px;
 }
 .modalBody * {
-  touch-action:pan-y pinch-zoom;
+  touch-action:manipulation;
 }
 .modalBody button {
-  touch-action:pan-y;
+  touch-action:manipulation;
 }
 .card p,.dialogue p {
   font-size:14px;
@@ -936,7 +940,7 @@ body.left-handed .actions { right:auto; left:calc(var(--left) + 12px); }
   body.left-handed .actions { right:auto; left:calc(var(--left) + 12px); }
 }
 
-/* 3.8.1 graphics: five explicit quality tiers without compressing other segmented controls. */
+/* 3.8.3 graphics: five explicit quality tiers without compressing other segmented controls. */
 #qualitySeg { grid-template-columns:repeat(5,minmax(0,1fr)); }
 #qualitySeg button { min-width:0; padding-inline:4px; font-size:11px; }
 @media(max-width:390px) and (orientation:portrait) {

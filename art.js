@@ -1,6 +1,6 @@
 "use strict";
 
-/* Aethernfall 3.8.1 — shared raster atlases; all rectangles use source pixels. */
+/* Aethernfall 3.8.3 — shared raster atlases; all rectangles use source pixels. */
 (() => {
   'use strict';
 
@@ -47,11 +47,11 @@
     armor: ['objects', 757, 733, 300, 330],
     potion: ['objects', 1172, 740, 204, 303]
   };
-  const images = {},
-    surfaces = {};
+  const images = {};
   const materials = [{}, {}, {}, {}, {}];
-  let loading;
+  let loading, terrainReady = false;
   function makeSurfaces(image) {
+    terrainReady = false;
     // Mirrored repetitions share edge pixels, avoiding hard terrain tile seams.
     ['grass', 'stone', 'dirt', 'water'].forEach((name, index) => {
       const tile = document.createElement('canvas');
@@ -64,7 +64,6 @@
         c.drawImage(image, index % 2 * 627, Math.floor(index / 2) * 627, 627, 627, 0, 0, 192, 192);
         c.restore();
       }
-      surfaces[name] = tile;
       for (let level = 0; level < 5; level++) {
         const variant = document.createElement('canvas');
         variant.width = variant.height = 384;
@@ -135,7 +134,10 @@
         }
         materials[level][name] = variant;
       }
+      // Variants own their pixels after drawImage(); release the redundant base tile.
+      tile.width = tile.height = 0;
     });
+    terrainReady = true;
   }
   function load(changed = () => {}) {
     if (loading) return loading;
@@ -318,7 +320,7 @@
     icon,
     has: name => !!images[sprites[name]?.[0]],
     get terrainReady() {
-      return !!surfaces.grass;
+      return terrainReady;
     }
   };
 })();

@@ -3,7 +3,7 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '3.8.1';
+  const BUILD_VERSION = '3.8.3';
   const SAVE_SCHEMA = 3;
   const BASE_STATS = Object.freeze({ startLevel: 6, damage: 32, maxHp: 240, maxStamina: 100, speed: 205, damagePerLevel: 3, hpPerLevel: 18 });
   const MAX_UPGRADE_RANK = 5;
@@ -626,8 +626,13 @@
     resetFrameLimiter();
     if (started && !rafId) if (!globalThis.__AETHER_TEST__) rafId = requestAnimationFrame(renderFrame);
   }
+  function syncBrowserZoomState() {
+    const zoomed = (window.visualViewport?.scale || 1) > 1.01;
+    document.body.classList.toggle('browser-zoomed', zoomed);
+    return zoomed;
+  }
   function resizeViewport() {
-    if ((window.visualViewport?.scale || 1) > 1.01) return;
+    if (syncBrowserZoomState()) return;
     resetInput();
     const apply = () => {
       viewportResizeRaf = 0;
@@ -644,6 +649,13 @@
   });
   window.visualViewport?.addEventListener('resize', resizeViewport, {
     passive: true
+  });
+  window.visualViewport?.addEventListener('scroll', syncBrowserZoomState, {
+    passive: true
+  });
+  // Suppress browser smart/double-tap zoom while keeping pinch zoom available where CSS allows it.
+  document.addEventListener('dblclick', event => event.preventDefault(), {
+    passive: false
   });
   addEventListener('orientationchange', resetInput, {
     passive: true
@@ -1209,6 +1221,7 @@
   function applyGraphics() {
     profile = QUALITY[settings.quality] || QUALITY.medium;
     const viewportScale = window.visualViewport?.scale || 1;
+    document.body.classList.toggle('browser-zoomed', viewportScale > 1.01);
     W = Math.round((window.visualViewport?.width || innerWidth) * viewportScale);
     H = Math.round((window.visualViewport?.height || innerHeight) * viewportScale);
     const dprCap = profile.dprCap || 2,
@@ -1244,7 +1257,7 @@
     atmosphereGradient = null;
   }
   function loadTextures() {
-    const names = ['grass', 'dirt', 'stone', 'water', 'wood', 'foliage', 'rune'];
+    const names = ['grass', 'dirt', 'stone', 'water', 'wood', 'foliage'];
     let done = 0;
     const mark = () => {
       done++;
@@ -1609,7 +1622,7 @@
     spawnLootFromEnemy(e, firstGuardianUnlock);
     if (zoneId === 'mistwood' && quest().id === 'mist' && s.step === 2 && e.type === 'raider') {
       s.kills++;
-      advanceQuest('kill');
+      advanceQuest('kill', false);
     }
     if (zoneId === 'stonevale' && e.type === 'guardian' && s.step === 2) {
       s.guardian++;
@@ -1617,11 +1630,11 @@
         player.inv.guardianToken = 1;
         toast('Получен Знак стража · броня открыта');
       } else toast('Страж руин повержен!');
-      advanceQuest('kill');
+      advanceQuest('kill', false);
     }
     if (zoneId === 'ashfield' && s.step === 2) {
       s.kills++;
-      advanceQuest('kill');
+      advanceQuest('kill', false);
     }
     burst(e.x, e.y, e.type === 'guardian' ? '#ceb1ea' : '#e27677', 24, 155);
     save();
@@ -1849,15 +1862,15 @@
     player.inv[key] = (player.inv[key] || 0) + 1;
     if (zoneId === 'mistwood' && key === 'herb' && questState().step === 1) {
       questState().herb++;
-      advanceQuest('resource');
+      advanceQuest('resource', false);
     }
     if (zoneId === 'stonevale' && key === 'ore' && questState().step === 1) {
       questState().ore++;
-      advanceQuest('resource');
+      advanceQuest('resource', false);
     }
     if (zoneId === 'ashfield' && key === 'wood' && questState().step === 1) {
       questState().wood++;
-      advanceQuest('resource');
+      advanceQuest('resource', false);
     }
     toast('Получено: ' + {
       wood: 'древесина',
@@ -2369,7 +2382,7 @@
     if (saveBlockedReason === 'conflict') location.reload();
     else toast(save() ? 'Прогресс снова сохраняется' : saveStatusText());
   });
-  // Browser zoom remains available for accessibility. Gameplay surfaces use touch-action:none in CSS.
+  // Pinch zoom remains available for accessibility in UI surfaces; double-tap zoom is suppressed to avoid sticky mobile browser zoom.
   function updateEnemyPatrol(dt) {
     for (const e of entities) {
       if (e.kind !== 'enemy' || e.hp <= 0) continue;
@@ -3522,9 +3535,9 @@
     mctx.arc(player.x / WORLD.w * 240, player.y / WORLD.h * 240, 4, 0, Math.PI * 2);
     mctx.fill();
     mctx.fillStyle = 'rgba(255,225,150,.55)';
-    for (const lm of z.landmarks || []) {
+    for (const lm of LANDMARKS[zoneId] || []) {
       mctx.beginPath();
-      mctx.arc(lm.x / WORLD.w * 240, lm.y / WORLD.h * 240, 2, 0, Math.PI * 2);
+      mctx.arc(lm[0] / WORLD.w * 240, lm[1] / WORLD.h * 240, 2, 0, Math.PI * 2);
       mctx.fill();
     }
   }
