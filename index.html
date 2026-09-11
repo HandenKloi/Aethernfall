@@ -2,15 +2,15 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no,interactive-widget=resizes-content">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self';">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#101817">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
-<title>Aethernfall v3.7.0</title>
-<link rel="manifest" href="manifest.json?v=3.7.0">
-<link rel="stylesheet" href="style.css?v=3.7.0">
+<title>Aethernfall v3.7.1</title>
+<link rel="manifest" href="manifest.json?v=3.7.1">
+<link rel="stylesheet" href="style.css?v=3.7.1">
 <link rel="apple-touch-icon" href="assets/icon-192.png">
 <link rel="icon" href="assets/icon-192.png">
 <meta name="apple-mobile-web-app-title" content="Aethernfall">
@@ -76,15 +76,11 @@
 </span>
 </div>
 <div id="netPill" class="netPill">● OFFLINE</div>
+<button id="savePill" class="savePill hidden" type="button" aria-live="polite"></button>
 <div id="perfPill" class="perfPill hidden">
 <span id="perfPillFps">--</span> FPS · <span id="perfPillMs">--</span> ms</div>
 <div id="lootTicker" class="lootTicker">
 </div>
-<section id="targetHud" class="targetHud panel hidden" aria-label="Текущая цель">
-<div class="targetLine"><b id="targetName">Противник</b><span id="targetHpText">0 / 0</span></div>
-<div class="targetBar"><span id="targetHpFill"></span></div>
-</section>
-
 
 <div id="joystick" class="joystick">
 <div class="joyRing">
@@ -98,27 +94,27 @@
 <small id="actionLabel">ДЕЙСТВИЕ</small>
 <b>✦</b>
 </button>
-<button id="skill1Btn" class="action skill" data-act="skill1" aria-label="Разрез ветра" title="Разрез ветра">
-<small>РАЗРЕЗ</small>
+<button id="skill1Btn" class="action skill" data-act="skill1" aria-label="Разрез ветра, 20 выносливости">
+<small>РАЗРЕЗ</small><span class="actionMeta" id="skill1Meta">20 EN</span>
 <b>Ⅰ</b>
 </button>
-<button id="skill2Btn" class="action skill" data-act="skill2" aria-label="Тройной импульс" title="Тройной импульс">
-<small>ИМПУЛЬС</small>
+<button id="skill2Btn" class="action skill" data-act="skill2" aria-label="Тройной импульс, 20 выносливости">
+<small>ИМПУЛЬС</small><span class="actionMeta" id="skill2Meta">20 EN</span>
 <b>Ⅱ</b>
 </button>
-<button id="skill3Btn" class="action skill" data-act="skill3" aria-label="Второе дыхание" title="Второе дыхание">
-<small id="skill3Status">ДЫХАНИЕ</small>
+<button id="skill3Btn" class="action skill" data-act="skill3" aria-label="Второе дыхание, 20 выносливости, восстановление 8 секунд">
+<small>ДЫХАНИЕ</small><span class="actionMeta" id="skill3Meta">20 EN</span>
 <b>Ⅲ</b>
 </button>
-<button id="blockBtn" class="action block" data-act="block" aria-label="Блок" title="Блок">
+<button class="action block" data-act="block">
 <small>БЛОК</small>
 <b>◈</b>
 </button>
-<button id="dodgeBtn" class="action dodge" data-act="dodge" aria-label="Уклонение" title="Уклонение">
-<small id="dodgeStatus">УКЛОН</small>
+<button id="dodgeBtn" class="action dodge" data-act="dodge" aria-label="Уклонение, 24 выносливости">
+<small>УКЛОН</small><span class="actionMeta" id="dodgeMeta">24 EN</span>
 <b>↝</b>
 </button>
-<button id="attackBtn" class="action attack" data-act="attack" aria-label="Атака" title="Атака">
+<button class="action attack" data-act="attack">
 <small>АТАКА</small>
 <b>⚔</b>
 </button>
@@ -150,9 +146,9 @@
 </div>
 </div>
 </div>
-<script src="physics.js?v=3.7.0" defer></script>
-<script src="art.js?v=3.7.0" defer></script>
-<script src="game.js?v=3.7.0" defer>
+<script src="physics.js?v=3.7.1" defer></script>
+<script src="art.js?v=3.7.1" defer></script>
+<script src="game.js?v=3.7.1" defer>
 </script>
 <div id="perfMonitor" class="perfMonitor hidden" aria-live="polite">
   <div>

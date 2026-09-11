@@ -24,13 +24,8 @@
       "type": "image/png"
     }
   ],
-  "version": "3.7.0",
-  "description": "Aethernfall Mobile 2.5D Action RPG — offline-first",
+  "version": "3.7.1",
+  "description": "Aethernfall Mobile 2.5D Action RPG",
   "orientation": "any",
-  "lang": "ru",
-  "categories": [
-    "games",
-    "entertainment"
-  ],
-  "prefer_related_applications": false
+  "lang": "ru"
 }

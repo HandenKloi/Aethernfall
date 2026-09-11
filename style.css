@@ -8,7 +8,7 @@ html,body {
   background:#08100f;
   color:#eef4ef;
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif;
-  touch-action:none;
+  touch-action:pan-x pan-y pinch-zoom;
   user-select:none;
   -webkit-user-select:none;
   -webkit-touch-callout:none;
@@ -30,6 +30,7 @@ button {
 }
 #game {
   position:fixed;
+  touch-action:none;
   inset:0;
   width:100%;
   height:100%;
@@ -252,18 +253,6 @@ button:active {
 .use {
   border-color:rgba(228,199,112,.28);
 }
-#lookHint {
-  position:fixed;
-  z-index:8;
-  right:30px;
-  bottom:calc(276px + env(safe-area-inset-bottom));
-  color:rgba(238,244,239,.45);
-  font-size:9px;
-  max-width:175px;
-  text-align:right;
-  pointer-events:none;
-  opacity:.9;
-}
 #modal {
   position:fixed;
   z-index:40;
@@ -473,13 +462,6 @@ button:active {
 .modalBody {
   -webkit-overflow-scrolling:touch;
 }
-.versionMark {
-  position:fixed;
-  font:700 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
-  letter-spacing:.08em;
-  color:rgba(223,214,184,.55);
-  pointer-events:none;
-}
 .dialogueName {
   font-weight:800;
   color:#ebd9a0;
@@ -521,13 +503,6 @@ button:active {
 .netPill.offline {
   color:#df9d91;
   border-color:rgba(223,157,145,.22);
-}
-.buildLabel {
-  text-align:center;
-  color:#718179;
-  font-size:10px;
-  opacity:.72;
-  margin-bottom:7px;
 }
 /* 3.2.0 mobile layout: independent thumb zones and safe-area insets. */
 :root {
@@ -714,12 +689,6 @@ html,body {
   font-size:9px;
   z-index:7;
 }
-.versionMark {
-  left:calc(var(--left) + 14px);
-  top:calc(var(--top) + 209px);
-  font-size:9px;
-  z-index:7;
-}
 .perfPill {
   display:none!important;
 }
@@ -754,12 +723,12 @@ html,body {
 .modalBody {
   max-height:none;
   overflow:auto;
-  touch-action:pan-y;
+  touch-action:pan-y pinch-zoom;
   overscroll-behavior:contain;
   padding:16px;
 }
 .modalBody * {
-  touch-action:pan-y;
+  touch-action:pan-y pinch-zoom;
 }
 .modalBody button {
   touch-action:pan-y;
@@ -856,7 +825,7 @@ button:focus-visible {
   }
 }
 @media(orientation:landscape) and (max-height:520px) {
-  #questTracker,#resourceHud,.versionMark,.netPill,#minimapFrame {
+  #questTracker,#resourceHud,.netPill,#minimapFrame {
     display:none;
   }
   .heroPanel {
@@ -917,15 +886,6 @@ button:focus-visible {
 #questTracker { top:calc(var(--top) + 126px); padding:8px 10px; background:rgba(9,23,20,.34); }
 #minimapFrame { top:calc(var(--top) + 126px); }
 .netPill { top:calc(var(--top) + 220px); }
-.versionMark { top:calc(var(--top) + 246px); }
-#toast,.lootTicker { font-size:11px; font-weight:600; padding:6px 10px; background:none; border:0; border-radius:0; box-shadow:none; text-shadow:0 1px 3px #000,0 0 5px #000; backdrop-filter:none; -webkit-backdrop-filter:none; max-width:72%; }
-#toast { top:calc(var(--top) + 280px); }
-.lootTicker { top:calc(var(--top) + 300px); }
-@media(orientation:landscape) and (max-height:520px) {
-  #resourceHud { display:flex; top:calc(var(--top) + 84px); font-size:10px; }
-  #toast { top:calc(var(--top) + 123px); }
-  .lootTicker { top:calc(var(--top) + 145px); }
-}
 .shopWallet { color: #f0d486; font-size: 18px; padding: 4px 0 10px; }
 .shopList { display: grid; gap: 12px; }
 .shopList .card h3 { font-size: 16px; color: #eee1b9; }
@@ -943,57 +903,35 @@ button:focus-visible {
 .shopList .card .btn { clear: both; }
 .portrait svg { width: 100%; height: 100%; border-radius: inherit; }
 
-/* 3.7.0 combat feedback and accessibility controls. */
-.targetHud {
+
+/* 3.7.1 accessibility, save health and control presets. */
+.savePill {
   position:fixed;
-  z-index:9;
-  right:calc(var(--right) + 12px);
-  bottom:calc(var(--bottom) + 286px);
-  width:216px;
-  padding:8px 10px;
-  border-radius:13px;
-  pointer-events:none;
-  background:linear-gradient(160deg,rgba(35,31,29,.94),rgba(18,22,21,.94));
+  z-index:24;
+  left:calc(var(--left) + 14px);
+  top:calc(var(--top) + 246px);
+  max-width:min(360px,calc(100vw - var(--left) - var(--right) - 28px));
+  min-height:32px;
+  padding:6px 9px;
+  border:1px solid rgba(224,145,119,.38);
+  border-radius:9px;
+  background:rgba(74,31,29,.9);
+  color:#ffd0c3;
+  font-size:10px;
+  font-weight:700;
+  text-align:left;
 }
-.targetLine {
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  margin-bottom:6px;
-  font-size:11px;
-}
-.targetLine b { color:#f2dfad; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.targetLine span { color:#c9b6aa; font:700 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:nowrap; }
-.targetBar {
-  height:5px;
-  border-radius:999px;
-  overflow:hidden;
-  background:rgba(255,255,255,.08);
-}
-.targetBar span {
-  display:block;
-  height:100%;
-  width:100%;
-  border-radius:inherit;
-  background:linear-gradient(90deg,#873e42,#d97968);
-  transition:width .1s linear;
-}
-.action.cooldown { filter:saturate(.65) brightness(.78); }
-.action.cooldown small { color:#f0cf8d; font-variant-numeric:tabular-nums; }
-.leftHanded .joystick { left:auto; right:calc(var(--right) + 14px); }
-.leftHanded .actions { right:auto; left:calc(var(--left) + 12px); }
-.leftHanded .targetHud { right:auto; left:calc(var(--left) + 12px); }
+.saveWarningText { color:#ffc0b0; background:#421f1d; border:1px solid #b56d5e55; border-radius:10px; padding:10px; }
+.actionMeta { font-size:7px; line-height:1; color:#f0d58e; opacity:.92; }
+.action.skill { gap:1px; }
+.action.skill small { font-size:7px; max-width:48px; overflow:hidden; text-overflow:ellipsis; }
+body.left-handed .joystick { left:auto; right:calc(var(--right) + 14px); }
+body.left-handed .actions { right:auto; left:calc(var(--left) + 12px); }
 @media(max-width:390px) and (orientation:portrait) {
-  .leftHanded .joystick { right:calc(var(--right) + 10px); }
-  .leftHanded .actions { left:calc(var(--left) + 8px); }
-  .targetHud { width:200px; }
+  body.left-handed .actions { right:auto; left:calc(var(--left) + 8px); }
 }
 @media(orientation:landscape) and (max-height:520px) {
-  .targetHud { display:none!important; }
-  .leftHanded .joystick { right:calc(var(--right) + 12px); }
-  .leftHanded .actions { left:calc(var(--left) + 12px); }
-}
-@media(prefers-reduced-motion:reduce) {
-  .targetBar span { transition:none; }
+  .savePill { top:calc(var(--top) + 122px); }
+  body.left-handed .joystick { left:auto; right:calc(var(--right) + 14px); }
+  body.left-handed .actions { right:auto; left:calc(var(--left) + 12px); }
 }

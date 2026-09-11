@@ -16,9 +16,6 @@
         buckets.get(key).push(o);
       }
     }
-    function removeSource(source) {
-      set(obstacles.filter(o => o.source !== source));
-    }
     function obstacleAt(x, y, r, ignore = null) {
       if (x < r || y < r || x > width - r || y > height - r) return {
         x,
@@ -190,7 +187,6 @@
     }
     return {
       set,
-      removeSource,
       move,
       relocate,
       chase,

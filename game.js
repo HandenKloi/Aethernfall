@@ -3,7 +3,14 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '3.7.0';
+  const BUILD_VERSION = '3.7.1';
+  const SAVE_SCHEMA = 3;
+  const BASE_STATS = Object.freeze({ startLevel: 6, damage: 32, maxHp: 240, maxStamina: 100, speed: 205, damagePerLevel: 3, hpPerLevel: 18 });
+  const MAX_UPGRADE_RANK = 5;
+  const BLOCK_STAMINA_DRAIN = 12;
+  const SECOND_WIND_COOLDOWN = 8;
+  const SUPPLY_COOLDOWN = 1.2;
+  const ATTACK_BUFFER_WINDOW = .13;
   const art = window.AetherArt;
   const GEAR = {
     emptyHand: {
@@ -44,7 +51,7 @@
       slot: 'armor',
       name: 'Пластинчатая броня стража',
       health: 25,
-      blockDrain: .7,
+      blockDrainMultiplier: .7,
       icon: 'armor'
     }
   };
@@ -129,14 +136,15 @@
     perfPillFps: $('perfPillFps'),
     perfPillMs: $('perfPillMs'),
     netPill: $('netPill'),
-    targetHud: $('targetHud'),
-    targetName: $('targetName'),
-    targetHpText: $('targetHpText'),
-    targetHpFill: $('targetHpFill'),
+    savePill: $('savePill'),
+    skill1Btn: $('skill1Btn'),
+    skill2Btn: $('skill2Btn'),
     skill3Btn: $('skill3Btn'),
-    skill3Status: $('skill3Status'),
+    skill1Meta: $('skill1Meta'),
+    skill2Meta: $('skill2Meta'),
+    skill3Meta: $('skill3Meta'),
     dodgeBtn: $('dodgeBtn'),
-    dodgeStatus: $('dodgeStatus')
+    dodgeMeta: $('dodgeMeta')
   };
 
   // Modern mobile browsers share the Pointer Events input path.
@@ -153,7 +161,6 @@
   };
   const QUALITY = {
     low: {
-      ambient: 18,
       particles: 12,
       textureScale: .44,
       shadow: .06,
@@ -161,7 +168,6 @@
       detail: 0
     },
     medium: {
-      ambient: 28,
       particles: 20,
       textureScale: .60,
       shadow: .16,
@@ -169,7 +175,6 @@
       detail: 1
     },
     high: {
-      ambient: 40,
       particles: 30,
       textureScale: .76,
       shadow: .26,
@@ -177,7 +182,6 @@
       detail: 2
     },
     'very-high': {
-      ambient: 54,
       particles: 42,
       textureScale: .88,
       shadow: .36,
@@ -187,10 +191,11 @@
   };
   const FPS = [30, 40, 45, 60];
   const detected = device.ios ? 'medium' : device.ram >= 8 && device.cores >= 8 ? 'high' : device.ram >= 6 && device.cores >= 6 ? 'high' : device.ram >= 4 && device.cores >= 4 ? 'medium' : 'low';
-  const testStorage = new Map();
+  const testStorage = new Map(Object.entries(globalThis.__AETHER_TEST_INITIAL_STORAGE__ || {}).map(([key, value]) => [key, String(value)]));
   const storage = {
     getItem(key) {
       try {
+        if (globalThis.__AETHER_TEST_STORAGE_HOOKS__?.failGet) throw Error('test storage read failure');
         return globalThis.__AETHER_TEST__ ? testStorage.get(key) ?? null : localStorage.getItem(key);
       } catch {
         return null;
@@ -198,17 +203,37 @@
     },
     setItem(key, value) {
       try {
+        const fail = globalThis.__AETHER_TEST_STORAGE_HOOKS__?.failSet;
+        if (fail === true || typeof fail === 'function' && fail(key, value)) throw Error('test storage write failure');
         if (globalThis.__AETHER_TEST__) testStorage.set(key, String(value));else localStorage.setItem(key, value);
         return true;
       } catch {
         return false;
+      }
+    },
+    removeItem(key) {
+      try {
+        if (globalThis.__AETHER_TEST_STORAGE_HOOKS__?.failRemove) throw Error('test storage remove failure');
+        if (globalThis.__AETHER_TEST__) testStorage.delete(key);else localStorage.removeItem(key);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    keys() {
+      try {
+        if (globalThis.__AETHER_TEST__) return [...testStorage.keys()];
+        return Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)).filter(Boolean);
+      } catch {
+        return [];
       }
     }
   };
   let settings = {
     quality: storage.getItem('aef_quality') || detected,
     fps: Number(storage.getItem('aef_fps') || 60),
-    leftHanded: storage.getItem('aef_left_handed') === '1'
+    controls: storage.getItem('aef_controls') === 'left' ? 'left' : 'right',
+    questCollapsed: storage.getItem('aef_quest_collapsed') !== '0'
   };
   if (!Object.hasOwn(QUALITY, settings.quality)) settings.quality = detected;
   if (!FPS.includes(settings.fps)) settings.fps = 60;
@@ -243,6 +268,7 @@
   };
   const SAVE = 'aethernfall_save_v30';
   const SAVE_BACKUP = SAVE + '_backup';
+  const RECOVERY_PREFIX = SAVE + '_recovery_';
   const LEGACY_SAVES = ['aethernfall_save_v27', 'aethernfall_save_v21', 'aethernfall_save_v11'];
   const zones = {
     mistwood: {
@@ -343,6 +369,9 @@
     dir: 0,
     speed: 205,
     attackCd: 0,
+    attackQueuedUntil: 0,
+    secondWindCd: 0,
+    supplyCd: 0,
     dodgeUntil: 0,
     dodgeCd: 0,
     blocking: false,
@@ -367,6 +396,13 @@
     supplies: {
       potion: 0,
       tonic: 0
+    },
+    progression: {
+      forgeRank: 0,
+      vitalityRank: 0,
+      legacyDamageBonus: 0,
+      legacyHpBonus: 0,
+      completedCycles: 0
     },
     quests: {
       mist: {
@@ -395,11 +431,7 @@
     patterns = {},
     interactionLock = 0;
   let lootDrops = [],
-    floatingTexts = [],
-    focusedEnemy = null,
-    focusUntil = 0,
-    healSkillReadyAt = 0,
-    attackBuffered = false;
+    floatingTexts = [];
   const LOOT_TABLE = {
     common: [{
       id: 'coin',
@@ -420,12 +452,17 @@
     guardian: [{
       id: 'coin',
       label: 'Монеты',
-      chance: .70,
+      chance: .55,
       count: 35
     }, {
       id: 'ore',
       label: 'Серебряная руда',
-      chance: .30,
+      chance: .25,
+      count: 1
+    }, {
+      id: 'guardianToken',
+      label: 'Знак стража',
+      chance: .20,
       count: 1
     }]
   };
@@ -436,6 +473,7 @@
     nextUIAt = 0,
     nextSaveAt = 15000,
     atmosphereGradient = null;
+  let blockPointer = null;
   const joy = {
       id: null,
       x: 0,
@@ -478,15 +516,17 @@
   }
   function resetInput() {
     resetJoy();
-    attackBuffered = false;
     player.dashRemaining = 0;
     player.dodgeUntil = 0;
+    player.attackQueuedUntil = 0;
     look.ids.clear();
+    blockPointer = null;
     player.blocking = false;
     document.querySelectorAll('.pressed').forEach(el => el.classList.remove('pressed'));
   }
   function suspend() {
     resetInput();
+    if (suspended) return;
     suspended = true;
     cancelAnimationFrame(rafId);
     rafId = 0;
@@ -551,7 +591,10 @@
       });
       button.addEventListener('click', () => {
         if (!reg.waiting) return;
-        if (!save()) {
+        // A newer-schema save is evidence that a newer client already wrote progress.
+        // Do not let the old client overwrite it, but also do not deadlock the update
+        // by requiring a save operation that is intentionally blocked.
+        if (saveBlockedReason !== 'newer' && !save()) {
           toast('Обновление отложено: прогресс не сохранён');
           return;
         }
@@ -607,141 +650,352 @@
   addEventListener('offline', updateNetworkStatus, {
     passive: true
   });
-  function migrateLegacySave() {
-    if (storage.getItem(SAVE)) return;
-    for (const key of LEGACY_SAVES) {
-      const raw = storage.getItem(key);
-      if (!raw) continue;
-      try {
-        if (storage.setItem(SAVE, raw)) return;
-      } catch {}
-    }
-  }
-  migrateLegacySave();
   const defaults = JSON.parse(JSON.stringify(player));
-  let saveEnvelope = {},
-    saveBlocked = false,
-    restoredPosition = false;
+  const SESSION_ID = globalThis.crypto?.randomUUID?.() || `session-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  let saveRevision = 0,
+    saveDirty = false,
+    saveBlockedReason = '',
+    restoredPosition = false,
+    pendingLoadNotice = '';
   function object(value) {
     return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   }
   function finite(value, fallback, min = 0, max = 1e9) {
     return typeof value === 'number' && Number.isFinite(value) ? clamp(value, min, max) : fallback;
   }
-  function save() {
-    if (saveBlocked) return false;
-    const data = {
-      ...saveEnvelope,
-      schemaVersion: 2,
-      version: BUILD_VERSION,
-      zoneId,
-      player: {
-        ...object(saveEnvelope.player),
-        ...player,
-        inv: {
-          ...object(object(saveEnvelope.player).inv),
-          ...player.inv
-        },
-        attackCd: 0,
-        dodgeCd: 0,
-        dodgeUntil: 0,
-        blocking: false,
-        combo: 0,
-        comboTimer: 0
-      },
-      settings
-    };
-    const raw = JSON.stringify(data),
-      previous = storage.getItem(SAVE);
-    if (previous && previous !== raw) {
-      try {
-        const parsed = JSON.parse(previous);
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) storage.setItem(SAVE_BACKUP, previous);
-      } catch {}
-    }
-    return storage.setItem(SAVE, raw);
+  function finiteSigned(value, fallback = 0, min = -1e9, max = 1e9) {
+    return typeof value === 'number' && Number.isFinite(value) ? clamp(value, min, max) : fallback;
   }
-  function load() {
-    const primary = storage.getItem(SAVE),
-      backup = storage.getItem(SAVE_BACKUP),
-      legacy = LEGACY_SAVES.map(key => storage.getItem(key)).find(Boolean),
-      candidates = [[primary, true], [backup, false], [legacy, false]].filter(([raw]) => !!raw);
-    if (!candidates.length) return;
-    let primaryDamaged = false;
-    for (const [raw, isPrimary] of candidates) try {
-      const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw Error('Invalid save');
-      saveEnvelope = parsed;
-      if (Number(parsed.schemaVersion) > 2) saveBlocked = true;
-      const saved = object(parsed.player);
-      zoneId = Object.hasOwn(zones, parsed.zoneId) ? parsed.zoneId : zoneId;
-      for (const [key, value] of Object.entries(defaults)) if (typeof value === 'number') player[key] = finite(saved[key], value);
-      for (const key of ['maxHp', 'maxStamina', 'xpNeed', 'level', 'speed', 'damage']) player[key] = Math.max(1, player[key]);
-      player.hp = clamp(player.hp, 1, player.maxHp);
-      player.stamina = clamp(player.stamina, 0, player.maxStamina);
-      player.x = finite(saved.x, zones[zoneId].camp.x, 70, WORLD.w - 70);
-      player.y = finite(saved.y, zones[zoneId].camp.y, 70, WORLD.h - 70);
-      player.dir = finite(saved.dir, 0, -Math.PI * 2, Math.PI * 2);
-      for (const key of ['wood', 'ore', 'herb', 'guardianToken', 'emberShard']) player.inv[key] = Math.floor(finite(object(saved.inv)[key], 0));
-      for (const key of ['weapon', 'armor']) {
-        const value = object(saved.equipment)[key];
-        if (typeof value === 'string') player.equipment[key] = value.slice(0, 160);
-      }
-      player.shopOwned = {};
-      for (const id of ['dawnBlade', 'wardenArmor', 'buckler']) {
-        if (object(saved.shopOwned)[id] === true) player.shopOwned[id] = true;
-      }
-      restoreEquipment(saved);
-      for (const [key, fields] of Object.entries(defaults.quests)) for (const field of Object.keys(fields)) player.quests[key][field] = Math.floor(finite(object(object(saved.quests)[key])[field], 0, 0, field === 'step' ? 3 : 1e9));
-      const config = object(parsed.settings);
-      if (Object.hasOwn(QUALITY, config.quality)) settings.quality = config.quality;
-      if (FPS.includes(Number(config.fps))) settings.fps = Number(config.fps);
-      if (typeof config.leftHanded === 'boolean') settings.leftHanded = config.leftHanded;
-      player.attackCd = player.dodgeCd = player.dodgeUntil = player.combo = player.comboTimer = 0;
-      healSkillReadyAt = 0;
-      attackBuffered = false;
-      player.blocking = false;
-      restoredPosition = true;
-      if (primaryDamaged && !isPrimary) storage.setItem(SAVE, raw);
-      return;
+  function saveStatusText() {
+    if (saveBlockedReason === 'newer') return 'Сохранение создано более новой версией игры';
+    if (saveBlockedReason === 'conflict') return 'Открыта более новая игровая сессия · перезагрузите игру';
+    if (saveDirty) return 'Прогресс пока не сохраняется · повторная попытка автоматически';
+    return '';
+  }
+  function refreshSaveHealth() {
+    if (!ui.savePill) return;
+    const text = saveStatusText();
+    ui.savePill.classList.toggle('hidden', !text);
+    setText(ui.savePill, text);
+    ui.savePill.title = saveBlockedReason === 'conflict' ? 'Нажмите, чтобы перезагрузить актуальное сохранение' : text;
+  }
+  function markSaveFailure(reason = '') {
+    saveDirty = true;
+    if (reason) saveBlockedReason = reason;
+    refreshSaveHealth();
+  }
+  function clearSaveFailure() {
+    saveDirty = false;
+    if (saveBlockedReason !== 'newer' && saveBlockedReason !== 'conflict') saveBlockedReason = '';
+    refreshSaveHealth();
+  }
+  function validSaveShape(data, schema) {
+    if (!data || typeof data !== 'object' || Array.isArray(data) || !data.player || typeof data.player !== 'object' || Array.isArray(data.player)) return false;
+    const p = data.player;
+    const finiteFields = (value, fields) => fields.every(key => typeof value[key] === 'number' && Number.isFinite(value[key]));
+    const stringFields = (value, fields) => fields.every(key => typeof value[key] === 'string');
+    const booleanFields = (value, fields) => fields.every(key => typeof value[key] === 'boolean');
+    if (schema >= 3) {
+      const meta = object(data.meta), inv = object(p.inv), shopOwned = object(p.shopOwned), loadout = object(p.loadout), supplies = object(p.supplies), progression = object(p.progression), quests = object(p.quests), config = object(data.settings);
+      if (!finiteFields(p, ['x', 'y', 'hp', 'stamina', 'level', 'xp', 'xpNeed', 'gold', 'dir'])) return false;
+      if (!finiteFields(meta, ['revision', 'updatedAt']) || typeof meta.sessionId !== 'string' || !meta.sessionId) return false;
+      if (!Object.hasOwn(zones, data.zoneId)) return false;
+      if (!finiteFields(inv, ['wood', 'ore', 'herb', 'guardianToken', 'emberShard'])) return false;
+      if (!booleanFields(shopOwned, ['dawnBlade', 'wardenArmor', 'buckler'])) return false;
+      if (!stringFields(loadout, ['weapon', 'armor', 'offhand', 'quick'])) return false;
+      if (!finiteFields(supplies, ['potion', 'tonic'])) return false;
+      if (!finiteFields(progression, ['forgeRank', 'vitalityRank', 'legacyDamageBonus', 'legacyHpBonus', 'completedCycles'])) return false;
+      if (!finiteFields(object(quests.mist), ['step', 'herb', 'kills']) || !finiteFields(object(quests.stone), ['step', 'ore', 'guardian']) || !finiteFields(object(quests.ash), ['step', 'wood', 'kills'])) return false;
+      if (typeof config.quality !== 'string' || typeof config.fps !== 'number' || !Number.isFinite(config.fps) || typeof config.controls !== 'string' || typeof config.questCollapsed !== 'boolean') return false;
+      return true;
+    }
+    // Historical saves were less explicit, but these core values have existed throughout
+    // the supported legacy line and distinguish a real save from syntactically valid junk.
+    return finiteFields(p, ['x', 'y', 'hp', 'maxHp', 'stamina', 'level', 'gold', 'damage']) && object(p.inv) === p.inv && object(p.quests) === p.quests;
+  }
+  function parseSave(raw) {
+    if (!raw || typeof raw !== 'string') return { ok: false, reason: 'empty' };
+    try {
+      const data = JSON.parse(raw);
+      if (!data || typeof data !== 'object' || Array.isArray(data)) return { ok: false, reason: 'shape' };
+      const schema = Number.isFinite(Number(data.schemaVersion)) ? Number(data.schemaVersion) : 1;
+      if (schema > SAVE_SCHEMA) return { ok: false, newer: true, schema };
+      if (!validSaveShape(data, schema)) return { ok: false, reason: 'shape' };
+      return { ok: true, data, schema };
     } catch {
-      if (isPrimary) {
-        primaryDamaged = true;
-        // Preserve the exact damaged bytes before trying the last known-good backup.
-        if (!storage.setItem(SAVE + '_recovery_' + Date.now(), raw)) saveBlocked = true;
-      }
+      return { ok: false, reason: 'json' };
     }
   }
-  load();
+  let recoveryNonce = 0;
+  function preserveRecovery(raw) {
+    if (!raw) return true;
+    const copies = storage.keys().filter(k => k.startsWith(RECOVERY_PREFIX)).sort();
+    if (copies.some(key => storage.getItem(key) === raw)) return true;
+    const key = RECOVERY_PREFIX + Date.now() + '_' + recoveryNonce++;
+    if (!storage.setItem(key, raw)) return false;
+    copies.push(key);
+    copies.sort();
+    while (copies.length > 3) storage.removeItem(copies.shift());
+    return true;
+  }
   function ownsGear(id) {
     return id === 'emptyHand' || id === 'starterBlade' || id === 'starterArmor' || player.shopOwned[id] === true || id === 'guardianArmor' && player.inv.guardianToken > 0;
   }
+  function levelSteps() {
+    return Math.max(0, Math.floor(player.level) - BASE_STATS.startLevel);
+  }
+  function recomputeDerivedStats() {
+    const weapon = GEAR[player.loadout.weapon] || GEAR.starterBlade,
+      armor = GEAR[player.loadout.armor] || GEAR.starterArmor,
+      progression = player.progression;
+    player.damage = Math.max(1, BASE_STATS.damage + levelSteps() * BASE_STATS.damagePerLevel + progression.forgeRank * 5 + progression.legacyDamageBonus + (weapon.damage || 0));
+    player.maxHp = Math.max(1, BASE_STATS.maxHp + levelSteps() * BASE_STATS.hpPerLevel + progression.vitalityRank * 12 + progression.legacyHpBonus + (armor.health || 0));
+    player.maxStamina = BASE_STATS.maxStamina;
+    player.speed = BASE_STATS.speed;
+    player.hp = Math.min(player.hp, player.maxHp);
+    player.equipment.weapon = player.loadout.weapon === 'starterBlade' && progression.forgeRank > 0 ? 'Закалённый меч следопыта' : weapon.name;
+    player.equipment.armor = armor.name;
+  }
   function restoreEquipment(saved) {
     const previous = object(saved.loadout);
+    const savedEquipment = object(saved.equipment);
     const weapon = player.shopOwned.dawnBlade ? 'dawnBlade' : 'starterBlade';
-    const armor = player.equipment.armor === GEAR.guardianArmor.name && player.inv.guardianToken > 0 ? 'guardianArmor' : player.shopOwned.wardenArmor ? 'wardenArmor' : 'starterArmor';
-    player.loadout = {
-      weapon,
-      armor,
-      offhand: 'emptyHand',
-      quick: 'potion'
-    };
+    const armor = savedEquipment.armor === GEAR.guardianArmor.name && player.inv.guardianToken > 0 ? 'guardianArmor' : player.shopOwned.wardenArmor ? 'wardenArmor' : 'starterArmor';
+    player.loadout = { weapon, armor, offhand: 'emptyHand', quick: 'potion' };
     for (const slot of ['weapon', 'armor', 'offhand']) if (Object.hasOwn(GEAR, previous[slot]) && GEAR[previous[slot]].slot === slot && ownsGear(previous[slot])) player.loadout[slot] = previous[slot];
     if (previous.quick === '' || Object.hasOwn(SUPPLIES, previous.quick)) player.loadout.quick = previous.quick;
+  }
+  function inferLegacyProgression(saved) {
+    const weaponBonus = GEAR[player.loadout.weapon]?.damage || 0,
+      armorBonus = GEAR[player.loadout.armor]?.health || 0,
+      baseDamage = BASE_STATS.damage + levelSteps() * BASE_STATS.damagePerLevel + weaponBonus,
+      baseHp = BASE_STATS.maxHp + levelSteps() * BASE_STATS.hpPerLevel + armorBonus,
+      oldDamage = finiteSigned(saved.damage, baseDamage, 1, 1e9),
+      oldMaxHp = finiteSigned(saved.maxHp, baseHp, 1, 1e9),
+      damageExtra = oldDamage - baseDamage,
+      hpExtra = oldMaxHp - baseHp,
+      forgeRank = clamp(Math.floor(Math.max(0, damageExtra) / 5), 0, MAX_UPGRADE_RANK),
+      vitalityRank = clamp(Math.floor(Math.max(0, hpExtra) / 12), 0, MAX_UPGRADE_RANK);
+    player.progression = {
+      forgeRank,
+      vitalityRank,
+      legacyDamageBonus: damageExtra - forgeRank * 5,
+      legacyHpBonus: hpExtra - vitalityRank * 12,
+      completedCycles: 0
+    };
+  }
+  function restoreProgression(saved, schema) {
+    if (schema >= 3) {
+      const p = object(saved.progression);
+      player.progression = {
+        forgeRank: Math.floor(finite(p.forgeRank, 0, 0, MAX_UPGRADE_RANK)),
+        vitalityRank: Math.floor(finite(p.vitalityRank, 0, 0, MAX_UPGRADE_RANK)),
+        legacyDamageBonus: finiteSigned(p.legacyDamageBonus, 0),
+        legacyHpBonus: finiteSigned(p.legacyHpBonus, 0),
+        completedCycles: Math.floor(finite(p.completedCycles, 0, 0, 1e9))
+      };
+    } else inferLegacyProgression(saved);
+  }
+  function applySaveData(parsed, schema) {
+    const saved = object(parsed.player);
+    zoneId = Object.hasOwn(zones, parsed.zoneId) ? parsed.zoneId : 'mistwood';
+    player.level = Math.max(1, Math.floor(finite(saved.level, defaults.level, 1, 1e6)));
+    player.xp = finite(saved.xp, defaults.xp, 0, 1e12);
+    player.xpNeed = Math.max(1, finite(saved.xpNeed, defaults.xpNeed, 1, 1e12));
+    player.gold = Math.floor(finite(saved.gold, defaults.gold, 0, 1e12));
+    player.x = finite(saved.x, zones[zoneId].camp.x, 70, WORLD.w - 70);
+    player.y = finite(saved.y, zones[zoneId].camp.y, 70, WORLD.h - 70);
+    player.dir = finiteSigned(saved.dir, 0, -Math.PI * 2, Math.PI * 2);
+    player.inv = {};
+    for (const key of ['wood', 'ore', 'herb', 'guardianToken', 'emberShard']) player.inv[key] = Math.floor(finite(object(saved.inv)[key], 0, 0, 1e9));
+    player.shopOwned = {};
+    for (const id of ['dawnBlade', 'wardenArmor', 'buckler']) if (object(saved.shopOwned)[id] === true) player.shopOwned[id] = true;
+    restoreEquipment(saved);
     player.supplies = {};
     for (const id of Object.keys(SUPPLIES)) player.supplies[id] = Math.floor(finite(object(saved.supplies)[id], 0, 0, 9999));
-    for (const slot of ['weapon', 'armor']) if (player.loadout[slot] !== 'starterBlade' && player.loadout[slot] !== 'starterArmor') player.equipment[slot] = GEAR[player.loadout[slot]].name;
-    player.damage = Math.max(1 + (GEAR[player.loadout.weapon].damage || 0), player.damage);
-    player.maxHp = Math.max(1 + (GEAR[player.loadout.armor].health || 0), player.maxHp);
+    for (const [key, fields] of Object.entries(defaults.quests)) {
+      player.quests[key] = {};
+      for (const field of Object.keys(fields)) player.quests[key][field] = Math.floor(finite(object(object(saved.quests)[key])[field], 0, 0, field === 'step' ? 3 : 1e9));
+    }
+    // A 3.6.2 player already past the Stone guardian cannot be made to repeat the
+    // completed objective merely because the old reward used RNG. Grant only when
+    // the save itself proves that objective was completed in the current route.
+    if (schema < 3 && player.inv.guardianToken === 0 && (player.quests.stone.step >= 3 || zoneId === 'ashfield')) player.inv.guardianToken = 1;
+    restoreProgression(saved, schema);
+    player.hp = finite(saved.hp, defaults.hp, 0, 1e12);
+    player.stamina = finite(saved.stamina, defaults.stamina, 0, BASE_STATS.maxStamina);
+    recomputeDerivedStats();
+    player.hp = clamp(player.hp, 1, player.maxHp);
+    player.stamina = clamp(player.stamina, 0, player.maxStamina);
+    const config = object(parsed.settings);
+    if (Object.hasOwn(QUALITY, config.quality)) settings.quality = config.quality;
+    if (FPS.includes(Number(config.fps))) settings.fps = Number(config.fps);
+    settings.controls = config.controls === 'left' ? 'left' : 'right';
+    settings.questCollapsed = config.questCollapsed !== false;
+    player.attackCd = player.attackQueuedUntil = player.secondWindCd = player.supplyCd = player.dodgeCd = player.dodgeUntil = player.combo = player.comboTimer = 0;
+    player.dashRemaining = 0;
+    player.blocking = false;
+    saveRevision = Math.floor(finite(object(parsed.meta).revision, 0, 0, Number.MAX_SAFE_INTEGER));
+    restoredPosition = true;
   }
+  function serializeSave(revision) {
+    return {
+      schemaVersion: SAVE_SCHEMA,
+      version: BUILD_VERSION,
+      meta: { revision, updatedAt: Date.now(), sessionId: SESSION_ID },
+      zoneId,
+      player: {
+        x: player.x,
+        y: player.y,
+        hp: player.hp,
+        stamina: player.stamina,
+        level: player.level,
+        xp: player.xp,
+        xpNeed: player.xpNeed,
+        gold: player.gold,
+        dir: player.dir,
+        inv: {
+          wood: player.inv.wood || 0,
+          ore: player.inv.ore || 0,
+          herb: player.inv.herb || 0,
+          guardianToken: player.inv.guardianToken || 0,
+          emberShard: player.inv.emberShard || 0
+        },
+        shopOwned: {
+          dawnBlade: player.shopOwned.dawnBlade === true,
+          wardenArmor: player.shopOwned.wardenArmor === true,
+          buckler: player.shopOwned.buckler === true
+        },
+        loadout: {
+          weapon: player.loadout.weapon,
+          armor: player.loadout.armor,
+          offhand: player.loadout.offhand,
+          quick: player.loadout.quick
+        },
+        supplies: {
+          potion: player.supplies.potion || 0,
+          tonic: player.supplies.tonic || 0
+        },
+        progression: {
+          forgeRank: player.progression.forgeRank,
+          vitalityRank: player.progression.vitalityRank,
+          legacyDamageBonus: player.progression.legacyDamageBonus,
+          legacyHpBonus: player.progression.legacyHpBonus,
+          completedCycles: player.progression.completedCycles
+        },
+        quests: {
+          mist: { step: player.quests.mist.step, herb: player.quests.mist.herb, kills: player.quests.mist.kills },
+          stone: { step: player.quests.stone.step, ore: player.quests.stone.ore, guardian: player.quests.stone.guardian },
+          ash: { step: player.quests.ash.step, wood: player.quests.ash.wood, kills: player.quests.ash.kills }
+        }
+      },
+      settings: {
+        quality: settings.quality,
+        fps: settings.fps,
+        controls: settings.controls,
+        questCollapsed: settings.questCollapsed
+      }
+    };
+  }
+  function save() {
+    if (saveBlockedReason === 'newer' || saveBlockedReason === 'conflict') {
+      markSaveFailure(saveBlockedReason);
+      return false;
+    }
+    const currentRaw = storage.getItem(SAVE);
+    const current = parseSave(currentRaw);
+    if (current.newer) {
+      markSaveFailure('newer');
+      return false;
+    }
+    if (currentRaw && !current.ok && !preserveRecovery(currentRaw)) {
+      markSaveFailure();
+      return false;
+    }
+    const currentMeta = object(current.data?.meta);
+    const currentRevision = current.ok ? Math.floor(finite(currentMeta.revision, 0, 0, Number.MAX_SAFE_INTEGER)) : 0;
+    const currentSession = typeof currentMeta.sessionId === 'string' ? currentMeta.sessionId : '';
+    if (current.ok && currentRevision > saveRevision && currentSession && currentSession !== SESSION_ID) {
+      markSaveFailure('conflict');
+      return false;
+    }
+    const nextRevision = Math.max(saveRevision, currentRevision) + 1;
+    const nextRaw = JSON.stringify(serializeSave(nextRevision));
+    if (current.ok && currentRaw && currentRaw !== nextRaw && !storage.setItem(SAVE_BACKUP, currentRaw)) {
+      markSaveFailure();
+      return false;
+    }
+    if (!storage.setItem(SAVE, nextRaw)) {
+      markSaveFailure();
+      return false;
+    }
+    saveRevision = nextRevision;
+    clearSaveFailure();
+    return true;
+  }
+  function load() {
+    saveBlockedReason = '';
+    saveDirty = false;
+    pendingLoadNotice = '';
+    const primaryRaw = storage.getItem(SAVE);
+    if (primaryRaw) {
+      const primary = parseSave(primaryRaw);
+      if (primary.newer) {
+        saveBlockedReason = 'newer';
+        saveDirty = true;
+        refreshSaveHealth();
+        return false;
+      }
+      if (primary.ok) {
+        applySaveData(primary.data, primary.schema);
+        refreshSaveHealth();
+        return true;
+      }
+      if (!preserveRecovery(primaryRaw)) markSaveFailure();
+    }
+    const backupRaw = storage.getItem(SAVE_BACKUP);
+    const backup = parseSave(backupRaw);
+    if (backup.newer) {
+      saveBlockedReason = 'newer';
+      saveDirty = true;
+      refreshSaveHealth();
+      return false;
+    }
+    if (backup.ok) {
+      applySaveData(backup.data, backup.schema);
+      saveDirty = true;
+      pendingLoadNotice = 'Восстановлена резервная копия прогресса';
+      refreshSaveHealth();
+      return true;
+    }
+    for (const key of LEGACY_SAVES) {
+      const raw = storage.getItem(key);
+      const legacy = parseSave(raw);
+      if (!legacy.ok) continue;
+      applySaveData(legacy.data, legacy.schema);
+      saveDirty = true;
+      pendingLoadNotice = 'Старое сохранение подготовлено к обновлению';
+      refreshSaveHealth();
+      return true;
+    }
+    refreshSaveHealth();
+    return false;
+  }
+  load();
+  addEventListener('storage', event => {
+    if (event.key !== SAVE || !event.newValue) return;
+    const incoming = parseSave(event.newValue);
+    if (!incoming.ok) return;
+    const meta = object(incoming.data.meta),
+      revision = Math.floor(finite(meta.revision, 0, 0, Number.MAX_SAFE_INTEGER));
+    if (revision > saveRevision && meta.sessionId && meta.sessionId !== SESSION_ID) markSaveFailure('conflict');
+  });
   function switchGear(id) {
-    const next = GEAR[id],
-      old = GEAR[player.loadout[next.slot]];
-    player.damage += (next.damage || 0) - (old.damage || 0);
-    player.maxHp += (next.health || 0) - (old.health || 0);
-    player.hp = Math.min(player.hp, player.maxHp);
+    const next = GEAR[id];
+    if (!next) return false;
     player.loadout[next.slot] = id;
-    player.equipment[next.slot] = next.name;
+    recomputeDerivedStats();
+    return true;
   }
   function equipmentTransaction(change) {
     const before = JSON.parse(JSON.stringify(player));
@@ -756,6 +1010,7 @@
   }
   function equipItem(id) {
     if (ui.modal.classList.contains('hidden') || !Object.hasOwn(GEAR, id) || !ownsGear(id)) return false;
+    if (isInCombat()) { toast('Недоступно во время боя'); return false; }
     if (!equipmentTransaction(() => switchGear(id))) return false;
     openEquipment();
     toast('Надето: ' + GEAR[id].name);
@@ -763,6 +1018,7 @@
   }
   function selectSupply(id) {
     if (ui.modal.classList.contains('hidden') || id !== '' && !Object.hasOwn(SUPPLIES, id)) return false;
+    if (isInCombat()) { toast('Недоступно во время боя'); return false; }
     if (!equipmentTransaction(() => player.loadout.quick = id)) return false;
     openEquipment();
     return true;
@@ -775,6 +1031,10 @@
       toast('Нет расходника: выберите его в экипировке');
       return false;
     }
+    if (player.supplyCd > time) {
+      toast(`Расходник: ${(player.supplyCd - time).toFixed(1)} с`);
+      return false;
+    }
     if (supply.hp && player.hp >= player.maxHp || supply.stamina && player.stamina >= player.maxStamina) {
       toast('Восстановление не требуется');
       return false;
@@ -784,21 +1044,49 @@
       player.hp = Math.min(player.maxHp, player.hp + supply.hp);
       player.stamina = Math.min(player.maxStamina, player.stamina + supply.stamina);
     })) return false;
+    cancelBlock();
+    player.supplyCd = time + SUPPLY_COOLDOWN;
     animate(player, 'drink', .65);
     burst(player.x, player.y, '#92dcc3', 12, 65);
     toast(supply.name);
     return true;
   }
+  function statSources() {
+    const steps = levelSteps(),
+      weapon = GEAR[player.loadout.weapon] || GEAR.starterBlade,
+      armor = GEAR[player.loadout.armor] || GEAR.starterArmor;
+    return {
+      damage: { base: BASE_STATS.damage, level: steps * BASE_STATS.damagePerLevel, permanent: player.progression.forgeRank * 5 + player.progression.legacyDamageBonus, gear: weapon.damage || 0, total: player.damage },
+      hp: { base: BASE_STATS.maxHp, level: steps * BASE_STATS.hpPerLevel, permanent: player.progression.vitalityRank * 12 + player.progression.legacyHpBonus, gear: armor.health || 0, total: player.maxHp }
+    };
+  }
+  function signed(n) {
+    return n > 0 ? `+${n}` : String(n);
+  }
   function openEquipment() {
+    const inCombat = isInCombat();
+    const currentWeapon = GEAR[player.loadout.weapon] || GEAR.starterBlade,
+      currentArmor = GEAR[player.loadout.armor] || GEAR.starterArmor;
     const gearCards = Object.entries(GEAR).map(([id, item]) => {
       const owned = ownsGear(id),
         worn = player.loadout[item.slot] === id;
-      const baseDamage = player.damage - (GEAR[player.loadout.weapon].damage || 0);
-      const baseHp = player.maxHp - (GEAR[player.loadout.armor].health || 0);
-      const stats = item.slot === 'offhand' ? id === 'buckler' ? 'Блок: снижение входящего урона на 82% (с округлением). Не повышает HP.' : 'Блок мечом: снижение входящего урона на 74% (с округлением).' : item.slot === 'weapon' ? `Урон с оружием: ${baseDamage + (item.damage || 0)} · бонус +${item.damage || 0}<br>Комбо: до +20% · крит: 12%, ×1,5` : `Макс. здоровье: ${baseHp + (item.health || 0)} · бонус +${item.health || 0}<br>${item.blockDrain ? 'Особенность: расход выносливости при удержании блока −30%.' : 'Бонус здоровья действует, пока броня надета. Блок определяется щитом.'}`;
-      return `<article class="card">${itemArt(item.icon)}<h3>${item.name}</h3><p>${stats}</p><button class="btn" id="equip-${id}" ${!owned || worn ? 'disabled' : ''}>${worn ? 'Надето' : owned ? 'Надеть' : 'Не получено'}</button></article>`;
+      let stats = '';
+      if (item.slot === 'offhand') {
+        stats = id === 'buckler' ? 'Блок: входящий урон ×0,18 вместо ×0,26 с оружием.' : 'Блок оружием: входящий урон ×0,26.';
+      } else if (item.slot === 'weapon') {
+        const delta = (item.damage || 0) - (currentWeapon.damage || 0);
+        stats = `Урон: ${player.damage + delta} <b>(${signed(delta)})</b><br>Комбо: до +20% · крит: 12%, ×1,5`;
+      } else {
+        const delta = (item.health || 0) - (currentArmor.health || 0);
+        stats = `Макс. здоровье: ${player.maxHp + delta} <b>(${signed(delta)})</b>`;
+        if (id === 'guardianArmor') stats += '<br>Особенность: расход выносливости блока −30%.';
+        else if (id === 'wardenArmor') stats += '<br>Особенность: максимальный запас здоровья.';
+      }
+      const disabled = !owned || worn || inCombat;
+      const label = worn ? 'Надето' : !owned ? 'Не получено' : inCombat ? 'Недоступно во время боя' : 'Надеть';
+      return `<article class="card">${itemArt(item.icon)}<h3>${item.name}</h3><p>${stats}</p><button class="btn" id="equip-${id}" ${disabled ? 'disabled' : ''}>${label}</button></article>`;
     }).join('');
-    openModal('Экипировка персонажа', `<p class="note">Усиления от уровня и закалки сохраняются при смене оружия. Бонус брони действует, пока она надета.</p><div class="shopList">${gearCards}</div><div class="sectionTitle">БЫСТРЫЙ РАСХОДНИК</div><div class="shopList">${Object.entries(SUPPLIES).map(([id, s]) => `<article class="card">${itemArt('potion')}<h3>${s.name} · ${player.supplies[id]} шт.</h3><p>${s.note}<br>Расход: 1 шт. за применение. Используется кнопкой «Зелье» во время игры.</p><button class="btn" id="supply-${id}" ${player.loadout.quick === id ? 'disabled' : ''}>${player.loadout.quick === id ? 'В быстром слоте' : 'В быстрый слот'}</button></article>`).join('')}</div><button class="btn" id="supply-clear">Освободить быстрый слот</button><button class="btn" id="equipmentBack">Вернуться в сумку</button>`);
+    openModal('Экипировка персонажа', `<p class="note">Смена снаряжения не изменяет постоянные усиления. Во время активного боя экипировку менять нельзя.</p><div class="shopList">${gearCards}</div><div class="sectionTitle">БЫСТРЫЙ РАСХОДНИК</div><div class="shopList">${Object.entries(SUPPLIES).map(([id, item]) => `<article class="card">${itemArt('potion')}<h3>${item.name} · ${player.supplies[id]} шт.</h3><p>${item.note}<br>Расход: 1 шт. за применение.</p><button class="btn" id="supply-${id}" ${player.loadout.quick === id || inCombat ? 'disabled' : ''}>${player.loadout.quick === id ? 'В быстром слоте' : inCombat ? 'Недоступно во время боя' : 'В быстрый слот'}</button></article>`).join('')}</div><button class="btn" id="supply-clear" ${inCombat ? 'disabled' : ''}>${inCombat ? 'Недоступно во время боя' : 'Освободить быстрый слот'}</button><button class="btn" id="equipmentBack">Вернуться в сумку</button>`);
     for (const id of Object.keys(GEAR)) bindTap($('equip-' + id), () => equipItem(id));
     for (const id of Object.keys(SUPPLIES)) bindTap($('supply-' + id), () => selectSupply(id));
     bindTap($('supply-clear'), () => selectSupply(''));
@@ -831,7 +1119,6 @@
     H = Math.round((window.visualViewport?.height || innerHeight) * viewportScale);
     DPR = Math.min(device.dpr, 2, Math.sqrt(1500000 / (W * H)));
     document.documentElement.style.setProperty('--app-height', H + 'px');
-    document.body.classList.toggle('leftHanded', !!settings.leftHanded);
     const renderWidth = Math.max(1, Math.floor(W * DPR)),
       renderHeight = Math.max(1, Math.floor(H * DPR));
     if (canvas.width !== renderWidth) canvas.width = renderWidth;
@@ -929,16 +1216,12 @@
       }
     } else if (q.id === 'ash') {
       if (s.step === 0 && reason === 'scout') s.step = 1;else if (s.step === 1 && s.wood >= 4) s.step = 2;else if (s.step === 2 && s.kills >= 6) s.step = 3;else if (s.step === 3 && reason === 'portal') {
+        player.progression.completedCycles++;
+        player.inv.emberShard = (player.inv.emberShard || 0) + 1;
         for (const key of Object.keys(s)) s[key] = 0;
       }
     }
-    if (s.step !== previousStep) {
-      ensureQuestTargets();
-      if (q.id === 'ash' && previousStep === 2 && s.step === 3) {
-        player.inv.emberShard = (player.inv.emberShard || 0) + 1;
-        toast('Получен Осколок пламени · навыки усилены');
-      }
-    }
+    if (s.step !== previousStep) ensureQuestTargets();
     if (persist) save();
   }
   function ensureQuestTargets() {
@@ -986,9 +1269,6 @@
       cd: 0,
       hit: 0,
       seed: rng(x + y),
-      stun: 0,
-      windup: 0,
-      pendingAttack: false
     };
     if (type === 'raider') Object.assign(e, {
       r: 21,
@@ -1025,10 +1305,9 @@
       y: e.y
     };
     e.aiState = 'idle';
-    return e;
   }
   function addResource(kind, x, y) {
-    const resource = {
+    entities.push({
       kind: 'resource',
       type: kind,
       x,
@@ -1037,10 +1316,7 @@
       hp: 1,
       maxHp: 1,
       pulse: rng(x * y) * Math.PI * 2
-    };
-    entities.push(resource);
-    physics?.relocate(resource);
-    return resource;
+    });
   }
   function makeAmbient() {
     ambient = [];
@@ -1075,7 +1351,8 @@
       r: (zoneId === 'mistwood' ? 18 : 23) * a.scale
     });
     physics.set(items);
-    // Resource nodes remain collectible scenery, not hard collision or projectile blockers.
+    // Gatherables are interaction targets, not walls. Relocate them away from true
+    // static footprints, but keep them out of movement, LOS and projectile collision.
     for (const e of entities) if (e.kind === 'resource') physics.relocate(e);
     physics.relocate(player);
     for (const e of entities) if (e.kind === 'enemy') {
@@ -1121,8 +1398,10 @@
     projectiles = [];
     lootDrops = [];
     floatingTexts = [];
-    focusedEnemy = null;
-    focusUntil = 0;
+    player.attackQueuedUntil = 0;
+    player.dashRemaining = 0;
+    player.dodgeUntil = 0;
+    cancelBlock();
     const z = zones[zoneId];
     player.x = z.camp.x;
     player.y = z.camp.y;
@@ -1179,66 +1458,59 @@
       player.xp -= player.xpNeed;
       player.level++;
       player.xpNeed = Math.round(player.xpNeed * 1.24);
-      player.maxHp += 18;
+      recomputeDerivedStats();
       player.hp = player.maxHp;
-      player.damage += 3;
       toast('Новый уровень — ' + player.level);
     }
   }
-  function lootLabel(id, count) {
-    const names = {
-      coin: 'Золото',
-      herb: 'Трава',
-      wood: 'Древесина',
-      ore: 'Серебряная руда',
-      guardianToken: 'Знак стража',
-      emberShard: 'Осколок пламени'
-    };
-    return `${names[id] || id} ×${count}`;
-  }
-  function skillMultiplier() {
-    return 1 + Math.min(5, Math.max(0, player.inv.emberShard || 0)) * .03;
-  }
-  function focusEnemy(e, seconds = 4) {
-    if (!e || e.kind !== 'enemy' || e.hp <= 0) return;
-    focusedEnemy = e;
-    focusUntil = Math.max(focusUntil, time + seconds);
-  }
-  function addLootDrop(id, label, count, x, y) {
-    lootDrops.push({
-      id, label, count, x, y, life: 22
-    });
-  }
-  function spawnLootFromEnemy(e) {
+  function spawnLootFromEnemy(e, excludeGuardianToken = false) {
     const table = e.type === 'guardian' ? LOOT_TABLE.guardian : LOOT_TABLE.common;
-    if (e.type === 'guardian' && !(player.inv.guardianToken > 0) && !lootDrops.some(l => l.id === 'guardianToken' && l.life > 0)) {
-      addLootDrop('guardianToken', 'Знак стража', 1, e.x + 10, e.y - 6);
-    }
-    const roll = Math.random();
+    const allowed = excludeGuardianToken ? table.filter(item => item.id !== 'guardianToken') : table;
+    const total = allowed.reduce((sum, item) => sum + item.chance, 0);
+    const roll = Math.random() * total;
     let acc = 0;
-    for (const d of table) {
+    for (const d of allowed) {
       acc += d.chance;
       if (roll <= acc) {
-        addLootDrop(d.id, d.label, d.count + (d.id === 'coin' && e.type === 'guardian' ? Math.floor(Math.random() * 20) : 0), e.x + (Math.random() * 24 - 12), e.y + (Math.random() * 24 - 12));
+        lootDrops.push({
+          id: d.id,
+          label: d.label,
+          count: d.count + (d.id === 'coin' && e.type === 'guardian' ? Math.floor(Math.random() * 20) : 0),
+          x: e.x + (Math.random() * 24 - 12),
+          y: e.y + (Math.random() * 24 - 12),
+          life: 22
+        });
         break;
       }
     }
+  }
+  function isInCombat() {
+    return entities.some(e => e.kind === 'enemy' && e.hp > 0 && e.aiState === 'chase');
+  }
+  function cancelBlock() {
+    if (!player.blocking) return;
+    player.blocking = false;
+    document.querySelectorAll('.pressed').forEach(el => el.classList.remove('pressed'));
   }
   function kill(e) {
     e.hp = 0;
     e._corpseUntil = time + 0.75;
     gainXP(e.type === 'guardian' ? 120 : 18);
     player.gold += e.type === 'guardian' ? 90 : 4 + Math.floor(Math.random() * 5);
-    spawnLootFromEnemy(e);
     const s = questState();
+    const firstGuardianUnlock = zoneId === 'stonevale' && e.type === 'guardian' && s.step === 2 && !(player.inv.guardianToken > 0);
+    spawnLootFromEnemy(e, firstGuardianUnlock);
     if (zoneId === 'mistwood' && quest().id === 'mist' && s.step === 2 && e.type === 'raider') {
       s.kills++;
       advanceQuest('kill');
     }
     if (zoneId === 'stonevale' && e.type === 'guardian' && s.step === 2) {
       s.guardian++;
+      if (firstGuardianUnlock) {
+        player.inv.guardianToken = 1;
+        toast('Получен Знак стража · броня открыта');
+      } else toast('Страж руин повержен!');
       advanceQuest('kill');
-      toast('Страж руин повержен!');
     }
     if (zoneId === 'ashfield' && s.step === 2) {
       s.kills++;
@@ -1249,22 +1521,19 @@
   }
   function hitTarget(e, dmg) {
     if (!e || e.hp <= 0 || !Number.isFinite(dmg) || dmg <= 0) return;
-    focusEnemy(e);
     if (!Number.isFinite(e.hp)) e.hp = 0;
+    const homeDistance = Math.hypot(e.x - (e.homeX ?? e.x), e.y - (e.homeY ?? e.y));
+    const playerFromHome = Math.hypot(player.x - (e.homeX ?? e.x), player.y - (e.homeY ?? e.y));
+    if (dist(player, e) < 440 && homeDistance <= 420 && playerFromHome <= 480) e.aiState = 'chase';
     e.hp -= dmg;
     e.hit = .16;
     animate(e, 'hit', .2);
     burst(e.x, e.y, '#efcfa8', 9, 118);
     if (e.hp <= 0) kill(e);
   }
-  function attack() {
-    if (isPaused()) return false;
-    if (player.attackCd > 0) {
-      if (player.attackCd <= .13) attackBuffered = true;
-      return false;
-    }
-    attackBuffered = false;
+  function performAttack() {
     player.attackCd = .42;
+    player.attackQueuedUntil = 0;
     animate(player, 'attack', .42);
     player.combo = player.comboTimer > 0 ? Math.min(3, player.combo + 1) : 1;
     player.comboTimer = .9;
@@ -1298,10 +1567,24 @@
       hits++;
     }
     burst(player.x + Math.cos(a) * 36, player.y + Math.sin(a) * 36, '#e4bf69', hits ? 12 + player.combo * 2 : 5, 95);
-    return hits > 0;
+    return true;
+  }
+  function attack() {
+    if (isPaused()) return false;
+    if (player.attackCd > 0) {
+      if (player.attackCd <= ATTACK_BUFFER_WINDOW) {
+        cancelBlock();
+        player.attackQueuedUntil = time + ATTACK_BUFFER_WINDOW;
+      }
+      return false;
+    }
+    cancelBlock();
+    return performAttack();
   }
   function dodge() {
-    if (player.dodgeCd > time || player.stamina < 24 || isPaused()) return;
+    if (isPaused()) return false;
+    if (player.dodgeCd > time || player.stamina < 24) return false;
+    cancelBlock();
     player.stamina -= 24;
     player.dodgeCd = time + .78;
     player.dodgeUntil = time + .28;
@@ -1315,49 +1598,26 @@
     player.dashRemaining = .28;
     burst(player.x, player.y, '#91c6cc', 16, 145);
     toast('Уклонение');
-  }
-  function acquireEnemy(maxRange, maxAngle) {
-    let best = null,
-      bestScore = Infinity;
-    for (const e of entities) {
-      if (e.hp <= 0 || e.kind !== 'enemy') continue;
-      const d = dist(player, e);
-      if (d > maxRange || physics && !physics.clearLine(player.x, player.y, e.x, e.y, 2)) continue;
-      const angle = Math.abs(angleDiff(Math.atan2(e.y - player.y, e.x - player.x), player.dir));
-      if (angle > maxAngle) continue;
-      const score = d + angle * 42;
-      if (score < bestScore) {
-        best = e;
-        bestScore = score;
-      }
-    }
-    return best;
+    return true;
   }
   function skill(n) {
-    if (isPaused()) return false;
+    if (isPaused() || ![1, 2, 3].includes(n)) return false;
     if (n === 3 && player.hp >= player.maxHp) {
       toast('Здоровье полное');
       return false;
     }
-    if (n === 3 && time < healSkillReadyAt) {
-      toast('Второе дыхание: ' + Math.ceil(healSkillReadyAt - time) + ' с');
+    if (n === 3 && player.secondWindCd > time) {
+      toast(`Второе дыхание: ${Math.ceil(player.secondWindCd - time)} с`);
       return false;
     }
     if (player.stamina < 20) {
       toast('Недостаточно выносливости');
       return false;
     }
-    if (n === 1 || n === 2) {
-      const target = acquireEnemy(n === 1 ? 180 : 430, n === 1 ? 1.8 : 1.45);
-      if (target) {
-        player.dir = Math.atan2(target.y - player.y, target.x - player.x);
-        focusEnemy(target, 2.5);
-      }
-    }
+    cancelBlock();
     player.stamina -= 20;
     animate(player, n === 3 ? 'drink' : 'cast', .55);
     const a = player.dir;
-    const skillPower = skillMultiplier();
     if (n === 1) {
       let hits = 0;
       for (const e of entities) {
@@ -1365,7 +1625,7 @@
         const d = dist(player, e),
           ea = Math.atan2(e.y - player.y, e.x - player.x);
         if (d < 165 && Math.abs(angleDiff(ea, a)) < 1.3 && (!physics || physics.clearLine(player.x, player.y, e.x, e.y, 2))) {
-          hitTarget(e, Math.round(player.damage * 1.85 * skillPower));
+          hitTarget(e, Math.round(player.damage * 1.85));
           hits++;
         }
       }
@@ -1379,16 +1639,15 @@
           y: player.y + Math.sin(a) * 24,
           vx: Math.cos(aa) * 480,
           vy: Math.sin(aa) * 480,
-          damage: Math.round(player.damage * .9 * skillPower),
+          damage: Math.round(player.damage * .9),
           life: .82,
           color: '#bfe9ee'
         });
       }
       toast('Тройной импульс');
     } else {
-      const before = player.hp;
       player.hp = Math.min(player.maxHp, player.hp + 70);
-      healSkillReadyAt = time + 8;
+      player.secondWindCd = time + SECOND_WIND_COOLDOWN;
       burst(player.x, player.y, '#86c99b', 20, 100);
       toast('Восстановлено здоровье');
     }
@@ -1403,7 +1662,8 @@
     loot: 0,
     scout: 1,
     resource: 2,
-    portal: 3
+    portal: 3,
+    portalLocked: 4
   };
   function considerInteraction(type, entity, radius) {
     const d = Math.hypot(player.x - entity.x, player.y - entity.y);
@@ -1422,7 +1682,7 @@
     considerInteraction('scout', z.scout, 120);
     for (const loot of lootDrops) if (loot.life > 0) considerInteraction('loot', loot, 105);
     for (const e of entities) if (e.kind === 'resource' && e.hp > 0) considerInteraction('resource', e, 105);
-    if (canUsePortal()) considerInteraction('portal', z.portal, 135);
+    considerInteraction(canUsePortal() ? 'portal' : 'portalLocked', z.portal, 135);
     return interactionResult.type ? interactionResult : null;
   }
   function openNpcDialog() {
@@ -1442,7 +1702,7 @@
     const hit = nearbyInteraction();
     if (!hit) return;
     animate(player, 'gather', .5);
-    if (hit.type === 'portal') {
+    if (hit.type === 'portal' || hit.type === 'portalLocked') {
       if (!canUsePortal()) {
         toast('Сначала завершите текущую задачу');
         return;
@@ -1506,6 +1766,7 @@
   }
   function transitionZone() {
     if (transitioning) return;
+    resetInput();
     transitioning = true;
     ui.loading.classList.remove('hidden');
     ui.loadFill.style.width = '0%';
@@ -1518,7 +1779,9 @@
         requestAnimationFrame(tick);
         return;
       }
+      const cyclesBefore = player.progression.completedCycles;
       advanceQuest('portal', false);
+      const cycleCompleted = player.progression.completedCycles > cyclesBefore;
       zoneId = zones[zoneId].next;
       resetZone();
       save();
@@ -1526,32 +1789,64 @@
         resetFrameLimiter();
         ui.loading.classList.add('hidden');
         transitioning = false;
-        toast(zones[zoneId].name);
+        toast(cycleCompleted ? zones[zoneId].name + ' · получен Осколок пламени' : zones[zoneId].name);
       }, 120);
     }
     requestAnimationFrame(tick);
   }
+  let previousModalFocus = null;
+  function modalFocusable() {
+    return [...ui.modal.querySelectorAll('button:not([disabled]),a[href],input,select,textarea,[tabindex]:not([tabindex="-1"])')];
+  }
   function openModal(title, body) {
     shopOpen = false;
     resetInput();
+    previousModalFocus = document.activeElement && !ui.modal.contains(document.activeElement) ? document.activeElement : previousModalFocus;
     setText(ui.modalTitle, title);
     ui.modalBody.innerHTML = body;
     ui.modal.classList.remove('hidden');
+    $('modalClose')?.focus();
   }
   function closeModal() {
     shopOpen = false;
     ui.modal.classList.add('hidden');
     resetFrameLimiter();
     updateUI();
+    if (previousModalFocus?.focus) previousModalFocus.focus();
+    previousModalFocus = null;
   }
+  document.addEventListener('keydown', event => {
+    if (ui.modal.classList.contains('hidden')) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeModal();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusable = modalFocusable();
+    if (!focusable.length) {
+      event.preventDefault();
+      $('modalClose')?.focus();
+      return;
+    }
+    const first = focusable[0], last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
   function openInventory() {
-    openModal('Сумка и экипировка', `<button class="btn" id="equipmentEntry">Экипировка и расходники</button><div class="grid"><div class="card">${itemArt('sword')}<h3>Оружие</h3><p>${escapeHTML(player.equipment.weapon)}<br>Урон: <b>${player.damage}</b></p></div><div class="card">${itemArt('armor')}<h3>Броня</h3><p>${escapeHTML(player.equipment.armor)}<br>Макс. здоровье: <b>${player.maxHp}</b></p></div><div class="card"><h3>Ресурсы</h3><p>Древесина: ${player.inv.wood}<br>Руда: ${player.inv.ore}<br>Трава: ${player.inv.herb}</p></div><div class="card"><h3>Валюта</h3><p class="gold">${player.gold} золотых</p><p>Знаки: ${player.inv.guardianToken || 0}<br>Осколки: ${player.inv.emberShard || 0}</p></div></div><div class="card"><h3>Свойства материалов</h3><p>Древесина и руда: закалка, +5 урона за 3 древесины и 2 руды.<br>Трава: изготовление зелий.<br>Знак стража: открывает броню стража (+25 макс. здоровья при ношении).<br>Осколок пламени: +3% урона навыков за каждый, максимум +15%.</p></div><div class="sectionTitle">КРАФТ</div><button class="btn" id="brewBtn">Зелье лечения в сумку · 3 травы + 1 древесина · +100 HP при применении</button><button class="btn" id="craftBtn">Закалить меч · 3 древесины + 2 руды</button><button class="btn" id="potionBtn">Эликсир жизни · +12 макс. HP навсегда, полное лечение · 3 травы + 1 древесина</button>`);
-    $('craftBtn').disabled = player.inv.wood < 3 || player.inv.ore < 2;
-    $('potionBtn').disabled = player.inv.herb < 3 || player.inv.wood < 1;
+    const stats = statSources(), inCombat = isInCombat();
+    const bladeReason = inCombat ? 'Недоступно во время боя' : player.progression.forgeRank >= MAX_UPGRADE_RANK ? 'Максимальный ранг' : player.inv.wood < 3 || player.inv.ore < 2 ? `Нужно: ${Math.max(0, 3 - player.inv.wood)} древесины, ${Math.max(0, 2 - player.inv.ore)} руды` : '';
+    const vitalityReason = inCombat ? 'Недоступно во время боя' : player.progression.vitalityRank >= MAX_UPGRADE_RANK ? 'Максимальный ранг' : player.inv.herb < 3 || player.inv.wood < 1 ? `Нужно: ${Math.max(0, 3 - player.inv.herb)} травы, ${Math.max(0, 1 - player.inv.wood)} древесины` : '';
+    const brewReason = inCombat ? 'Недоступно во время боя' : player.inv.herb < 3 || player.inv.wood < 1 ? `Нужно: ${Math.max(0, 3 - player.inv.herb)} травы, ${Math.max(0, 1 - player.inv.wood)} древесины` : player.supplies.potion >= 9999 ? 'Сумка полна' : '';
+    openModal('Сумка и экипировка', `<button class="btn" id="equipmentEntry">Экипировка и расходники</button><div class="grid"><div class="card">${itemArt('sword')}<h3>Оружие</h3><p>${escapeHTML(player.equipment.weapon)}<br>Урон: <b>${player.damage}</b></p></div><div class="card">${itemArt('armor')}<h3>Броня</h3><p>${escapeHTML(player.equipment.armor)}<br>Макс. здоровье: <b>${player.maxHp}</b></p></div><div class="card"><h3>Ресурсы</h3><p>Древесина: ${player.inv.wood}<br>Руда: ${player.inv.ore}<br>Трава: ${player.inv.herb}</p></div><div class="card"><h3>Прогресс</h3><p>Золото: <b>${player.gold}</b><br>Знаки: ${player.inv.guardianToken || 0}<br>Осколки: ${player.inv.emberShard || 0}<br>Завершённые циклы: ${player.progression.completedCycles}</p></div></div><div class="card"><h3>Источники характеристик</h3><p>Урон: ${stats.damage.base} база + ${stats.damage.level} уровни + ${stats.damage.permanent} постоянные + ${stats.damage.gear} оружие = <b>${stats.damage.total}</b><br>HP: ${stats.hp.base} база + ${stats.hp.level} уровни + ${stats.hp.permanent} постоянные + ${stats.hp.gear} броня = <b>${stats.hp.total}</b></p></div><div class="sectionTitle">КРАФТ</div><button class="btn" id="brewBtn" ${brewReason ? 'disabled' : ''}>${brewReason || 'Зелье лечения · 3 травы + 1 древесина'}</button><button class="btn" id="craftBtn" ${bladeReason ? 'disabled' : ''}>${bladeReason || `Закалить меч · ранг ${player.progression.forgeRank + 1}/${MAX_UPGRADE_RANK} · 3 древесины + 2 руды`}</button><button class="btn" id="potionBtn" ${vitalityReason ? 'disabled' : ''}>${vitalityReason || `Эликсир жизни · ранг ${player.progression.vitalityRank + 1}/${MAX_UPGRADE_RANK} · +12 HP · 3 травы + 1 древесина`}</button>`);
     bindTap($('craftBtn'), () => craft('blade'));
     bindTap($('potionBtn'), () => craft('potion'));
     bindTap($('equipmentEntry'), openEquipment);
-    $('brewBtn').disabled = player.inv.herb < 3 || player.inv.wood < 1;
     bindTap($('brewBtn'), brewSupply);
   }
   const SHOP_ITEMS = [{
@@ -1615,6 +1910,7 @@
   let shopOpen = false,
     purchaseReadyAt = 0;
   function unavailableItem(item) {
+    if (isInCombat()) return 'Недоступно во время боя';
     if (player.shopOwned[item.id]) return 'Уже куплено';
     if (item.supply && player.supplies[item.supply] >= 9999) return 'Сумка полна';
     if (item.heal && player.hp >= player.maxHp) return 'Здоровье полное';
@@ -1712,37 +2008,61 @@
     openMenu();
   }
   function craft(recipe = 'blade') {
+    if (isInCombat()) {
+      toast('Недоступно во время боя');
+      return false;
+    }
     const before = JSON.parse(JSON.stringify(player));
-    if (recipe === 'blade' && player.inv.wood >= 3 && player.inv.ore >= 2) {
+    if (recipe === 'blade') {
+      if (player.progression.forgeRank >= MAX_UPGRADE_RANK) {
+        toast('Закалка: максимальный ранг');
+        return false;
+      }
+      if (player.inv.wood < 3 || player.inv.ore < 2) {
+        toast('Недостаточно ресурсов');
+        return false;
+      }
       player.inv.wood -= 3;
       player.inv.ore -= 2;
-      player.damage += 5;
-      if (player.loadout.weapon === 'starterBlade') player.equipment.weapon = 'Закалённый меч следопыта';
-      gainXP(35);
+      player.progression.forgeRank++;
+      recomputeDerivedStats();
       if (!save()) {
         Object.assign(player, before);
         toast('Крафт отменён: сохранение недоступно');
-        return;
+        return false;
       }
       closeModal();
-      toast('Оружие улучшено: +5 урона');
-    } else if (recipe === 'potion' && player.inv.herb >= 3 && player.inv.wood >= 1) {
+      toast(`Закалка меча: ранг ${player.progression.forgeRank}/${MAX_UPGRADE_RANK} · +5 урона`);
+      return true;
+    }
+    if (recipe === 'potion') {
+      if (player.progression.vitalityRank >= MAX_UPGRADE_RANK) {
+        toast('Эликсир жизни: максимальный ранг');
+        return false;
+      }
+      if (player.inv.herb < 3 || player.inv.wood < 1) {
+        toast('Недостаточно ресурсов');
+        return false;
+      }
       player.inv.herb -= 3;
-      player.inv.wood -= 1;
-      player.maxHp += 12;
+      player.inv.wood--;
+      player.progression.vitalityRank++;
+      recomputeDerivedStats();
       player.hp = player.maxHp;
-      gainXP(20);
       if (!save()) {
         Object.assign(player, before);
         toast('Крафт отменён: сохранение недоступно');
-        return;
+        return false;
       }
       closeModal();
-      toast('Создано зелье жизни · +12 макс. HP');
-    } else toast('Недостаточно ресурсов');
+      toast(`Эликсир жизни: ранг ${player.progression.vitalityRank}/${MAX_UPGRADE_RANK} · +12 макс. HP`);
+      return true;
+    }
+    return false;
   }
   function brewSupply() {
     if (ui.modal.classList.contains('hidden') || player.inv.herb < 3 || player.inv.wood < 1 || player.supplies.potion >= 9999) return false;
+    if (isInCombat()) { toast('Недоступно во время боя'); return false; }
     if (!equipmentTransaction(() => {
       player.inv.herb -= 3;
       player.inv.wood--;
@@ -1752,8 +2072,18 @@
     toast('Зелье лечения добавлено в сумку');
     return true;
   }
+  function applyControlLayout() {
+    document.body.classList.toggle('left-handed', settings.controls === 'left');
+  }
+  function setControls(side) {
+    settings.controls = side === 'left' ? 'left' : 'right';
+    storage.setItem('aef_controls', settings.controls);
+    applyControlLayout();
+    save();
+    openMenu();
+  }
   function openMenu() {
-    openModal('Настройки · v' + BUILD_VERSION, `<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><div class="sectionTitle">КАЧЕСТВО ГРАФИКИ</div><div class="settingRow"><div class="seg" id="qualitySeg">${['low', 'medium', 'high', 'very-high'].map(q => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}">${q === 'very-high' ? 'Very High' : q[0].toUpperCase() + q.slice(1)}</button>`).join('')}</div><div class="note">Меняет материалы земли, мелкие детали, тени, оформление порталов и лимит частиц. Разрешение и резкость спрайтов одинаковы при любом качестве. Препятствия не меняются. Применяется сразу.</div></div><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="settingRow"><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div><div class="note">Лимит управляет реальными отрисованными кадрами. Монитор считает только кадры после update + draw.</div></div><div class="sectionTitle">УПРАВЛЕНИЕ</div><button class="btn" id="handedBtn">${settings.leftHanded ? 'Левша: действия слева' : 'Обычное: действия справа'}</button><div class="note">Меняет местами джойстик и боевые кнопки. Применяется сразу.</div><div class="sectionTitle">МОНИТОР ПРОИЗВОДИТЕЛЬНОСТИ</div><button class="btn" id="perfBtn">${perfMonitorEnabled ? 'Выключить frame-time monitor' : 'Включить frame-time monitor'}</button>${devicePanel()}<div class="sectionTitle">СОХРАНЕНИЕ</div><button class="btn" id="saveBtn">Сохранить прогресс</button>`);
+    openModal('Настройки · v' + BUILD_VERSION, `<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><div class="sectionTitle">УПРАВЛЕНИЕ</div><div class="seg" id="controlsSeg"><button id="control-right" class="${settings.controls === 'right' ? 'active' : ''}">Правша</button><button id="control-left" class="${settings.controls === 'left' ? 'active' : ''}">Левша</button></div><p class="note">Меняет местами зоны джойстика и боевых кнопок.</p><div class="sectionTitle">КАЧЕСТВО ГРАФИКИ</div><div class="settingRow"><div class="seg" id="qualitySeg">${['low', 'medium', 'high', 'very-high'].map(q => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}">${q === 'very-high' ? 'Very High' : q[0].toUpperCase() + q.slice(1)}</button>`).join('')}</div><div class="note">Меняет материалы земли, мелкие детали, тени, оформление порталов и лимит частиц. Разрешение и препятствия не меняются.</div></div><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="settingRow"><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div></div><div class="sectionTitle">МОНИТОР ПРОИЗВОДИТЕЛЬНОСТИ</div><button class="btn" id="perfBtn">${perfMonitorEnabled ? 'Выключить frame-time monitor' : 'Включить frame-time monitor'}</button>${devicePanel()}<div class="sectionTitle">СОХРАНЕНИЕ</div>${saveStatusText() ? `<p class="saveWarningText">${escapeHTML(saveStatusText())}</p>` : ''}<button class="btn" id="saveBtn">Сохранить прогресс</button>`);
     document.querySelectorAll('#qualitySeg button').forEach(b => bindTap(b, () => {
       settings.quality = b.dataset.q;
       storage.setItem('aef_quality', settings.quality);
@@ -1768,16 +2098,9 @@
       save();
       openMenu();
     }));
-    bindTap($('saveBtn'), () => {
-      toast(save() ? 'Прогресс сохранён' : 'Не удалось сохранить: хранилище недоступно');
-    });
-    bindTap($('handedBtn'), () => {
-      settings.leftHanded = !settings.leftHanded;
-      storage.setItem('aef_left_handed', settings.leftHanded ? '1' : '0');
-      applyGraphics();
-      save();
-      openMenu();
-    });
+    bindTap($('control-right'), () => setControls('right'));
+    bindTap($('control-left'), () => setControls('left'));
+    bindTap($('saveBtn'), () => toast(save() ? 'Прогресс сохранён' : saveStatusText() || 'Не удалось сохранить: хранилище недоступно'));
     bindTap($('perfBtn'), () => {
       perfMonitorEnabled = !perfMonitorEnabled;
       storage.setItem('aef_perf_monitor', perfMonitorEnabled ? '1' : '0');
@@ -1864,8 +2187,7 @@
     passive: true
   });
   canvas.addEventListener('pointerdown', e => {
-    const inLookZone = settings.leftHanded ? e.clientX < W * .57 : e.clientX >= W * .43;
-    if (isPaused() || !inLookZone || look.ids.size) return;
+    if (isPaused() || e.clientX < W * .43 || look.ids.size) return;
     look.ids.add(e.pointerId);
     look.lastX = e.clientX;
     capture(canvas, e.pointerId);
@@ -1887,15 +2209,10 @@
   document.querySelectorAll('.action').forEach(btn => {
     const a = btn.dataset.act;
     if (a === 'block') {
-      let blockPointer = null;
       btn.addEventListener('pointerdown', e => {
         e.preventDefault();
         e.stopPropagation();
-        if (isPaused() || blockPointer !== null && player.blocking) return;
-        if (player.stamina < 8) {
-          toast('Недостаточно выносливости для блока');
-          return;
-        }
+        if (isPaused() || player.stamina <= 0 || blockPointer !== null) return;
         blockPointer = e.pointerId;
         player.blocking = true;
         btn.classList.add('pressed');
@@ -1929,79 +2246,27 @@
   function toggleQuest() {
     const panel = $('questTracker'),
       collapsed = panel.classList.toggle('collapsed');
+    settings.questCollapsed = collapsed;
+    storage.setItem('aef_quest_collapsed', collapsed ? '1' : '0');
     $('questToggle').setAttribute('aria-expanded', String(!collapsed));
     setText($('questChevron'), collapsed ? '›' : '‹');
+    save();
   }
   bindTap($('questToggle'), toggleQuest);
   bindTap($('menuBtn'), openMenu);
   bindTap($('questsBtn'), openQuests);
   bindTap($('shopBtn'), openShop);
   bindTap($('modalClose'), closeModal);
-  ['gesturestart', 'gesturechange', 'gestureend'].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), {
-    passive: false
-  }));
-  // Safari can still zoom a viewport that declares user-scalable=no.
-  // Block pinch at capture phase, including inside a scrollable modal.
-  document.addEventListener('touchmove', e => {
-    if (e.touches.length > 1 && e.cancelable) e.preventDefault();
-  }, {
-    passive: false,
-    capture: true
+  bindTap($('savePill'), () => {
+    if (saveBlockedReason === 'conflict') location.reload();
+    else toast(save() ? 'Прогресс снова сохраняется' : saveStatusText());
   });
-  document.addEventListener('dblclick', e => e.preventDefault(), {
-    passive: false,
-    capture: true
-  });
-  let tapStart = null,
-    previousTap = null;
-  document.addEventListener('touchstart', e => {
-    const t = e.touches[0];
-    tapStart = e.touches.length === 1 ? {
-      x: t.clientX,
-      y: t.clientY
-    } : null;
-    if (e.touches.length > 1) previousTap = null;
-  }, {
-    passive: true,
-    capture: true
-  });
-  document.addEventListener('touchend', e => {
-    const t = e.changedTouches[0],
-      now = performance.now();
-    if (!tapStart || e.touches.length || !t || Math.hypot(t.clientX - tapStart.x, t.clientY - tapStart.y) > 12) {
-      tapStart = null;
-      previousTap = null;
-      return;
-    }
-    if (previousTap && now - previousTap.time < 350 && Math.hypot(t.clientX - previousTap.x, t.clientY - previousTap.y) < 24 && e.cancelable) {
-      e.preventDefault();
-      // Preserve the second legitimate button tap when suppressing its native click.
-      const button = e.target.closest?.('button');
-      if (button && !button.disabled && !button.classList.contains('action')) button.click();
-    }
-    previousTap = {
-      x: t.clientX,
-      y: t.clientY,
-      time: now
-    };
-    tapStart = null;
-  }, {
-    passive: false,
-    capture: true
-  });
-  document.addEventListener('touchcancel', () => {
-    tapStart = null;
-    previousTap = null;
-  }, {
-    passive: true,
-    capture: true
-  });
+  // Browser zoom remains available for accessibility. Gameplay surfaces use touch-action:none in CSS.
   function updateEnemyPatrol(dt) {
     for (const e of entities) {
       if (e.kind !== 'enemy' || e.hp <= 0) continue;
       if (!Number.isFinite(e.patrolT)) e.patrolT = 0;
       if (!Number.isFinite(e.dir)) e.dir = e.seed * 6.283185;
-      const d = dist(player, e);
       if (e.aiState === 'idle') {
         e.patrolT += dt;
         if (e.patrolT >= 1.1) {
@@ -2021,18 +2286,15 @@
     entities.length = live;
     time += dt;
     player.attackCd = Math.max(0, player.attackCd - dt);
+    if (player.attackCd === 0 && player.attackQueuedUntil >= time) performAttack();
+    else if (player.attackQueuedUntil && player.attackQueuedUntil < time) player.attackQueuedUntil = 0;
     player.comboTimer = Math.max(0, player.comboTimer - dt);
     if (player.comboTimer === 0) player.combo = 0;
     if (player.blocking) {
-      const drain = 12 * (GEAR[player.loadout.armor]?.blockDrain || 1);
-      player.stamina = clamp(player.stamina - drain * dt, 0, player.maxStamina);
-      if (player.stamina <= 0) {
-        player.blocking = false;
-        document.querySelector('[data-act="block"]')?.classList.remove('pressed');
-        toast('Блок сбит: выносливость исчерпана');
-      }
+      const armorMultiplier = GEAR[player.loadout.armor]?.blockDrainMultiplier || 1;
+      player.stamina = clamp(player.stamina - BLOCK_STAMINA_DRAIN * armorMultiplier * dt, 0, player.maxStamina);
+      if (player.stamina <= 0) cancelBlock();
     } else player.stamina = clamp(player.stamina + 24 * dt, 0, player.maxStamina);
-    if (attackBuffered && player.attackCd <= 0) attack();
     const moving = Math.hypot(joy.x, joy.y) > .06;
     const dodgeUntil = Number.isFinite(player.dodgeUntil) ? player.dodgeUntil : 0;
     player.dodgeUntil = dodgeUntil;
@@ -2051,11 +2313,16 @@
     updateProjectiles(dt);
     updateEffects(dt);
   }
-  function damagePlayerFromEnemy(e) {
-    focusEnemy(e, 2.5);
-    if (time < player.dodgeUntil) return;
-    const reduction = player.blocking ? player.loadout.offhand === 'buckler' ? .18 : .26 : 1;
-    const dmg = Math.max(1, Math.ceil(e.damage * reduction));
+  function enemyAttackTiming(e) {
+    const windup = e.type === 'guardian' ? .52 : e.type === 'boar' ? .30 : .35;
+    const oldCycle = e.type === 'guardian' ? 1.05 : 1.35;
+    return { windup, recovery: Math.max(.35, oldCycle - windup) };
+  }
+  function resolveEnemyImpact(e) {
+    const range = e.r + player.r + 8;
+    if (e.hp <= 0 || e.aiState !== 'chase' || dist(player, e) > range || physics && !physics.clearLine(e.x, e.y, player.x, player.y, 2)) return false;
+    if (time < player.dodgeUntil) return false;
+    const dmg = player.blocking ? Math.ceil(e.damage * (player.loadout.offhand === 'buckler' ? .18 : .26)) : e.damage;
     player.hp = Math.max(0, player.hp - dmg);
     animate(player, player.blocking ? 'block' : 'hit', .24);
     addFloatingText('−' + dmg, player.x, player.y - 52, '#ff9690');
@@ -2065,36 +2332,36 @@
       player.hp = player.maxHp;
       player.x = zones[zoneId].camp.x;
       player.y = zones[zoneId].camp.y;
+      player.attackQueuedUntil = 0;
+      player.dashRemaining = 0;
+      player.dodgeUntil = 0;
+      cancelBlock();
       physics?.relocate(player);
-      resetInput();
+      save();
       toast('Вы возвращены к лагерю');
     }
+    return true;
   }
   function updateEnemies(dt) {
     for (const e of entities) {
       if (e.hp <= 0 || e.kind !== 'enemy') continue;
       e.cd = Math.max(0, e.cd - dt);
       e.hit = Math.max(0, e.hit - dt);
-      e.windup = Math.max(0, (Number(e.windup) || 0) - dt);
+      const d = dist(player, e);
       if (!Number.isFinite(e.homeX)) {
         e.homeX = e.x;
         e.homeY = e.y;
-        e.home = {
-          x: e.x,
-          y: e.y
-        };
+        e.home = { x: e.x, y: e.y };
         e.aiState = 'idle';
       }
-      const d = dist(player, e),
-        homeDistance = Math.hypot(e.x - e.homeX, e.y - e.homeY),
-        playerFromHome = Math.hypot(player.x - e.homeX, player.y - e.homeY),
-        attackRange = e.r + player.r + 8;
-      if (e.aiState === 'chase' && (d > 370 || homeDistance > 420 || playerFromHome > 480)) {
+      const homeDistance = Math.hypot(e.x - e.homeX, e.y - e.homeY);
+      const playerFromHome = Math.hypot(player.x - e.homeX, player.y - e.homeY);
+      if (e.aiState === 'chase' && (d > 440 || homeDistance > 420 || playerFromHome > 480)) {
         e.aiState = 'return';
-        e.pendingAttack = false;
-        e.windup = 0;
+        e.attackPhase = '';
       }
       if (e.aiState === 'return') {
+        e.attackPhase = '';
         if (homeDistance > 8) {
           if (physics) physics.chase(e, e.home, e.speed * dt, time);else moveActor(e, (e.homeX - e.x) / homeDistance * e.speed * dt, (e.homeY - e.y) / homeDistance * e.speed * dt);
         } else e.aiState = 'idle';
@@ -2103,21 +2370,28 @@
       if (e.aiState === 'idle' && e.hp === e.maxHp && e.level !== clamp(Math.floor(Number(player.level) || 1), 1, 100)) scaleEnemy(e);
       if (e.aiState === 'idle' && d < 220 && playerFromHome < 300 && (!physics || physics.clearLine(e.x, e.y, player.x, player.y, 2))) e.aiState = 'chase';
       if (e.aiState !== 'chase') continue;
-      if (e.pendingAttack) {
-        if (e.windup > 0) continue;
-        e.pendingAttack = false;
-        e.cd = e.type === 'guardian' ? 1.05 : 1.35;
-        if (d <= attackRange + 12 && (!physics || physics.clearLine(e.x, e.y, player.x, player.y, 2))) damagePlayerFromEnemy(e);
+      if (e.attackPhase === 'windup') {
+        if (time >= e.attackImpactAt) {
+          resolveEnemyImpact(e);
+          const timing = enemyAttackTiming(e);
+          e.attackPhase = 'recovery';
+          e.cd = timing.recovery;
+        }
         continue;
       }
-      const a = Math.atan2(player.y - e.y, player.x - e.x);
-      if (d > attackRange) {
+      if (e.attackPhase === 'recovery' && e.cd <= 0) e.attackPhase = '';
+      const currentDistance = dist(player, e),
+        a = Math.atan2(player.y - e.y, player.x - e.x),
+        range = e.r + player.r + 8;
+      if (currentDistance > range) {
         if (physics) physics.chase(e, player, e.speed * dt, time);else moveActor(e, Math.cos(a) * e.speed * dt, Math.sin(a) * e.speed * dt);
-      } else if (e.cd <= 0 && (!physics || physics.clearLine(e.x, e.y, player.x, player.y, 2))) {
-        e.pendingAttack = true;
-        e.windup = e.type === 'guardian' ? .48 : .32;
-        animate(e, 'attack', e.windup + .16);
-        focusEnemy(e, 2.5);
+      } else if (!e.attackPhase && e.cd <= 0 && (!physics || physics.clearLine(e.x, e.y, player.x, player.y, 2))) {
+        const timing = enemyAttackTiming(e);
+        e.attackPhase = 'windup';
+        e.attackStartedAt = time;
+        e.attackImpactAt = time + timing.windup;
+        e.attackWindup = timing.windup;
+        animate(e, 'attack', timing.windup + .12);
       }
     }
     updateEnemyPatrol(dt);
@@ -2181,29 +2455,41 @@
     setText(ui.ore, player.inv.ore);
     setText(ui.gold, player.gold);
     const supplyId = player.loadout.quick;
-    setText(ui.supplyLabel, (supplyId === 'tonic' ? 'ТОНИК' : supplyId ? 'ЗЕЛЬЕ' : 'ПУСТО') + ' · ' + (player.supplies[supplyId] || 0));
-    const supplyEmpty = !player.supplies[supplyId];
-    if (ui.supplyBtn.disabled !== supplyEmpty) ui.supplyBtn.disabled = supplyEmpty;
-    const healRemaining = Math.max(0, healSkillReadyAt - time),
-      dodgeRemaining = Math.max(0, player.dodgeCd - time);
-    setText(ui.skill3Status, healRemaining > 0 ? healRemaining.toFixed(1) + 'с' : 'ДЫХАНИЕ');
-    ui.skill3Btn?.classList.toggle('cooldown', healRemaining > 0);
-    setText(ui.dodgeStatus, dodgeRemaining > 0 ? dodgeRemaining.toFixed(1) + 'с' : 'УКЛОН');
-    ui.dodgeBtn?.classList.toggle('cooldown', dodgeRemaining > 0);
-    if (focusedEnemy && focusedEnemy.hp > 0 && (time < focusUntil || focusedEnemy.aiState === 'chase' && dist(player, focusedEnemy) < 320)) {
-      const names = {raider: 'Налётчик', boar: 'Вепрь', guardian: 'Страж руин'};
-      ui.targetHud?.classList.remove('hidden');
-      setText(ui.targetName, names[focusedEnemy.type] || 'Противник');
-      setText(ui.targetHpText, Math.max(0, Math.ceil(focusedEnemy.hp)) + ' / ' + Math.ceil(focusedEnemy.maxHp));
-      setWidth(ui.targetHpFill, clamp(focusedEnemy.hp / focusedEnemy.maxHp * 100, 0, 100) + '%');
-    } else {
-      focusedEnemy = null;
-      ui.targetHud?.classList.add('hidden');
+    const supplyLeft = Math.max(0, player.supplyCd - time);
+    const supplyName = supplyId === 'tonic' ? 'ТОНИК' : supplyId ? 'ЗЕЛЬЕ' : 'ПУСТО';
+    setText(ui.supplyLabel, supplyName + ' · ' + (supplyLeft > 0 ? `${supplyLeft.toFixed(1)}с` : player.supplies[supplyId] || 0));
+    const supplyEmpty = !player.supplies[supplyId], supplyDisabled = supplyEmpty || supplyLeft > 0;
+    if (ui.supplyBtn.disabled !== supplyDisabled) ui.supplyBtn.disabled = supplyDisabled;
+    ui.supplyBtn.title = supplyLeft > 0 ? `Расходник: ${supplyLeft.toFixed(1)} с` : supplyEmpty ? 'Нет выбранного расходника' : 'Использовать быстрый расходник';
+    ui.supplyBtn.setAttribute('aria-label', ui.supplyBtn.title);
+    const lowSkillStamina = player.stamina < 20;
+    for (const [btn, name] of [[ui.skill1Btn, 'Разрез ветра'], [ui.skill2Btn, 'Тройной импульс']]) if (btn) {
+      btn.disabled = lowSkillStamina;
+      btn.title = lowSkillStamina ? 'Недостаточно выносливости · нужно 20' : `${name} · 20 выносливости`;
+      btn.setAttribute('aria-label', btn.title);
     }
+    const secondWindLeft = Math.max(0, player.secondWindCd - time);
+    if (ui.skill3Meta) setText(ui.skill3Meta, secondWindLeft > 0 ? `${Math.ceil(secondWindLeft)}с` : '20 EN');
+    if (ui.skill3Btn) {
+      const reason = player.hp >= player.maxHp ? 'Здоровье полное' : secondWindLeft > 0 ? `Восстановление: ${Math.ceil(secondWindLeft)} с` : lowSkillStamina ? 'Недостаточно выносливости · нужно 20' : '';
+      ui.skill3Btn.disabled = !!reason;
+      ui.skill3Btn.title = reason || 'Второе дыхание · 20 выносливости · +70 HP';
+      ui.skill3Btn.setAttribute('aria-label', ui.skill3Btn.title);
+    }
+    const dodgeLeft = Math.max(0, player.dodgeCd - time);
+    if (ui.dodgeMeta) setText(ui.dodgeMeta, dodgeLeft > 0 ? `${dodgeLeft.toFixed(1)}с` : '24 EN');
+    if (ui.dodgeBtn) {
+      const reason = dodgeLeft > 0 ? `Уклонение: ${dodgeLeft.toFixed(1)} с` : player.stamina < 24 ? 'Недостаточно выносливости · нужно 24' : '';
+      ui.dodgeBtn.disabled = !!reason;
+      ui.dodgeBtn.title = reason || 'Уклонение · 24 выносливости';
+      ui.dodgeBtn.setAttribute('aria-label', ui.dodgeBtn.title);
+    }
+    refreshSaveHealth();
     const hit = nearbyInteraction();
     ui.actionUse.classList.toggle('available', !!hit);
     setText(ui.actionLabel, hit ? {
       portal: 'ПЕРЕЙТИ',
+      portalLocked: 'ЗАКРЫТО',
       scout: 'ГОВОРИТЬ',
       loot: 'ПОДОБРАТЬ',
       resource: 'СОБРАТЬ'
@@ -2835,11 +3121,6 @@
     for (const [x, y, k] of list) {
       const s = screenPos(x, y);
       if (s.x < -140 || s.x > W + 140 || s.y < -140 || s.y > H + 140) continue;
-      if (art?.has('house')) {
-        groundShadow(s.x, s.y + 15, 45);
-        art.draw(ctx, k === 'SHRINE' || k === 'BOSS' ? 'shrine' : k === 'RUIN' || k === 'MINE' ? 'ruins' : 'house', s.x, s.y + 20, 140);
-        continue;
-      }
       ctx.save();
       ctx.translate(s.x, s.y);
       ctx.fillStyle = 'rgba(0,0,0,.18)';
@@ -2934,19 +3215,21 @@
   }
   function drawCombatTelegraphs() {
     for (const e of entities) {
-      if (e.kind !== 'enemy' || e.hp <= 0 || !e.pendingAttack || !(e.windup > 0)) continue;
+      if (e.kind !== 'enemy' || e.hp <= 0 || e.attackPhase !== 'windup') continue;
       const s = screenPos(e.x, e.y),
-        total = e.type === 'guardian' ? .48 : .32,
-        progress = 1 - clamp(e.windup / total, 0, 1),
-        radius = e.type === 'guardian' ? 42 : 29;
+        duration = Math.max(.01, e.attackWindup || .35),
+        progress = clamp((time - (e.attackStartedAt || time)) / duration, 0, 1);
       ctx.save();
-      ctx.fillStyle = `rgba(199,65,58,${(.06 + progress * .12).toFixed(3)})`;
-      ctx.strokeStyle = `rgba(255,145,118,${(.48 + progress * .42).toFixed(3)})`;
-      ctx.lineWidth = 2.5 + progress * 1.5;
+      ctx.strokeStyle = 'rgba(232,111,96,.78)';
+      ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(s.x, s.y, radius, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.arc(s.x, s.y, 30 + progress * 5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
       ctx.stroke();
+      ctx.globalAlpha = .18 + progress * .28;
+      ctx.fillStyle = '#e86f60';
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 24, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
     }
   }
@@ -2980,26 +3263,18 @@
     drawNpcLabels();
   }
   function objectiveTarget() {
-    const q = quest(),
-      state = questState(),
-      z = zones[zoneId];
-    if (state.step === 0) return z.scout;
-    if (state.step >= 3) return z.portal;
-    let type = '';
-    if (state.step === 1) type = q.id === 'mist' ? 'herb' : q.id === 'stone' ? 'ore' : 'wood';
-    if (state.step === 2) type = q.id === 'stone' ? 'guardian' : 'enemy';
-    let best = null,
-      bestDist = Infinity;
-    for (const e of entities) {
-      const match = state.step === 1 ? e.kind === 'resource' && e.type === type && e.hp > 0 : e.kind === 'enemy' && e.hp > 0 && (type === 'enemy' || e.type === type) && (q.id !== 'mist' || e.type === 'raider');
-      if (!match) continue;
-      const d = dist(player, e);
-      if (d < bestDist) {
-        best = e;
-        bestDist = d;
-      }
+    const q = quest(), state = questState(), z = zones[zoneId];
+    if (state.step === 0) return { x: z.scout.x, y: z.scout.y };
+    if (state.step === 3) return { x: z.portal.x, y: z.portal.y };
+    let candidates = [];
+    if (state.step === 1) {
+      const type = q.id === 'mist' ? 'herb' : q.id === 'stone' ? 'ore' : 'wood';
+      candidates = entities.filter(e => e.kind === 'resource' && e.type === type && e.hp > 0);
+    } else if (state.step === 2) {
+      candidates = entities.filter(e => e.kind === 'enemy' && e.hp > 0 && (q.id === 'stone' ? e.type === 'guardian' : q.id === 'mist' ? e.type === 'raider' : true));
     }
-    return best || (state.step === 1 ? z.scout : z.portal);
+    if (!candidates.length) return null;
+    return candidates.reduce((best, item) => !best || dist(player, item) < dist(player, best) ? item : best, null);
   }
   function drawMap() {
     const z = zones[zoneId];
@@ -3032,13 +3307,14 @@
     mctx.fill();
     const target = objectiveTarget();
     if (target) {
-      const tx = target.x / WORLD.w * 240,
-        ty = target.y / WORLD.h * 240;
+      const tx = target.x / WORLD.w * 240, ty = target.y / WORLD.h * 240;
       mctx.strokeStyle = '#ffe08a';
       mctx.lineWidth = 2;
+      mctx.globalAlpha = .65 + Math.sin(time * 5) * .25;
       mctx.beginPath();
-      mctx.arc(tx, ty, 5 + (Math.sin(time * 5) + 1) * 1.2, 0, Math.PI * 2);
+      mctx.arc(tx, ty, 5.5, 0, Math.PI * 2);
       mctx.stroke();
+      mctx.globalAlpha = 1;
     }
     mctx.fillStyle = '#eef5ef';
     mctx.beginPath();
@@ -3144,6 +3420,11 @@
     if (started) return;
     started = true;
     updateNetworkStatus();
+    applyControlLayout();
+    const tracker = $('questTracker');
+    tracker.classList.toggle('collapsed', settings.questCollapsed);
+    $('questToggle').setAttribute('aria-expanded', String(!settings.questCollapsed));
+    setText($('questChevron'), settings.questCollapsed ? '›' : '‹');
     applyGraphics();
     const x = player.x,
       y = player.y;
@@ -3153,7 +3434,12 @@
       player.y = y;
     }
     physics?.relocate(player);
+    if (saveDirty && !saveBlockedReason) save();
     updateUI();
+    if (pendingLoadNotice) {
+      toast(pendingLoadNotice);
+      pendingLoadNotice = '';
+    }
     drawWorld();
     drawMap();
     resetFrameLimiter();
@@ -3186,6 +3472,7 @@
   refreshPerformanceMonitorVisibility();
   if (globalThis.__AETHER_TEST__) {
     globalThis.__AETHER_TEST_API__ = {
+      registerPWA,
       state: () => ({
         zoneId,
         player,
@@ -3198,18 +3485,14 @@
         projectiles,
         time,
         DPR,
-        combat: {
-          healSkillReadyAt,
-          attackBuffered,
-          focusedEnemy
-        },
         perf: {
           fps: perfActualFps,
           frameMs: perfAvgFrameMs,
           renderMs: perfAvgRenderMs
         }
       }),
-      recoveryCopies: () => [...testStorage.entries()].filter(([key]) => key.startsWith(SAVE + '_recovery_')),
+      recoveryCopies: () => [...testStorage.entries()].filter(([key]) => key.startsWith(RECOVERY_PREFIX)),
+      saveHealth: () => ({ dirty: saveDirty, blockedReason: saveBlockedReason, revision: saveRevision }),
       storage,
       firstPaint,
       resetInput,
@@ -3236,6 +3519,8 @@
       buyItem,
       openEquipment,
       equipItem,
+      switchGear,
+      recomputeDerivedStats,
       selectSupply,
       useSupply,
       brewSupply,
@@ -3252,11 +3537,12 @@
       applyGraphics,
       update,
       nearbyInteraction,
+      isInCombat,
+      statSources,
       objectiveTarget,
-      acquireEnemy,
-      skillMultiplier,
       zones,
       player,
+      setZone: id => { if (Object.hasOwn(zones, id)) { zoneId = id; resetZone(); updateUI(); return true; } return false; },
       setFps: f => {
         settings.fps = FPS.includes(Number(f)) ? Number(f) : 60;
         resetFrameLimiter();
