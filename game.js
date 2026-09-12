@@ -3,7 +3,7 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '4.0.6';
+  const BUILD_VERSION = '4.0.10';
   const SAVE_SCHEMA = 4;
   const BASE_STATS = Object.freeze({ startLevel: 6, damage: 32, maxHp: 240, maxStamina: 100, speed: 205, damagePerLevel: 3, hpPerLevel: 18 });
   const MAX_UPGRADE_RANK = 5;
@@ -49,7 +49,8 @@
     buckler: {
       slot: 'offhand',
       name: 'Щит дозорного',
-      icon: 'shield'
+      icon: 'shield',
+      build: { blockIncomingMultiplier: .18 }
     },
     starterBlade: {
       slot: 'weapon',
@@ -79,7 +80,7 @@
       slot: 'armor',
       name: 'Пластинчатая броня стража',
       health: 25,
-      blockDrainMultiplier: .7,
+      build: { blockDrainMultiplier: .70 },
       icon: 'armor'
     }
   };
@@ -185,6 +186,11 @@
   };
   const ui = {
     hp: $('hpFill'),
+    bossHud: $('bossHud'),
+    bossName: $('bossName'),
+    bossPhase: $('bossPhase'),
+    bossHpText: $('bossHpText'),
+    bossHpFill: $('bossHpFill'),
     stamina: $('staminaFill'),
     xp: $('xpFill'),
     level: $('levelText'),
@@ -406,9 +412,9 @@
   const physics = window.AetherPhysics?.create(WORLD.w, WORLD.h);
   let structures = [];
   const LANDMARKS = {
-    mistwood: [[940, 440, 'FOREST', 'Шепчущая чаща'], [1540, 1030, 'RUIN', 'Затонувшие руины'], [2150, 540, 'SHRINE', 'Святилище росы']],
-    stonevale: [[820, 480, 'VILLAGE', 'Старый дозор'], [1500, 840, 'MINE', 'Серебряный рудник'], [2180, 520, 'RUIN', 'Расколотая арка']],
-    ashfield: [[940, 500, 'OUTPOST', 'Пепельный пост'], [1760, 1240, 'BOSS', 'Обугленная арена'], [1260, 930, 'SHRINE', 'Святилище искры']]
+    mistwood: [[940,440,'FOREST','Шепчущая чаща'],[1540,1030,'RUIN','Затонувшие руины'],[2150,540,'SHRINE','Святилище росы'],[2440,1320,'SHRINE','Камень туманного дозора']],
+    stonevale:[[820,480,'VILLAGE','Старый дозор'],[1500,840,'MINE','Серебряный рудник'],[2180,520,'RUIN','Расколотая арка'],[2360,1320,'RUIN','Раскол дозорных']],
+    ashfield:[[940,500,'OUTPOST','Пепельный пост'],[1760,1240,'BOSS','Обугленная арена'],[1260,930,'SHRINE','Святилище искры'],[700,1360,'OUTPOST','Пепельный маяк']]
   };
   const SAVE = 'aethernfall_save_v30';
   const SAVE_BACKUP = SAVE + '_backup';
@@ -434,11 +440,7 @@
         x: 2100,
         y: 850
       },
-      quest: {
-        id: 'mist',
-        title: 'Следы в тумане',
-        steps: ['Поговорите с разведчиком', 'Соберите 3 травы', 'Победите 4 налётчиков', 'Перейдите в Каменную долину']
-      },
+      questId: 'mist',
       next: 'stonevale',
       resources: ['herb', 'wood']
     },
@@ -461,11 +463,7 @@
         x: 210,
         y: 820
       },
-      quest: {
-        id: 'stone',
-        title: 'Пепел старого мира',
-        steps: ['Поговорите с разведчиком', 'Соберите 2 руды', 'Победите стража руин', 'Перейдите в Пепельные поля']
-      },
+      questId: 'stone',
       next: 'ashfield',
       resources: ['ore', 'herb']
     },
@@ -488,41 +486,54 @@
         x: 330,
         y: 420
       },
-      quest: {
-        id: 'ash',
-        title: 'Осколок пламени',
-        steps: ['Поговорите с хранителем', 'Соберите 4 древесины', 'Победите 6 врагов', 'Вернитесь в Туманный лес']
-      },
+      questId: 'ash',
       next: 'mistwood',
       resources: ['wood', 'ore']
     }
   };
+  const MAIN_QUESTS = Object.freeze({
+    mist: {
+      title:'Следы в тумане',
+      objectives:[
+        {id:'mist-scout',type:'talk',target:'scout',text:'Поговорите с разведчиком'},
+        {id:'mist-herb',type:'gather',target:'herb',match:'target',counter:'herb',required:3,text:'Соберите 3 травы',progressText:'Соберите траву'},
+        {id:'mist-watchstone',type:'discover',target:'mistwood:3',match:'target',text:'Найдите Камень туманного дозора'},
+        {id:'mist-raiders',type:'kill',target:'raider',match:'target',counter:'kills',required:4,text:'Победите 4 налётчиков',progressText:'Победите налётчиков'},
+        {id:'mist-portal',type:'portal',text:'Перейдите в Каменную долину'},
+      ],
+    },
+    stone: {
+      title:'Пепел старого мира',
+      objectives:[
+        {id:'stone-scout',type:'talk',target:'scout',text:'Поговорите с разведчиком'},
+        {id:'stone-ore',type:'gather',target:'ore',match:'target',counter:'ore',required:2,text:'Соберите 2 руды',progressText:'Соберите руду'},
+        {id:'stone-watchrift',type:'discover',target:'stonevale:3',match:'target',text:'Исследуйте Раскол дозорных'},
+        {id:'stone-guardian',type:'kill',target:'guardian',match:'target',counter:'guardian',required:1,text:'Победите стража руин'},
+        {id:'stone-portal',type:'portal',text:'Перейдите в Пепельные поля'},
+      ],
+    },
+    ash: {
+      title:'Осколок пламени',
+      objectives:[
+        {id:'ash-scout',type:'talk',target:'scout',text:'Поговорите с хранителем'},
+        {id:'ash-wood',type:'gather',target:'wood',match:'target',counter:'wood',required:4,text:'Соберите 4 древесины',progressText:'Соберите древесину'},
+        {id:'ash-beacon',type:'discover',target:'ashfield:3',match:'target',text:'Доберитесь до Пепельного маяка'},
+        {id:'ash-enemies',type:'kill',target:'enemy',match:'category',counter:'kills',required:6,spawnTarget:'raider',text:'Победите 6 врагов',progressText:'Победите врагов'},
+        {id:'ash-portal',type:'portal',text:'Вернитесь в Туманный лес',effect:'questCycleCompleted'},
+      ],
+    },
+  });
   const CONTRACTS = Object.freeze({
-    mistwood: { title: 'Травы для дозора', kind: 'gather', target: 'herb', required: 4, gold: 45, supply: 'potion', note: 'Соберите 4 травы для походной аптечки дозора.' },
-    stonevale: { title: 'Серебро для укреплений', kind: 'gather', target: 'ore', required: 3, gold: 70, supply: 'tonic', note: 'Добудьте 3 единицы руды у старых выработок.' },
-    ashfield: { title: 'Зачистка пепельной тропы', kind: 'kill', target: 'enemy', required: 5, gold: 100, supply: 'fieldKit', note: 'Победите 5 противников в Пепельных полях.' }
+    mistwood: { title:'Травы для дозора', kind:'gather', target:'herb', match:'target', required:4, gold:45, supply:'potion', note:'Соберите 4 травы для походной аптечки дозора.' },
+    stonevale: { title:'Серебро для укреплений', kind:'gather', target:'ore', match:'target', required:3, gold:70, supply:'tonic', note:'Добудьте 3 единицы руды у старых выработок.' },
+    ashfield: { title:'Зачистка пепельной тропы', kind:'kill', target:'enemy', match:'category', required:5, gold:100, supply:'fieldKit', note:'Победите 5 противников в Пепельных полях.' },
   });
-  const MAIN_QUEST_TRANSITIONS = Object.freeze({
-    mist: { steps: [
-      { type: 'talk', target: 'scout' },
-      { type: 'gather', target: 'herb', counter: 'herb', required: 3 },
-      { type: 'kill', target: 'raider', counter: 'kills', required: 4 },
-      { type: 'portal' }
-    ] },
-    stone: { steps: [
-      { type: 'talk', target: 'scout' },
-      { type: 'gather', target: 'ore', counter: 'ore', required: 2 },
-      { type: 'kill', target: 'guardian', counter: 'guardian', required: 1 },
-      { type: 'portal' }
-    ] },
-    ash: { steps: [
-      { type: 'talk', target: 'scout' },
-      { type: 'gather', target: 'wood', counter: 'wood', required: 4 },
-      { type: 'kill', target: 'enemy', counter: 'kills', required: 6 },
-      { type: 'portal', effect: 'questCycleCompleted' }
-    ] }
-  });
-  const questEngine = window.AetherQuests?.createEngine({ main: MAIN_QUEST_TRANSITIONS, contracts: CONTRACTS });
+  function validateZoneQuestBindings(definitions, zoneDefinitions) {
+    for (const [id, zone] of Object.entries(zoneDefinitions)) {
+      if (!definitions[zone.questId]) throw new Error(`Zone quest missing: ${id}:${zone.questId}`);
+    }
+  }
+  validateZoneQuestBindings(MAIN_QUESTS, zones);
   const COSMETICS = Object.freeze({
     accents: { teal: '#7ef1e1', gold: '#f0d58e', ember: '#ff8e5c' },
     trails: { steel: '#91c6cc', aether: '#b7a8ff', ember: '#ff9b63' }
@@ -531,14 +542,21 @@
     weapon: {
       none: { name: 'Без руны' },
       edge: { name: 'Руна кромки', damage: 5, note: '+5 к итоговому урону.' },
-      aether: { name: 'Руна эфира', skill: .10, note: '+10% урона навыков.' }
+      aether: { name: 'Руна эфира', build: { skillDamageMultiplier: 1.10 }, note: '+10% урона навыков.' }
     },
     armor: {
       none: { name: 'Без руны' },
       vigor: { name: 'Руна стойкости', health: 18, note: '+18 к максимальному здоровью.' },
-      guard: { name: 'Руна стража', block: .90, note: 'Расход выносливости блока −10%.' }
+      guard: { name: 'Руна стража', build: { blockDrainMultiplier: .90 }, note: 'Расход выносливости блока −10%.' }
     }
   });
+  const buildEngine = window.AetherBuilds.createEngine({
+    baseStats: BASE_STATS,
+    combatRules: COMBAT_RULES,
+    gear: GEAR,
+    runes: RUNES
+  });
+  let buildProfile = null;
   const player = {
     x: 360,
     y: 500,
@@ -617,6 +635,35 @@
       }
     }
   };
+  function validateLiveQuestStateBindings(definitions, questStates, zoneDefinitions = zones, landmarkDefinitions = LANDMARKS) {
+    const definitionIds = Object.keys(definitions).sort();
+    const stateIds = Object.keys(questStates).sort();
+    if (JSON.stringify(definitionIds) !== JSON.stringify(stateIds)) throw new Error('Quest definition/state registry mismatch');
+
+    const zoneByQuest = {};
+    for (const [zoneKey, zone] of Object.entries(zoneDefinitions)) {
+      if (!definitions[zone.questId]) throw new Error(`Zone quest missing: ${zoneKey}:${zone.questId}`);
+      if (zoneByQuest[zone.questId]) throw new Error(`Quest bound to multiple zones: ${zone.questId}`);
+      zoneByQuest[zone.questId] = zoneKey;
+    }
+
+    for (const [questId, definition] of Object.entries(definitions)) {
+      const state = questStates[questId];
+      const zoneKey = zoneByQuest[questId];
+      if (!zoneKey) throw new Error(`Quest zone missing: ${questId}`);
+      for (const objective of definition.objectives) {
+        if (objective.counter && !Object.hasOwn(state, objective.counter)) throw new Error(`Quest counter missing: ${questId}.${objective.counter}`);
+        if (objective.type === 'discover' && objective.match === 'target') {
+          const prefix = `${zoneKey}:`;
+          const suffix = objective.target.startsWith(prefix) ? objective.target.slice(prefix.length) : '';
+          const index = /^\d+$/.test(suffix) ? Number(suffix) : -1;
+          if (!Array.isArray(landmarkDefinitions[zoneKey]?.[index])) throw new Error(`Quest discover target is not same-zone landmark: ${questId}.${objective.target}`);
+        }
+      }
+    }
+  }
+  validateLiveQuestStateBindings(MAIN_QUESTS, player.quests);
+  const questEngine = window.AetherQuests?.createEngine({ main: MAIN_QUESTS, contracts: CONTRACTS });
   let zoneId = 'mistwood',
     entities = [],
     particles = [],
@@ -700,14 +747,18 @@
   function clamp01(value) {
     return Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
   }
-  function getActionPresentation(action, state, now, pressed = false) {
+  function getActionPresentation(action, state, now, pressed = false, tuning = buildProfile?.combat) {
     const stamina = Number.isFinite(state?.stamina) ? state.stamina : 0,
       hp = Number.isFinite(state?.hp) ? state.hp : 0,
       maxHp = Number.isFinite(state?.maxHp) ? state.maxHp : 0,
       attackCd = Math.max(0, Number.isFinite(state?.attackCd) ? state.attackCd : 0),
       attackQueuedUntil = Number.isFinite(state?.attackQueuedUntil) ? state.attackQueuedUntil : 0,
       dodgeLeft = Math.max(0, (Number.isFinite(state?.dodgeCd) ? state.dodgeCd : 0) - now),
-      secondWindLeft = Math.max(0, (Number.isFinite(state?.secondWindCd) ? state.secondWindCd : 0) - now);
+      secondWindLeft = Math.max(0, (Number.isFinite(state?.secondWindCd) ? state.secondWindCd : 0) - now),
+      dodgeStaminaCost = tuning?.dodgeStaminaCost ?? COMBAT_RULES.dodgeStaminaCost,
+      dodgeCooldown = tuning?.dodgeCooldown ?? COMBAT_RULES.dodgeCooldown,
+      skillStaminaCost = tuning?.skillStaminaCost ?? COMBAT_RULES.skillStaminaCost,
+      secondWindCooldown = tuning?.secondWindCooldown ?? COMBAT_RULES.secondWindCooldown;
     let availability = 'ready', progress = 0, disabled = false, title = '', ariaLabel = '';
     if (action === 'attack') {
       if (attackCd > 0) {
@@ -723,24 +774,24 @@
     if (action === 'dodge') {
       if (dodgeLeft > 0) {
         availability = 'cooldown';
-        progress = clamp01(dodgeLeft / COMBAT_RULES.dodgeCooldown);
+        progress = clamp01(dodgeLeft / dodgeCooldown);
         disabled = true;
         title = `Уклонение · восстановление ${dodgeLeft.toFixed(1)} с`;
-      } else if (stamina < COMBAT_RULES.dodgeStaminaCost) {
+      } else if (stamina < dodgeStaminaCost) {
         availability = 'resource';
         disabled = true;
-        title = `Уклонение · недостаточно выносливости · нужно ${COMBAT_RULES.dodgeStaminaCost}`;
-      } else title = `Уклонение · готово · ${COMBAT_RULES.dodgeStaminaCost} выносливости`;
+        title = `Уклонение · недостаточно выносливости · нужно ${dodgeStaminaCost}`;
+      } else title = `Уклонение · готово · ${dodgeStaminaCost} выносливости`;
       ariaLabel = title;
       return { availability, interaction: pressed ? 'pressed' : 'idle', progress, disabled, title, ariaLabel };
     }
     if (action === 'skill1' || action === 'skill2') {
       const name = action === 'skill1' ? 'Разрез ветра' : 'Тройной импульс';
-      if (stamina < COMBAT_RULES.skillStaminaCost) {
+      if (stamina < skillStaminaCost) {
         availability = 'resource';
         disabled = true;
-        title = `${name} · недостаточно выносливости · нужно ${COMBAT_RULES.skillStaminaCost}`;
-      } else title = `${name} · готово · ${COMBAT_RULES.skillStaminaCost} выносливости`;
+        title = `${name} · недостаточно выносливости · нужно ${skillStaminaCost}`;
+      } else title = `${name} · готово · ${skillStaminaCost} выносливости`;
       ariaLabel = title;
       return { availability, interaction: pressed ? 'pressed' : 'idle', progress: 0, disabled, title, ariaLabel };
     }
@@ -751,14 +802,14 @@
         title = 'Второе дыхание · здоровье полное';
       } else if (secondWindLeft > 0) {
         availability = 'cooldown';
-        progress = clamp01(secondWindLeft / COMBAT_RULES.secondWindCooldown);
+        progress = clamp01(secondWindLeft / secondWindCooldown);
         disabled = true;
         title = `Второе дыхание · восстановление ${Math.ceil(secondWindLeft)} с`;
-      } else if (stamina < COMBAT_RULES.skillStaminaCost) {
+      } else if (stamina < skillStaminaCost) {
         availability = 'resource';
         disabled = true;
-        title = `Второе дыхание · недостаточно выносливости · нужно ${COMBAT_RULES.skillStaminaCost}`;
-      } else title = `Второе дыхание · готово · ${COMBAT_RULES.skillStaminaCost} выносливости`;
+        title = `Второе дыхание · недостаточно выносливости · нужно ${skillStaminaCost}`;
+      } else title = `Второе дыхание · готово · ${skillStaminaCost} выносливости`;
       ariaLabel = title;
       return { availability, interaction: pressed ? 'pressed' : 'idle', progress, disabled, title, ariaLabel };
     }
@@ -962,6 +1013,17 @@
     cosmetics: COSMETICS,
     contracts: CONTRACTS,
     contractIds: Object.keys(CONTRACTS),
+    questStepMax: Object.fromEntries(
+      Object.entries(MAIN_QUESTS).map(([id, definition]) => [id, definition.objectives.length - 1])
+    ),
+    questStepMigration: {
+      beforeVersion: '4.0.9',
+      mappings: {
+        mist: [0,1,3,4],
+        stone:[0,1,3,4],
+        ash:  [0,1,3,4],
+      },
+    },
     qualityIds: Object.keys(QUALITY),
     fpsValues: FPS,
     settingsOptions: {
@@ -1042,21 +1104,19 @@
     const weapon = GEAR[player.loadout.weapon] || GEAR.starterBlade,
       armor = GEAR[player.loadout.armor] || GEAR.starterArmor,
       progression = player.progression;
-    const weaponRune = RUNES.weapon[player.runes?.weapon] || RUNES.weapon.none,
-      armorRune = RUNES.armor[player.runes?.armor] || RUNES.armor.none;
-    player.damage = Math.max(1, BASE_STATS.damage + levelSteps() * BASE_STATS.damagePerLevel + progression.forgeRank * 5 + progression.legacyDamageBonus + (weapon.damage || 0) + (weaponRune.damage || 0));
-    player.maxHp = Math.max(1, BASE_STATS.maxHp + levelSteps() * BASE_STATS.hpPerLevel + progression.vitalityRank * 12 + progression.legacyHpBonus + (armor.health || 0) + (armorRune.health || 0));
-    player.maxStamina = BASE_STATS.maxStamina;
-    player.speed = BASE_STATS.speed;
+    buildProfile = buildEngine.derive({
+      level: player.level,
+      progression,
+      loadout: player.loadout,
+      runes: player.runes
+    });
+    player.damage = buildProfile.damage;
+    player.maxHp = buildProfile.maxHp;
+    player.maxStamina = buildProfile.maxStamina;
+    player.speed = buildProfile.speed;
     player.hp = Math.min(player.hp, player.maxHp);
     player.equipment.weapon = player.loadout.weapon === 'starterBlade' && progression.forgeRank > 0 ? 'Закалённый меч следопыта' : weapon.name;
     player.equipment.armor = armor.name;
-  }
-  function skillDamageMultiplier() {
-    return 1 + (RUNES.weapon[player.runes?.weapon]?.skill || 0);
-  }
-  function blockDrainMultiplier() {
-    return (GEAR[player.loadout.armor]?.blockDrainMultiplier || 1) * (RUNES.armor[player.runes?.armor]?.block || 1);
   }
   const COMBAT_STATE_KEYS = ['attackCd', 'attackQueuedUntil', 'combo', 'comboTimer', 'stamina', 'dodgeCd', 'dodgeUntil', 'dashRemaining', 'secondWindCd', 'hp'];
   function combatStateSnapshot() {
@@ -1188,6 +1248,7 @@
     refreshSaveHealth();
     return false;
   }
+  recomputeDerivedStats();
   load();
   addEventListener('storage', event => {
     if (event.key !== SAVE || !event.newValue) return;
@@ -1208,6 +1269,7 @@
     change();
     if (!save()) {
       Object.assign(player, before);
+      recomputeDerivedStats();
       toast('Изменение отменено: сохранение недоступно');
       return false;
     }
@@ -1228,6 +1290,12 @@
     if (!equipmentTransaction(() => player.loadout.quick = id)) return false;
     openEquipment();
     return true;
+  }
+  function scaledSelfHeal(baseAmount, profile = buildProfile) {
+    const amount = Number(baseAmount);
+    const multiplier = Number(profile?.healingMultiplier);
+    if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(multiplier) || multiplier <= 0) return 0;
+    return Math.round(amount * multiplier);
   }
   function supplyUseReason(id) {
     const supply = SUPPLIES[id];
@@ -1250,7 +1318,7 @@
     }
     if (!equipmentTransaction(() => {
       player.supplies[id]--;
-      player.hp = Math.min(player.maxHp, player.hp + supply.hp);
+      player.hp = Math.min(player.maxHp, player.hp + scaledSelfHeal(supply.hp));
       player.stamina = Math.min(player.maxStamina, player.stamina + supply.stamina);
     })) return false;
     cancelBlock();
@@ -1539,33 +1607,52 @@
       im.src = new URL(`assets/textures/${name}.png`, document.baseURI).href;
     })));
   }
+  function currentQuestId() {
+    return zones[zoneId].questId;
+  }
   function quest() {
-    return zones[zoneId].quest;
+    return MAIN_QUESTS[currentQuestId()];
   }
   function questState() {
-    return player.quests[quest().id];
+    return player.quests[currentQuestId()];
+  }
+  function inspectCurrentQuest() {
+    return questEngine?.inspectMain(currentQuestId(), questState()) || null;
+  }
+  let reconcilingDiscovery = false;
+  function exactDiscoveryEvent(target) {
+    if (typeof target !== 'string') return null;
+    const prefix = `${zoneId}:`;
+    if (!target.startsWith(prefix)) return null;
+    const indexText = target.slice(prefix.length);
+    if (!/^\d+$/.test(indexText)) return null;
+    const landmark = LANDMARKS[zoneId]?.[Number(indexText)];
+    if (!landmark) return null;
+    return { type:'discover', target, category:landmark[2], amount:1 };
+  }
+  function reconcileActiveDiscoveryObjective() {
+    if (reconcilingDiscovery) return false;
+    const active = inspectCurrentQuest()?.active;
+    if (active?.type !== 'discover' || active.match !== 'target' || active.counter !== undefined) return false;
+    if (!player.discoveries.includes(active.target)) return false;
+    const event = exactDiscoveryEvent(active.target);
+    if (!event) return false;
+    reconcilingDiscovery = true;
+    try { return applyMainQuestEvent(event); }
+    finally { reconcilingDiscovery = false; }
   }
   function currentObjective() {
-    const q = quest(),
-      s = questState(),
-      step = q.steps[Math.min(s.step, q.steps.length - 1)];
-    if (q.id === 'mist' && s.step === 1) return `Соберите траву: ${s.herb}/3`;
-    if (q.id === 'mist' && s.step === 2) return `Победите налётчиков: ${s.kills}/4`;
-    if (q.id === 'stone' && s.step === 1) return `Соберите руду: ${s.ore}/2`;
-    if (q.id === 'ash' && s.step === 1) return `Соберите древесину: ${s.wood}/4`;
-    if (q.id === 'ash' && s.step === 2) return `Победите врагов: ${s.kills}/6`;
-    return step;
+    return inspectCurrentQuest()?.active?.displayText || '';
   }
   function openQuests() {
-    const q = quest(),
-      state = questState();
-    const steps = q.steps.map((text, index) => {
-      const current = index === state.step,
-        complete = index < state.step;
-      return `<li class="${current ? 'current' : complete ? 'complete' : ''}" ${current ? 'aria-current="step"' : ''}>${complete ? '✓ ' : ''}${escapeHTML(current ? currentObjective() : text)}${current ? ' · Сейчас' : ''}</li>`;
+    const view = inspectCurrentQuest();
+    if (!view) return;
+    const steps = view.steps.map(step => {
+      const current = step.status === 'current', complete = step.status === 'complete';
+      return `<li class="${current ? 'current' : complete ? 'complete' : ''}" ${current ? 'aria-current="step"' : ''}>${complete ? '✓ ' : ''}${escapeHTML(step.displayText)}${current ? ' · Сейчас' : ''}</li>`;
     }).join('');
     const def = CONTRACTS[zoneId], c = refreshLiveContract(zoneId), contractText = c.state === 0 ? 'Доступно в лагере' : c.state === 1 ? `Выполняется · ${c.progress}/${def.required}` : c.state === 2 ? 'Выполнено · заберите награду в лагере' : 'Завершено в этом цикле';
-    openModal('Задания', `<article class="card"><p class="note">${escapeHTML(zones[zoneId].name)} · этап ${state.step + 1} из ${q.steps.length}</p><h3>${escapeHTML(q.title)}</h3><ol class="questSteps">${steps}</ol></article><article class="card"><p class="note">ПОРУЧЕНИЕ ЛАГЕРЯ</p><h3>${escapeHTML(def.title)}</h3><p>${escapeHTML(def.note)}</p><p><b>${contractText}</b></p></article><p class="note">Основное задание продвигается во время игры. Материалы из магазина не засчитываются как сбор. Поручения принимаются у доски в лагере.</p><button class="btn" id="questsClose">Вернуться в игру</button>`);
+    openModal('Задания', `<article class="card"><p class="note">${escapeHTML(zones[zoneId].name)} · этап ${view.stepIndex + 1} из ${view.stepCount}</p><h3>${escapeHTML(view.title)}</h3><ol class="questSteps">${steps}</ol></article><article class="card"><p class="note">ПОРУЧЕНИЕ ЛАГЕРЯ</p><h3>${escapeHTML(def.title)}</h3><p>${escapeHTML(def.note)}</p><p><b>${contractText}</b></p></article><p class="note">Основное задание продвигается во время игры. Материалы из магазина не засчитываются как сбор. Поручения принимаются у доски в лагере.</p><button class="btn" id="questsClose">Вернуться в игру</button>`);
     bindTap($('questsClose'), closeModal);
   }
   function applyMainQuestResult(questId, result) {
@@ -1578,40 +1665,60 @@
     if (result.effects.some(effect => effect.type === 'questStepChanged')) {
       ensureQuestTargets();
       feedback('quest', 10);
+      if (!reconcilingDiscovery) reconcileActiveDiscoveryObjective();
     }
     return true;
   }
   function applyMainQuestEvent(event) {
     if (!questEngine) return false;
-    const questId = quest().id;
+    const questId = currentQuestId();
     return applyMainQuestResult(questId, questEngine.applyMainEvent(questId, questState(), event));
   }
   function advanceQuest(reason, persist = true) {
     if (questEngine) {
-      const questId = quest().id;
+      const questId = currentQuestId();
       applyMainQuestResult(questId, questEngine.evaluateLegacyReason(questId, questState(), reason));
     }
     if (persist) save();
   }
+  function enemyQuestCategory(e) {
+    return e?.kind === 'enemy' ? 'enemy' : null;
+  }
   function ensureQuestTargets() {
-    const q = quest(),
-      state = questState(),
-      z = zones[zoneId];
-    if (state.step === 1) {
-      const type = q.id === 'mist' ? 'herb' : q.id === 'stone' ? 'ore' : 'wood';
-      const needed = (q.id === 'mist' ? 3 : q.id === 'stone' ? 2 : 4) - state[type];
-      let available = entities.filter(e => e.kind === 'resource' && e.type === type && e.hp > 0).length;
-      while (available < needed) {
-        addResource(type, clamp(z.scout.x + 160 + available * 42, 80, WORLD.w - 80), clamp(z.scout.y + 100, 80, WORLD.h - 80));
+    const z = zones[zoneId];
+    const objective = inspectCurrentQuest()?.active;
+    if (!objective) return;
+    const remaining = objective.required === undefined ? 0 : Math.max(0, objective.required - (objective.current || 0));
+    if (objective.type === 'gather') {
+      let available = entities.filter(e => e.kind === 'resource' && e.hp > 0 && e.type === objective.target).length;
+      while (available < remaining) {
+        addResource(
+          objective.target,
+          clamp(z.scout.x + 160 + available * 42, 80, WORLD.w - 80),
+          clamp(z.scout.y + 100, 80, WORLD.h - 80)
+        );
         available++;
       }
+      return;
     }
-    if (state.step === 2) {
-      const type = q.id === 'stone' ? 'guardian' : 'raider';
-      const needed = q.id === 'stone' ? 1 - state.guardian : (q.id === 'mist' ? 4 : 6) - state.kills;
-      let available = entities.filter(e => e.kind === 'enemy' && e.hp > 0 && (q.id === 'ash' || e.type === type)).length;
-      for (let i = available; i < needed; i++) addEnemy(type, clamp(z.scout.x + 300 + i * 65, 80, WORLD.w - 80), clamp(z.scout.y + 250, 80, WORLD.h - 80));
+    if (objective.type !== 'kill') return;
+    const matchesEnemy = objective.match === 'target'
+      ? e => e.kind === 'enemy' && e.hp > 0 && e.type === objective.target
+      : e => e.kind === 'enemy' && e.hp > 0 && enemyQuestCategory(e) === objective.target;
+    let available = entities.filter(matchesEnemy).length;
+    const fallbackType = objective.match === 'target' ? objective.target : objective.spawnTarget;
+    for (let i = available; i < remaining; i++) {
+      addEnemy(
+        fallbackType,
+        clamp(z.scout.x + 300 + i * 65, 80, WORLD.w - 80),
+        clamp(z.scout.y + 250, 80, WORLD.h - 80)
+      );
     }
+  }
+  function scaledEnemyDamage(baseDamage, level) {
+    const safeLevel = clamp(Math.floor(Number(level) || 1), 1, 100);
+    const extra = Math.max(0, safeLevel - 6);
+    return Math.round(baseDamage * (1 + extra * .055));
   }
   // Level 6 is the original starting balance. Never change a wounded enemy mid-fight.
   function scaleEnemy(e) {
@@ -1620,7 +1727,7 @@
     e.level = level;
     const extra = Math.max(0, level - 6);
     e.hp = e.maxHp = Math.round(e.baseStats.hp * (1 + extra * .09));
-    e.damage = Math.round(e.baseStats.damage * (1 + extra * .055));
+    e.damage = scaledEnemyDamage(e.baseStats.damage, level);
   }
   function addEnemy(type, x, y) {
     const cap = entities.reduce((n, e) => n + (e.kind === 'enemy' && e.type !== 'guardian' && e.hp > 0), 0);
@@ -1666,7 +1773,16 @@
       hp: 620,
       maxHp: 620,
       speed: 48,
-      damage: 22
+      damage: 22,
+      bossPhase: 1,
+      bossAttack: '',
+      bossSequenceStep: 0,
+      bossPhasePending: false,
+      bossPhaseTransitioned: false,
+      bossPhaseTransitionSerial: 0,
+      bossPhaseFlashUntil: 0,
+      attackRecovery: 0,
+      attackBossPhase: 1
     });
     e.baseStats = {
       hp: e.maxHp,
@@ -1880,17 +1996,18 @@
     e._corpseUntil = time + 0.75;
     gainXP(e.type === 'guardian' ? 120 : 18);
     player.gold += e.type === 'guardian' ? 90 : 4 + Math.floor(Math.random() * 5);
-    const s = questState();
-    const firstGuardianUnlock = zoneId === 'stonevale' && e.type === 'guardian' && s.step === 2 && !(player.inv.guardianToken > 0);
+    const objective = inspectCurrentQuest()?.active;
+    const guardianQuestActive = zoneId === 'stonevale' && e.type === 'guardian'
+      && objective?.type === 'kill' && objective.match === 'target' && objective.target === 'guardian';
+    const firstGuardianUnlock = guardianQuestActive && !(player.inv.guardianToken > 0);
     spawnLootFromEnemy(e, firstGuardianUnlock);
-    if (zoneId === 'stonevale' && e.type === 'guardian' && s.step === 2) {
+    if (guardianQuestActive) {
       if (firstGuardianUnlock) {
         player.inv.guardianToken = 1;
         toast('Получен Знак стража · броня открыта');
       } else toast('Страж руин повержен!');
     }
-    applyMainQuestEvent({ type: 'kill', target: e.type, category: 'enemy', amount: 1 });
-    progressContract('kill', 'enemy');
+    applyQuestProgressEvent({ type: 'kill', target: e.type, category: enemyQuestCategory(e), amount: 1 });
     burst(e.x, e.y, e.type === 'guardian' ? '#ceb1ea' : '#e27677', 24, 155);
     save();
   }
@@ -1959,7 +2076,7 @@
   }
   function dodge() {
     if (isPaused()) return false;
-    const requested = combatEngine.requestDodge({ now: time, stamina: player.stamina, dodgeCd: player.dodgeCd });
+    const requested = combatEngine.requestDodge({ now: time, stamina: player.stamina, dodgeCd: player.dodgeCd, tuning: buildProfile.combat });
     if (!requested.accepted) return false;
     cancelBlock();
     applyCombatState(requested.state);
@@ -1984,7 +2101,7 @@
       hp: player.hp,
       maxHp: player.maxHp,
       secondWindCd: player.secondWindCd,
-      skillDamageMultiplier: skillDamageMultiplier()
+      tuning: buildProfile.combat
     });
     if (!requested.accepted) {
       if (requested.reason === 'fullHealth') toast('Здоровье полное');
@@ -2095,6 +2212,11 @@
     }
     return true;
   }
+  function applyQuestProgressEvent(event) {
+    const mainChanged = applyMainQuestEvent(event);
+    const contractChanged = applyContractEvent(event);
+    return mainChanged || contractChanged;
+  }
   function progressContract(kind, target) {
     return applyContractEvent({ type: kind, target, category: kind === 'kill' ? target : undefined, amount: 1 });
   }
@@ -2145,9 +2267,13 @@
     nextDiscoveryAt = time + .35;
     const list = LANDMARKS[zoneId] || [];
     for (let i = 0; i < list.length; i++) {
-      const [x, y, , name] = list[i], id = `${zoneId}:${i}`;
+      const [x, y, kind, name] = list[i], id = `${zoneId}:${i}`;
       if (player.discoveries.includes(id) || Math.hypot(player.x - x, player.y - y) > 135) continue;
-      player.discoveries.push(id); player.gold += 10; gainXP(10); save();
+      player.discoveries.push(id);
+      player.gold += 10;
+      gainXP(10);
+      applyQuestProgressEvent({ type: 'discover', target: id, category: kind, amount: 1 });
+      save();
       toast(`Открыто место: ${name} · +10 золота`); feedback('discovery', 15); break;
     }
   }
@@ -2159,8 +2285,7 @@
     bindTap($('dialogContinue'), closeModal);
   }
   function canUsePortal() {
-    const s = questState();
-    return s.step >= 3;
+    return inspectCurrentQuest()?.active?.type === 'portal';
   }
   function interact() {
     if (interactionLock > time || isPaused()) return;
@@ -2212,8 +2337,7 @@
     const key = r.type;
     if (!['wood', 'ore', 'herb'].includes(key)) return;
     player.inv[key] = (player.inv[key] || 0) + 1;
-    applyMainQuestEvent({ type: 'gather', target: key, amount: 1 });
-    progressContract('gather', key);
+    applyQuestProgressEvent({ type: 'gather', target: key, amount: 1 });
     toast('Получено: ' + {
       wood: 'древесина',
       ore: 'руда',
@@ -2456,6 +2580,7 @@
     }
     if (!save()) {
       Object.assign(player, before);
+      recomputeDerivedStats();
       toast('Покупка отменена: не удалось сохранить прогресс');
       return false;
     }
@@ -2509,6 +2634,7 @@
       recomputeDerivedStats();
       if (!save()) {
         Object.assign(player, before);
+        recomputeDerivedStats();
         toast('Крафт отменён: сохранение недоступно');
         return false;
       }
@@ -2532,6 +2658,7 @@
       player.hp = player.maxHp;
       if (!save()) {
         Object.assign(player, before);
+        recomputeDerivedStats();
         toast('Крафт отменён: сохранение недоступно');
         return false;
       }
@@ -2837,7 +2964,7 @@
     for (const e of entities) if (e.kind !== 'enemy' || e.hp > 0 || e._corpseUntil > time) entities[live++] = e;
     entities.length = live;
     time += dt;
-    const combatTick = combatEngine.tick(combatStateSnapshot(), { dt, now: time, maxStamina: player.maxStamina, blocking: player.blocking, blockDrainMultiplier: blockDrainMultiplier() });
+    const combatTick = combatEngine.tick(combatStateSnapshot(), { dt, now: time, maxStamina: player.maxStamina, blocking: player.blocking, tuning: buildProfile.combat });
     applyCombatState(combatTick.state);
     if (combatTick.exhausted) cancelBlock();
     for (const effect of combatTick.effects) if (effect.type === 'executeBufferedAttack') beginPlayerAttack();
@@ -2868,7 +2995,9 @@
     return e?.type === 'marksman' ? 420 : 300;
   }
   function enemyDisengageDistance(e) {
-    return e?.type === 'marksman' ? 520 : 440;
+    if (e?.type === 'marksman') return 520;
+    if (e?.type === 'guardian') return 480;
+    return 440;
   }
   function marksmanDistanceIntent(distance, phase = '') {
     if (!Number.isFinite(distance)) return 'approach';
@@ -2878,11 +3007,112 @@
     if (distance <= 460) return phase === 'recovery' ? 'approach' : 'far';
     return 'approach';
   }
+  const GUARDIAN_SEQUENCES = Object.freeze({
+    1: Object.freeze(['slam', 'bolt', 'wave']),
+    2: Object.freeze(['bolt', 'slam', 'wave', 'slam'])
+  });
+  const GUARDIAN_PROFILES = Object.freeze({
+    slam: Object.freeze({ attack: 'slam', damage: 26, windup: .75, recovery1: .85, recovery2: .68, startRange: 125 }),
+    bolt: Object.freeze({ attack: 'bolt', damage: 24, windup: .70, recovery1: .90, recovery2: .72, startRange: 460 }),
+    wave: Object.freeze({ attack: 'wave', damage: 22, windup: .95, recovery1: 1.00, recovery2: .80, startRange: 300 })
+  });
+  function guardianSequence(phase = 1) {
+    return GUARDIAN_SEQUENCES[phase === 2 ? 2 : 1];
+  }
+  function guardianPhaseForHp(hp, maxHp) {
+    const max = Number(maxHp);
+    if (!Number.isFinite(max) || max <= 0) return 1;
+    return Number(hp) < max * .5 ? 2 : 1;
+  }
+  function guardianAttackProfile(attack, phase = 1) {
+    const base = GUARDIAN_PROFILES[attack] || GUARDIAN_PROFILES.slam;
+    return { attack: base.attack, damage: base.damage, windup: base.windup, recovery: phase === 2 ? base.recovery2 : base.recovery1, startRange: base.startRange };
+  }
+  function guardianNextAttack(e) {
+    const seq = guardianSequence(e?.bossPhase);
+    const step = Math.max(0, Math.floor(Number(e?.bossSequenceStep) || 0));
+    return seq[step % seq.length];
+  }
+  function guardianAttackEligible(e, attack, distance, hasLos) {
+    if (!e || e.type !== 'guardian' || !hasLos) return false;
+    const profile = guardianAttackProfile(attack, e.bossPhase);
+    return Number.isFinite(distance) && distance <= profile.startRange;
+  }
+  function guardianAttackDamage(e, baseDamage) {
+    return scaledEnemyDamage(baseDamage, e?.level ?? player.level);
+  }
+  function resetGuardianAttack(e) {
+    e.attackPhase = '';
+    e.attackStartedAt = 0;
+    e.attackImpactAt = 0;
+    e.attackWindup = 0;
+    e.attackRecovery = 0;
+    e.bossAttack = '';
+    e.cd = 0;
+  }
+  function settleGuardianPhasePending(e) {
+    if (!e.bossPhasePending) return;
+    e.bossSequenceStep = 0;
+    e.bossPhasePending = false;
+  }
+  function triggerGuardianPhase(e) {
+    if (!e || e.type !== 'guardian' || e.hp <= 0 || e.bossPhase === 2 || guardianPhaseForHp(e.hp, e.maxHp) !== 2) return false;
+    e.bossPhase = 2;
+    e.bossPhaseTransitioned = true;
+    e.bossPhaseTransitionSerial = (Number(e.bossPhaseTransitionSerial) || 0) + 1;
+    e.bossPhaseFlashUntil = time + .55;
+    if (e.attackPhase) e.bossPhasePending = true;
+    else { e.bossSequenceStep = 0; e.bossPhasePending = false; }
+    return true;
+  }
+  function resetGuardianEncounter(e) {
+    if (!e || e.type !== 'guardian') return;
+    e.hp = e.maxHp;
+    e.bossPhase = 1;
+    e.bossSequenceStep = 0;
+    e.bossPhasePending = false;
+    e.bossPhaseTransitioned = false;
+    e.bossPhaseTransitionSerial = 0;
+    e.bossPhaseFlashUntil = 0;
+    e.attackBossPhase = 1;
+    resetGuardianAttack(e);
+  }
+  function startGuardianAttack(e, attack) {
+    const phase = e.bossPhase === 2 ? 2 : 1;
+    const profile = guardianAttackProfile(attack, phase);
+    e.bossAttack = attack;
+    e.attackBossPhase = phase;
+    e.attackWindup = profile.windup;
+    e.attackRecovery = profile.recovery;
+    e.attackPhase = 'windup';
+    e.attackStartedAt = time;
+    e.attackImpactAt = time + profile.windup;
+    animate(e, 'attack', profile.windup + .12);
+  }
+  function advanceGuardianSequence(e) {
+    if (e.bossPhasePending || e.bossPhase !== e.attackBossPhase) return;
+    const seq = guardianSequence(e.attackBossPhase);
+    e.bossSequenceStep = (Math.max(0, Math.floor(Number(e.bossSequenceStep) || 0)) + 1) % seq.length;
+  }
+  function finishGuardianRecovery(e) {
+    e.attackPhase = '';
+    e.cd = 0;
+    e.bossAttack = '';
+    e.attackStartedAt = 0;
+    e.attackImpactAt = 0;
+    e.attackWindup = 0;
+    e.attackRecovery = 0;
+    settleGuardianPhasePending(e);
+  }
   function enemyAttackTiming(e) {
     if (e.type === 'marksman') return { windup: .55, recovery: 1.15 };
-    const windup = e.type === 'guardian' ? .52 : e.type === 'boar' ? .30 : .35;
-    const oldCycle = e.type === 'guardian' ? 1.05 : 1.35;
-    return { windup, recovery: Math.max(.35, oldCycle - windup) };
+    if (e.type === 'guardian') {
+      if (e.attackPhase && Number.isFinite(e.attackWindup) && Number.isFinite(e.attackRecovery)) return { windup: e.attackWindup, recovery: e.attackRecovery };
+      const profile = guardianAttackProfile(guardianNextAttack(e), e.bossPhase);
+      return { windup: profile.windup, recovery: profile.recovery };
+    }
+    const windup = e.type === 'boar' ? .30 : .35;
+    return { windup, recovery: Math.max(.35, 1.35 - windup) };
   }
   function enemyAttackRange(e, playerRadius) {
     const enemyRadius = Number.isFinite(e?.r) ? Math.max(0, e.r) : 0;
@@ -2944,7 +3174,7 @@
     return true;
   }
   function applyIncomingCombatImpact({ damage, sourceX, sourceY }) {
-    const impact = combatEngine.resolveIncomingDamage({ damage, blocking: player.blocking, buckler: player.loadout.offhand === 'buckler', dodging: time < player.dodgeUntil });
+    const impact = combatEngine.resolveIncomingDamage({ damage, blocking: player.blocking, dodging: time < player.dodgeUntil, tuning: buildProfile.combat });
     if (!impact.valid) return impact;
     if (impact.avoided) {
       burst(player.x, player.y, '#91c6cc', 5, 105);
@@ -2974,6 +3204,38 @@
     }
     return impact;
   }
+  function resolveGuardianSlam(e) {
+    if (!e || e.hp <= 0 || e.aiState !== 'chase') return false;
+    if (dist(player, e) > 115) return false;
+    const impact = applyIncomingCombatImpact({ damage: guardianAttackDamage(e, 26), sourceX: e.x, sourceY: e.y });
+    return !!impact?.valid && !impact.avoided;
+  }
+  function resolveGuardianWave(e) {
+    if (!e || e.hp <= 0 || e.aiState !== 'chase') return false;
+    const d = dist(player, e);
+    if (d < 140 || d > 260) return false;
+    const impact = applyIncomingCombatImpact({ damage: guardianAttackDamage(e, 22), sourceX: e.x, sourceY: e.y });
+    return !!impact?.valid && !impact.avoided;
+  }
+  function releaseGuardianBolt(e) {
+    const dx = player.x - e.x, dy = player.y - e.y, len = Math.hypot(dx, dy);
+    if (!Number.isFinite(len) || len <= 0) return false;
+    const nx = dx / len, ny = dy / len;
+    projectiles.push({
+      owner: 'enemy',
+      style: 'guardianBolt',
+      x: e.x + nx * (e.r + 12),
+      y: e.y + ny * (e.r + 12),
+      vx: nx * 220,
+      vy: ny * 220,
+      damage: guardianAttackDamage(e, 24),
+      life: 2.4,
+      r: 9,
+      collisionPad: 11,
+      color: '#c99be8'
+    });
+    return true;
+  }
   function resolveEnemyImpact(e) {
     const range = enemyAttackRange(e, player.r);
     if (e.hp <= 0 || e.aiState !== 'chase' || dist(player, e) > range || physics && !physics.clearLine(e.x, e.y, player.x, player.y, 2)) return false;
@@ -2996,18 +3258,82 @@
       const playerFromHome = Math.hypot(player.x - e.homeX, player.y - e.homeY);
       if (e.aiState === 'chase' && (d > enemyDisengageDistance(e) || homeDistance > 420 || playerFromHome > 480)) {
         e.aiState = 'return';
-        e.attackPhase = '';
+        if (e.type === 'guardian') {
+          resetGuardianAttack(e);
+          settleGuardianPhasePending(e);
+        } else e.attackPhase = '';
       }
       if (e.aiState === 'return') {
-        e.attackPhase = '';
-        if (homeDistance > 8) {
-          if (physics) physics.chase(e, e.home, e.speed * dt, time);else moveActor(e, (e.homeX - e.x) / homeDistance * e.speed * dt, (e.homeY - e.y) / homeDistance * e.speed * dt);
-        } else e.aiState = 'idle';
-        continue;
+        if (e.type === 'guardian') {
+          resetGuardianAttack(e);
+          const canReaggro = d < enemyDetectionRange(e) && playerFromHome < enemyActivationHomeRange(e) && (!physics || physics.clearLine(e.x, e.y, player.x, player.y, 2));
+          if (canReaggro && homeDistance > 8) e.aiState = 'chase';
+          else if (homeDistance > 8) {
+            if (physics) physics.chase(e, e.home, e.speed * dt, time);
+            else moveActor(e, (e.homeX - e.x) / homeDistance * e.speed * dt, (e.homeY - e.y) / homeDistance * e.speed * dt);
+            continue;
+          } else {
+            resetGuardianEncounter(e);
+            e.aiState = 'idle';
+            continue;
+          }
+        } else {
+          e.attackPhase = '';
+          if (homeDistance > 8) {
+            if (physics) physics.chase(e, e.home, e.speed * dt, time);else moveActor(e, (e.homeX - e.x) / homeDistance * e.speed * dt, (e.homeY - e.y) / homeDistance * e.speed * dt);
+          } else e.aiState = 'idle';
+          continue;
+        }
       }
       if (e.aiState === 'idle' && e.hp === e.maxHp && e.level !== clamp(Math.floor(Number(player.level) || 1), 1, 100)) scaleEnemy(e);
       if (e.aiState === 'idle' && d < enemyDetectionRange(e) && playerFromHome < enemyActivationHomeRange(e) && (!physics || physics.clearLine(e.x, e.y, player.x, player.y, 2))) e.aiState = 'chase';
       if (e.aiState !== 'chase') continue;
+
+      if (e.type === 'guardian') {
+        triggerGuardianPhase(e);
+        const currentDistance = dist(player, e);
+        const hasLos = !physics || physics.clearLine(e.x, e.y, player.x, player.y, 2);
+        if (e.attackPhase === 'windup') {
+          if (e.bossAttack === 'bolt' && (!hasLos || currentDistance > 460)) {
+            resetGuardianAttack(e);
+            settleGuardianPhasePending(e);
+            continue;
+          }
+          if (time >= e.attackImpactAt) {
+            let resolved = true;
+            if (e.bossAttack === 'slam') resolveGuardianSlam(e);
+            else if (e.bossAttack === 'wave') resolveGuardianWave(e);
+            else if (e.bossAttack === 'bolt') resolved = releaseGuardianBolt(e);
+            if (!resolved) {
+              resetGuardianAttack(e);
+              settleGuardianPhasePending(e);
+              continue;
+            }
+            advanceGuardianSequence(e);
+            e.attackPhase = 'recovery';
+            e.cd = e.attackRecovery;
+          }
+          continue;
+        }
+        if (e.attackPhase === 'recovery') {
+          if (e.cd <= 0) finishGuardianRecovery(e);
+          else {
+            const a = Math.atan2(player.y - e.y, player.x - e.x);
+            if (physics) physics.chase(e, player, e.speed * dt, time);
+            else moveActor(e, Math.cos(a) * e.speed * dt, Math.sin(a) * e.speed * dt);
+            continue;
+          }
+        }
+        const attack = guardianNextAttack(e);
+        if (guardianAttackEligible(e, attack, currentDistance, hasLos) && e.cd <= 0) {
+          startGuardianAttack(e, attack);
+        } else {
+          const a = Math.atan2(player.y - e.y, player.x - e.x);
+          if (physics) physics.chase(e, player, e.speed * dt, time);
+          else moveActor(e, Math.cos(a) * e.speed * dt, Math.sin(a) * e.speed * dt);
+        }
+        continue;
+      }
 
       if (e.type === 'marksman') {
         const currentDistance = dist(player, e);
@@ -3141,6 +3467,16 @@
   }
   function updateUI() {
     setWidth(ui.hp, player.hp / player.maxHp * 100 + '%');
+    const guardian = entities.find(e => e.kind === 'enemy' && e.type === 'guardian' && e.hp > 0 && e.aiState === 'chase');
+    const bossActive = !!guardian;
+    ui.bossHud?.classList.toggle('hidden', !bossActive);
+    if (bossActive) {
+      setText(ui.bossName, 'Guardian');
+      setText(ui.bossPhase, guardian.bossPhase === 2 ? 'II' : 'I');
+      setText(ui.bossHpText, `${Math.ceil(guardian.hp)} / ${Math.ceil(guardian.maxHp)}`);
+      setWidth(ui.bossHpFill, clamp(guardian.hp / guardian.maxHp * 100, 0, 100) + '%');
+      ui.bossHud?.classList.toggle('phase2', guardian.bossPhase === 2);
+    }
     setWidth(ui.stamina, player.stamina / player.maxStamina * 100 + '%');
     setWidth(ui.xp, player.xp / player.xpNeed * 100 + '%');
     setText(ui.level, 'Ур. ' + player.level);
@@ -3148,7 +3484,7 @@
     setText(ui.zone, z.name);
     const objective = currentObjective();
     setText(ui.objective, objective);
-    setText(ui.questTitle, z.quest.title);
+    setText(ui.questTitle, quest().title);
     setText(ui.questProgress, objective);
     setText(ui.badge, z.badge);
     setText(ui.herb, player.inv.herb);
@@ -3176,10 +3512,10 @@
     updateActionState(ui.skill1Btn, getActionPresentation('skill1', actionState, time, ui.skill1Btn?.classList.contains('pressed')));
     updateActionState(ui.skill2Btn, getActionPresentation('skill2', actionState, time, ui.skill2Btn?.classList.contains('pressed')));
     const secondWindLeft = Math.max(0, player.secondWindCd - time);
-    if (ui.skill3Meta) setText(ui.skill3Meta, secondWindLeft > 0 ? `${Math.ceil(secondWindLeft)}с` : '20 EN');
+    if (ui.skill3Meta) setText(ui.skill3Meta, secondWindLeft > 0 ? `${Math.ceil(secondWindLeft)}с` : `${buildProfile.combat.skillStaminaCost} EN`);
     updateActionState(ui.skill3Btn, getActionPresentation('skill3', actionState, time, ui.skill3Btn?.classList.contains('pressed')));
     const dodgeLeft = Math.max(0, player.dodgeCd - time);
-    if (ui.dodgeMeta) setText(ui.dodgeMeta, dodgeLeft > 0 ? `${dodgeLeft.toFixed(1)}с` : '24 EN');
+    if (ui.dodgeMeta) setText(ui.dodgeMeta, dodgeLeft > 0 ? `${dodgeLeft.toFixed(1)}с` : `${buildProfile.combat.dodgeStaminaCost} EN`);
     updateActionState(ui.dodgeBtn, getActionPresentation('dodge', actionState, time, ui.dodgeBtn?.classList.contains('pressed')));
     refreshSaveHealth();
     const hit = nearbyInteraction();
@@ -3575,7 +3911,17 @@
         ctx.stroke();
         ctx.restore();
       }
-      if (e.hp > 0) {
+      if (e.type === 'guardian' && e.hp > 0 && e.bossPhase === 2) {
+        ctx.save();
+        ctx.globalAlpha = reduceMotion ? .62 : .52 + Math.sin(time * 4) * .08;
+        ctx.strokeStyle = '#d5a6ef';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y + 4, e.r + 11, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+      if (e.hp > 0 && !(e.type === 'guardian' && e.aiState === 'chase')) {
         const width = e.r * 2.1;
         ctx.fillStyle = '#111b19';
         ctx.fillRect(p.x - width / 2, p.y - height + 10, width, 5);
@@ -3616,11 +3962,20 @@
       ctx.fillStyle = '#161d1b';
       ctx.fillRect(-e.r * .45, -e.r * .92, e.r * .9, 4);
     }
-    const hpw = e.r * 2.1;
-    ctx.fillStyle = 'rgba(0,0,0,.48)';
-    ctx.fillRect(-hpw / 2, -e.r - 15, hpw, 4);
-    ctx.fillStyle = e.type === 'guardian' ? '#d8a1e8' : '#df6f73';
-    ctx.fillRect(-hpw / 2, -e.r - 15, hpw * Math.max(0, e.hp / e.maxHp), 4);
+    if (e.type === 'guardian' && e.hp > 0 && e.bossPhase === 2) {
+      ctx.strokeStyle = '#d5a6ef';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 3, e.r + 11, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    if (!(e.type === 'guardian' && e.aiState === 'chase')) {
+      const hpw = e.r * 2.1;
+      ctx.fillStyle = 'rgba(0,0,0,.48)';
+      ctx.fillRect(-hpw / 2, -e.r - 15, hpw, 4);
+      ctx.fillStyle = e.type === 'guardian' ? '#d8a1e8' : '#df6f73';
+      ctx.fillRect(-hpw / 2, -e.r - 15, hpw * Math.max(0, e.hp / e.maxHp), 4);
+    }
     ctx.restore();
   }
   function drawPlayer() {
@@ -3708,10 +4063,10 @@
       if (p.owner === 'enemy') {
         ctx.rotate(Math.atan2(p.vy, p.vx));
         ctx.strokeStyle = p.color || '#e5b86a';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = p.style === 'guardianBolt' ? 5 : 3;
         ctx.beginPath();
-        ctx.moveTo(-10, 0);
-        ctx.lineTo(8, 0);
+        ctx.moveTo(p.style === 'guardianBolt' ? -18 : -10, 0);
+        ctx.lineTo(p.style === 'guardianBolt' ? 10 : 8, 0);
         ctx.stroke();
       }
       ctx.fillStyle = p.color;
@@ -4071,6 +4426,66 @@
       if (e.attackPhase === 'windup') {
         const progress = phaseProgress(time - Number(e.attackStartedAt), Number(e.attackWindup)),
           end = start + Math.PI * 2 * progress;
+        if (e.type === 'guardian') {
+          ctx.save();
+          if (e.bossAttack === 'bolt') {
+            const target = screenPos(player.x, player.y), sourceRadius = e.r + 7, timingRadius = e.r + 14;
+            ctx.globalAlpha = .78;
+            ctx.strokeStyle = 'rgba(201,155,232,.82)';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.moveTo(s.x, s.y);
+            ctx.lineTo(target.x, target.y);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = 'rgba(201,155,232,.92)';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, sourceRadius, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.strokeStyle = 'rgba(240,205,255,.98)';
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, timingRadius, start, end);
+            ctx.stroke();
+          } else if (e.bossAttack === 'wave') {
+            if (profile.detail > 0) {
+              ctx.globalAlpha = .08 + progress * .06;
+              ctx.strokeStyle = 'rgba(201,155,232,.45)';
+              ctx.lineWidth = 120;
+              ctx.beginPath();
+              ctx.arc(s.x, s.y, 200, 0, Math.PI * 2);
+              ctx.stroke();
+            }
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = 'rgba(201,155,232,.80)';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath(); ctx.arc(s.x, s.y, 140, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath(); ctx.arc(s.x, s.y, 260, 0, Math.PI * 2); ctx.stroke();
+            ctx.strokeStyle = 'rgba(240,205,255,.98)';
+            ctx.lineWidth = 5;
+            ctx.beginPath(); ctx.arc(s.x, s.y, e.r + 14, start, end); ctx.stroke();
+          } else {
+            const dangerRadius = 115;
+            if (profile.detail > 0) {
+              ctx.globalAlpha = .07 + progress * .07;
+              ctx.fillStyle = '#c99be8';
+              ctx.beginPath(); ctx.arc(s.x, s.y, dangerRadius, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = 'rgba(201,155,232,.78)';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath(); ctx.arc(s.x, s.y, dangerRadius, 0, Math.PI * 2); ctx.stroke();
+            ctx.strokeStyle = 'rgba(240,205,255,.98)';
+            ctx.lineWidth = 5;
+            ctx.beginPath(); ctx.arc(s.x, s.y, dangerRadius, start, end); ctx.stroke();
+            ctx.strokeStyle = 'rgba(220,180,245,.92)';
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(s.x, s.y, e.r + 7, 0, Math.PI * 2); ctx.stroke();
+          }
+          ctx.restore();
+          continue;
+        }
         if (e.type === 'marksman') {
           const target = screenPos(player.x, player.y), sourceRadius = e.r + 5, timingRadius = e.r + 10;
           ctx.save();
@@ -4180,15 +4595,27 @@
     drawDamageFlash();
   }
   function objectiveTarget() {
-    const q = quest(), state = questState(), z = zones[zoneId];
-    if (state.step === 0) return { x: z.scout.x, y: z.scout.y };
-    if (state.step === 3) return { x: z.portal.x, y: z.portal.y };
+    const objective = inspectCurrentQuest()?.active;
+    const z = zones[zoneId];
+    if (!objective) return null;
+    if (objective.type === 'talk') return { x: z.scout.x, y: z.scout.y };
+    if (objective.type === 'portal') return { x: z.portal.x, y: z.portal.y };
+
     let candidates = [];
-    if (state.step === 1) {
-      const type = q.id === 'mist' ? 'herb' : q.id === 'stone' ? 'ore' : 'wood';
-      candidates = entities.filter(e => e.kind === 'resource' && e.type === type && e.hp > 0);
-    } else if (state.step === 2) {
-      candidates = entities.filter(e => e.kind === 'enemy' && e.hp > 0 && (q.id === 'stone' ? e.type === 'guardian' : q.id === 'mist' ? e.type === 'raider' : true));
+    if (objective.type === 'gather') {
+      candidates = entities.filter(e => e.kind === 'resource' && e.type === objective.target && e.hp > 0);
+    } else if (objective.type === 'kill') {
+      candidates = entities.filter(e => e.kind === 'enemy' && e.hp > 0 && (
+        objective.match === 'target' ? e.type === objective.target : enemyQuestCategory(e) === objective.target
+      ));
+    } else if (objective.type === 'discover') {
+      const landmarks = LANDMARKS[zoneId] || [];
+      candidates = landmarks.flatMap(([x, y, kind], index) => {
+        const id = `${zoneId}:${index}`;
+        if (player.discoveries.includes(id)) return [];
+        const match = objective.match === 'target' ? id === objective.target : kind === objective.target;
+        return match ? [{ x, y }] : [];
+      });
     }
     if (!candidates.length) return null;
     return candidates.reduce((best, item) => !best || dist(player, item) < dist(player, best) ? item : best, null);
@@ -4351,6 +4778,7 @@
       player.y = y;
     }
     physics?.relocate(player);
+    if (reconcileActiveDiscoveryObjective()) saveDirty = true;
     if (saveDirty && !saveBlockedReason) save();
     updateUI();
     if (pendingLoadNotice) {
@@ -4409,6 +4837,7 @@
         }
       }),
       persistence: { codecActive: true },
+      build: { engineActive: Boolean(buildEngine), profile: () => buildProfile },
       recoveryCopies: () => [...testStorage.entries()].filter(([key]) => key.startsWith(RECOVERY_PREFIX)),
       saveHealth: () => ({ dirty: saveDirty, blockedReason: saveBlockedReason, revision: saveRevision }),
       storage,
@@ -4447,6 +4876,7 @@
       acceptContract,
       claimContract,
       applyContractEvent,
+      applyQuestProgressEvent,
       progressContract,
       checkDiscoveries,
       installRune,
@@ -4457,6 +4887,7 @@
       selectSupply,
       useSupply,
       supplyUseReason,
+      scaledSelfHeal,
       brewSupply,
       setUiSetting,
       setVolume,
@@ -4472,16 +4903,29 @@
       drawMap,
       updateUI,
       transitionZone,
+      currentQuestId,
+      inspectCurrentQuest,
+      reconcileActiveDiscoveryObjective,
+      canUsePortal,
+      validateZoneQuestBindings,
       applyMainQuestEvent,
       advanceQuest,
       questTransitions: { engineActive: Boolean(questEngine) },
       combat: { engineActive: Boolean(combatEngine) },
-      actionPresentation: (action, state, now, pressed = false) => getActionPresentation(action, state, now, pressed),
+      actionPresentation: (action, state, now, pressed = false, tuning = buildProfile?.combat) => getActionPresentation(action, state, now, pressed, tuning),
       enemyAttackRange: (enemy, playerRadius) => enemyAttackRange(enemy, playerRadius),
+      enemyQuestCategory,
+      ensureQuestTargets,
       enemyDetectionRange: enemy => enemyDetectionRange(enemy),
       enemyActivationHomeRange: enemy => enemyActivationHomeRange(enemy),
       enemyDisengageDistance: enemy => enemyDisengageDistance(enemy),
       marksmanDistanceIntent: (distance, phase = '') => marksmanDistanceIntent(distance, phase),
+      guardianSequence: phase => guardianSequence(phase),
+      guardianPhaseForHp: (hp, maxHp) => guardianPhaseForHp(hp, maxHp),
+      guardianAttackProfile: (attack, phase) => guardianAttackProfile(attack, phase),
+      guardianAttackDamage: (enemy, baseDamage) => guardianAttackDamage(enemy, baseDamage),
+      guardianNextAttack: enemy => guardianNextAttack(enemy),
+      guardianAttackEligible: (enemy, attack, distance, hasLos) => guardianAttackEligible(enemy, attack, distance, hasLos),
       enemyAttackTiming: enemy => enemyAttackTiming(enemy),
       enemyAttackPresentation: (enemy, now, playerRadius) => enemyAttackPresentation(enemy, now, playerRadius),
       renderFrame,
@@ -4494,7 +4938,10 @@
       statSources,
       objectiveTarget,
       zones,
+      LANDMARKS,
+      MAIN_QUESTS,
       CONTRACTS,
+      validateLiveQuestStateBindings,
       RUNES,
       COSMETICS,
       player,

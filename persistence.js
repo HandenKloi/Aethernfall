@@ -13,9 +13,36 @@
     return Number.isFinite(n) ? clamp(n, 0, 1) : fallback;
   };
 
+  function versionTriplet(value) {
+    if (typeof value !== 'string') return null;
+    const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(value.trim());
+    if (!match) return null;
+    const parts = match.slice(1).map(Number);
+    return parts.every(Number.isSafeInteger) ? parts : null;
+  }
+
+  function compareVersionTriplets(a, b) {
+    for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1;
+    return 0;
+  }
+
   function validateRules(rules) {
     if (!isObject(rules) || !Number.isInteger(rules.saveSchema) || rules.saveSchema < 1) throw new TypeError('Invalid persistence rules');
-    if (!Array.isArray(rules.zoneIds) || !Array.isArray(rules.contractIds)) throw new TypeError('Invalid persistence rules');
+    if (!Array.isArray(rules.zoneIds) || !Array.isArray(rules.contractIds) || !isObject(rules.questStepMax)) throw new TypeError('Invalid persistence rules');
+    for (const questId of Object.keys(object(rules.defaults?.player?.quests))) {
+      if (!Number.isInteger(rules.questStepMax[questId]) || rules.questStepMax[questId] < 0) {
+        throw new TypeError('Invalid persistence rules');
+      }
+    }
+    if (rules.questStepMigration !== undefined) {
+      const migration = rules.questStepMigration;
+      if (!isObject(migration) || !versionTriplet(migration.beforeVersion) || !isObject(migration.mappings)) throw new TypeError('Invalid persistence rules');
+      for (const questId of Object.keys(object(rules.defaults?.player?.quests))) {
+        const map = migration.mappings[questId];
+        if (!Array.isArray(map) || !map.length) throw new TypeError('Invalid persistence rules');
+        for (const value of map) if (!Number.isInteger(value) || value < 0 || value > rules.questStepMax[questId]) throw new TypeError('Invalid persistence rules');
+      }
+    }
   }
 
   function createCodec(rules) {
@@ -101,6 +128,11 @@
       requireNormalizeRules();
       const defaults = rules.defaults.player;
       const saved = object(data?.player);
+      const migration = rules.questStepMigration;
+      const threshold = migration ? versionTriplet(migration.beforeVersion) : null;
+      const savedVersion = versionTriplet(data?.version);
+      const migrateQuestSteps = Boolean(migration && (!savedVersion || compareVersionTriplets(savedVersion, threshold) < 0));
+      const sourceQuestSteps = {};
       const zoneId = zoneIds.has(data?.zoneId) ? data.zoneId : rules.defaultZoneId;
       const zone = object(rules.zones[zoneId]);
       const camp = object(zone.camp);
@@ -180,10 +212,29 @@
       for (const [key, fields] of Object.entries(defaults.quests)) {
         player.quests[key] = {};
         const source = object(savedQuests[key]);
-        for (const field of Object.keys(fields)) player.quests[key][field] = Math.floor(finite(source[field], 0, 0, field === 'step' ? 3 : 1e9));
+        for (const field of Object.keys(fields)) {
+          if (field === 'step') {
+            if (migrateQuestSteps) {
+              const map = migration.mappings[key];
+              const sourceStep = Math.floor(finite(source.step, 0, 0, map.length - 1));
+              sourceQuestSteps[key] = sourceStep;
+              player.quests[key].step = map[sourceStep];
+            } else {
+              const step = Math.floor(finite(source.step, 0, 0, rules.questStepMax[key]));
+              sourceQuestSteps[key] = step;
+              player.quests[key].step = step;
+            }
+          } else {
+            player.quests[key][field] = Math.floor(finite(source[field], 0, 0, 1e9));
+          }
+        }
       }
 
-      if (schema < 3 && player.inv.guardianToken === 0 && (player.quests.stone?.step >= 3 || zoneId === 'ashfield')) player.inv.guardianToken = 1;
+      const stoneCompletionStep = migrateQuestSteps
+        ? migration.mappings.stone.length - 1
+        : rules.questStepMax.stone;
+      const stoneStepForCompatibility = sourceQuestSteps.stone ?? 0;
+      if (schema < 3 && player.inv.guardianToken === 0 && (stoneStepForCompatibility >= stoneCompletionStep || zoneId === 'ashfield')) player.inv.guardianToken = 1;
 
       if (schema >= 3) {
         const progression = object(saved.progression);

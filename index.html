@@ -8,9 +8,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#101817">
-<title>Aethernfall v4.0.6</title>
-<link rel="manifest" href="manifest.json?v=4.0.6">
-<link rel="stylesheet" href="style.css?v=4.0.6">
+<title>Aethernfall v4.0.10</title>
+<link rel="manifest" href="manifest.json?v=4.0.10">
+<link rel="stylesheet" href="style.css?v=4.0.10">
 <link rel="apple-touch-icon" href="assets/icon-192.png">
 <link rel="icon" href="assets/icon-192.png">
 <meta name="apple-mobile-web-app-title" content="Aethernfall">
@@ -56,6 +56,11 @@
 <button class="topBtn roundBtn" id="menuBtn" aria-label="Меню" title="Меню"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
 </div>
 </header>
+<section id="bossHud" class="bossHud panel hidden" aria-live="polite">
+  <div class="bossLine"><b id="bossName">Guardian</b><span>Phase <b id="bossPhase">I</b></span></div>
+  <div class="bossBar"><span id="bossHpFill"></span></div>
+  <div id="bossHpText" class="bossHpText">620 / 620</div>
+</section>
 <section id="questTracker" class="panel collapsed">
 <button id="questToggle" aria-expanded="false" aria-controls="questProgress"><b id="questTitle">Следы в тумане</b><span id="questChevron" aria-hidden="true">›</span></button>
 <span id="questProgress">Поговорите с разведчиком</span>
@@ -146,13 +151,14 @@
 </div>
 </div>
 </div>
-<script src="physics.js?v=4.0.6" defer></script>
-<script src="art.js?v=4.0.6" defer></script>
-<script src="audio.js?v=4.0.6" defer></script>
-<script src="persistence.js?v=4.0.6" defer></script>
-<script src="quests.js?v=4.0.6" defer></script>
-<script src="combat.js?v=4.0.6" defer></script>
-<script src="game.js?v=4.0.6" defer>
+<script src="physics.js?v=4.0.10" defer></script>
+<script src="art.js?v=4.0.10" defer></script>
+<script src="audio.js?v=4.0.10" defer></script>
+<script src="persistence.js?v=4.0.10" defer></script>
+<script src="quests.js?v=4.0.10" defer></script>
+<script src="combat.js?v=4.0.10" defer></script>
+<script src="builds.js?v=4.0.10" defer></script>
+<script src="game.js?v=4.0.10" defer>
 </script>
 <div id="perfMonitor" class="perfMonitor hidden" aria-live="polite">
   <div>

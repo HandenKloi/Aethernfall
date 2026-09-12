@@ -993,3 +993,64 @@ body.left-handed[data-control-size="compact"] .actions, body.left-handed[data-co
   body[data-control-size="large"] .actions { transform:scale(1.04); }
   body[data-control-size="large"] .joystick { transform:scale(1.04); }
 }
+
+/* M3B Guardian boss encounter HUD */
+.bossHud {
+  position:fixed;
+  z-index:7;
+  top:calc(env(safe-area-inset-top, 0px) + 72px);
+  left:50%;
+  transform:translateX(-50%);
+  width:min(430px, calc(100vw - 28px));
+  padding:9px 12px 8px;
+  border-radius:16px;
+  background:rgba(10,13,18,.78);
+  box-shadow:0 12px 34px rgba(0,0,0,.24);
+  pointer-events:none;
+}
+.bossLine {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:5px;
+  font-size:12px;
+  letter-spacing:.05em;
+}
+.bossLine > b { color:#f3e5c2; font-size:14px; }
+.bossLine span { color:#cab7d7; text-transform:uppercase; }
+.bossBar {
+  height:8px;
+  overflow:hidden;
+  border-radius:999px;
+  background:rgba(255,255,255,.09);
+  border:1px solid rgba(219,184,235,.18);
+}
+.bossBar span {
+  display:block;
+  height:100%;
+  width:100%;
+  border-radius:inherit;
+  background:linear-gradient(90deg,#6f4a83,#c08bd7,#d9b56d);
+  transition:width .12s linear;
+}
+.bossHpText {
+  margin-top:4px;
+  text-align:center;
+  color:#c9c2cc;
+  font-size:10px;
+  font-variant-numeric:tabular-nums;
+}
+.bossHud.phase2 {
+  border-color:rgba(213,166,239,.42);
+  box-shadow:0 12px 34px rgba(0,0,0,.24),0 0 18px rgba(174,111,208,.15);
+}
+@media(max-width:390px) and (orientation:portrait) {
+  .bossHud { top:calc(env(safe-area-inset-top, 0px) + 124px); width:calc(100vw - 24px); }
+}
+@media(orientation:landscape) and (max-height:520px) {
+  .bossHud { top:calc(env(safe-area-inset-top, 0px) + 8px); width:min(360px, 42vw); }
+}
+@media(prefers-reduced-motion:reduce) {
+  .bossBar span { transition:none; }
+}
