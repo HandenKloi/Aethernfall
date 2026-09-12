@@ -3,7 +3,7 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '4.0.10';
+  const BUILD_VERSION = '4.0.13';
   const SAVE_SCHEMA = 4;
   const BASE_STATS = Object.freeze({ startLevel: 6, damage: 32, maxHp: 240, maxStamina: 100, speed: 205, damagePerLevel: 3, hpPerLevel: 18 });
   const MAX_UPGRADE_RANK = 5;
@@ -44,13 +44,14 @@
     emptyHand: {
       slot: 'offhand',
       name: 'Без щита',
-      icon: 'sword'
+      icon: 'sword',
+      build: { staminaRegenMultiplier: 1.10, dodgeStaminaCostMultiplier: .90, dodgeCooldownMultiplier: .92 }
     },
     buckler: {
       slot: 'offhand',
       name: 'Щит дозорного',
       icon: 'shield',
-      build: { blockIncomingMultiplier: .18 }
+      build: { blockIncomingMultiplier: .18, speedMultiplier: .98 }
     },
     starterBlade: {
       slot: 'weapon',
@@ -62,25 +63,28 @@
       slot: 'weapon',
       name: 'Клинок рассвета',
       damage: 15,
-      icon: 'sword'
+      icon: 'sword',
+      build: { skillDamageMultiplier: 1.10, skillStaminaCostMultiplier: 1.20, staminaRegenMultiplier: .90 }
     },
     starterArmor: {
       slot: 'armor',
       name: 'Панцирь следопыта',
       health: 0,
-      icon: 'armor'
+      icon: 'armor',
+      build: { speedMultiplier: 1.06 }
     },
     wardenArmor: {
       slot: 'armor',
       name: 'Доспех хранителя',
       health: 40,
-      icon: 'armor'
+      icon: 'armor',
+      build: { healingMultiplier: 1.15, secondWindCooldownMultiplier: .90, speedMultiplier: .98 }
     },
     guardianArmor: {
       slot: 'armor',
       name: 'Пластинчатая броня стража',
       health: 25,
-      build: { blockDrainMultiplier: .70 },
+      build: { blockDrainMultiplier: .70, speedMultiplier: .96 },
       icon: 'armor'
     }
   };
@@ -541,13 +545,31 @@
   const RUNES = Object.freeze({
     weapon: {
       none: { name: 'Без руны' },
-      edge: { name: 'Руна кромки', damage: 5, note: '+5 к итоговому урону.' },
-      aether: { name: 'Руна эфира', build: { skillDamageMultiplier: 1.10 }, note: '+10% урона навыков.' }
+      edge: {
+        name: 'Руна кромки',
+        damage: 5,
+        build: { staminaRegenMultiplier: 1.05 },
+        note: '+5 к итоговому урону; регенерация выносливости +5%.'
+      },
+      aether: {
+        name: 'Руна эфира',
+        build: { skillDamageMultiplier: 1.20, skillStaminaCostMultiplier: 0.85 },
+        note: 'Урон навыков +20%; стоимость навыка −15%.'
+      }
     },
     armor: {
       none: { name: 'Без руны' },
-      vigor: { name: 'Руна стойкости', health: 18, note: '+18 к максимальному здоровью.' },
-      guard: { name: 'Руна стража', build: { blockDrainMultiplier: .90 }, note: 'Расход выносливости блока −10%.' }
+      vigor: {
+        name: 'Руна стойкости',
+        health: 18,
+        build: { healingMultiplier: 1.10, secondWindCooldownMultiplier: 0.90 },
+        note: '+18 к максимальному здоровью; лечение +10%; перезарядка Второго дыхания −10%.'
+      },
+      guard: {
+        name: 'Руна стража',
+        build: { blockDrainMultiplier: 0.85, staminaRegenMultiplier: 1.05 },
+        note: 'Расход выносливости блока −15%; регенерация выносливости +5%.'
+      }
     }
   });
   const buildEngine = window.AetherBuilds.createEngine({
@@ -1343,24 +1365,133 @@
   function signed(n) {
     return n > 0 ? `+${n}` : String(n);
   }
+  const BUILD_PREVIEW_AXES = Object.freeze([
+    ['damage', 'Урон', p => p.damage, 'integer', 'higher'],
+    ['maxHp', 'Макс. здоровье', p => p.maxHp, 'integer', 'higher'],
+    ['speed', 'Скорость', p => p.speed, 'number2', 'higher'],
+    ['blockIncomingMultiplier', 'Блок: входящий урон', p => p.combat.blockIncomingMultiplier, 'multiplier', 'lower'],
+    ['blockStaminaDrain', 'Расход блока', p => p.combat.blockStaminaDrain, 'number2', 'lower'],
+    ['staminaRegen', 'Регенерация выносливости', p => p.combat.staminaRegen, 'number2', 'higher'],
+    ['dodgeStaminaCost', 'Стоимость рывка', p => p.combat.dodgeStaminaCost, 'number2', 'lower'],
+    ['dodgeCooldown', 'Перезарядка рывка', p => p.combat.dodgeCooldown, 'cooldown', 'lower'],
+    ['skillStaminaCost', 'Стоимость навыка', p => p.combat.skillStaminaCost, 'number2', 'lower'],
+    ['skillDamageMultiplier', 'Урон навыка', p => p.combat.skillDamageMultiplier, 'multiplier', 'higher'],
+    ['healingMultiplier', 'Лечение', p => p.healingMultiplier, 'multiplier', 'higher'],
+    ['secondWindHeal', 'Второе дыхание: лечение', p => p.combat.secondWindHeal, 'integer', 'higher'],
+    ['secondWindCooldown', 'Второе дыхание: перезарядка', p => p.combat.secondWindCooldown, 'cooldown', 'lower'],
+  ]);
+  function formatBuildPreviewValue(value, kind) {
+    if (kind === 'integer') return String(Math.round(value));
+    if (kind === 'multiplier') return `×${value.toFixed(2)}`;
+    const digits = kind === 'cooldown' ? 3 : 2;
+    return String(Number(value.toFixed(digits)));
+  }
+  function buildCandidateProfile(id) {
+    const item = GEAR[id];
+    if (!item) return null;
+    return buildEngine.derive({
+      level: player.level,
+      progression: player.progression,
+      loadout: { ...player.loadout, [item.slot]: id },
+      runes: player.runes,
+    });
+  }
+  function buildPreviewRows(current, candidate) {
+    if (!current || !candidate) return [];
+    const rows = [];
+    for (const [key, label, read, format, direction] of BUILD_PREVIEW_AXES) {
+      const from = read(current), to = read(candidate);
+      if (Math.abs(from - to) <= 1e-12) continue;
+      const benefit = direction === 'higher' ? to > from : to < from;
+      rows.push({
+        key, label, current: from, candidate: to,
+        text: `${label}: ${formatBuildPreviewValue(from, format)} -> ${formatBuildPreviewValue(to, format)}`,
+        impact: benefit ? 'benefit' : 'tradeoff',
+      });
+    }
+    return rows;
+  }
+  function renderBuildDeltaGroups(rows) {
+    if (!rows?.length) return 'Характеристики не изменятся';
+    const renderGroup = (title, className, entries) => entries.length ?
+      `<div class="buildDeltaGroup ${className}"><div class="buildGroupTitle">${title}</div>${entries.map(row => `<div class="buildStatRow">${escapeHTML(row.text)}</div>`).join('')}</div>` : '';
+    const benefits = rows.filter(row => row.impact === 'benefit');
+    const tradeoffs = rows.filter(row => row.impact === 'tradeoff');
+    return `${renderGroup('ПЛЮСЫ','buildDeltaBenefit',benefits)}${renderGroup('КОМПРОМИССЫ','buildDeltaTradeoff',tradeoffs)}`;
+  }
+  function equipmentPreview(id) {
+    const item = GEAR[id];
+    if (!item) return null;
+    const worn = player.loadout[item.slot] === id;
+    if (worn) return { worn: true, profile: buildProfile, rows: [], html: 'Текущая конфигурация' };
+    const profile = buildCandidateProfile(id);
+    const rows = buildPreviewRows(buildProfile, profile);
+    return { worn: false, profile, rows, html: renderBuildDeltaGroups(rows) };
+  }
+  function buildCandidateRuneProfile(slot, id) {
+    const table = RUNES[slot];
+    if (!table || !Object.hasOwn(table, id)) return null;
+    return buildEngine.derive({
+      level: player.level,
+      progression: player.progression,
+      loadout: player.loadout,
+      runes: { ...player.runes, [slot]: id },
+    });
+  }
+  function runePreview(slot, id) {
+    const table = RUNES[slot];
+    if (!table || !Object.hasOwn(table, id)) return null;
+    const active = player.runes[slot] === id;
+    if (active) return { active: true, profile: buildProfile, rows: [], html: 'Текущая конфигурация' };
+    const profile = buildCandidateRuneProfile(slot, id);
+    const rows = buildPreviewRows(buildProfile, profile);
+    return { active: false, profile, rows, html: renderBuildDeltaGroups(rows) };
+  }
+  function buildSummaryView(profile, loadout, runes) {
+    if (!profile || !loadout || !runes) return null;
+    const gearName = id => GEAR[id]?.name || String(id || '');
+    const runeName = (slot, id) => RUNES[slot]?.[id]?.name || String(id || '');
+    const makeRow = (key, label, value, kind, suffix = '') => ({
+      key, label, value, text: `${formatBuildPreviewValue(value, kind)}${suffix}`,
+    });
+    const loadoutRows = [
+      { key:'weapon', label:'Оружие', value:`${gearName(loadout.weapon)} · ${runeName('weapon', runes.weapon)}` },
+      { key:'armor', label:'Броня', value:`${gearName(loadout.armor)} · ${runeName('armor', runes.armor)}` },
+      { key:'offhand', label:'Доп. слот', value:gearName(loadout.offhand) },
+    ];
+    const groups = [
+      { key:'attack', title:'АТАКА', rows:[
+        makeRow('damage','Урон',profile.damage,'integer'),
+        makeRow('skillDamageMultiplier','Урон навыка',profile.combat.skillDamageMultiplier,'multiplier'),
+        makeRow('skillStaminaCost','Стоимость навыка',profile.combat.skillStaminaCost,'number2'),
+      ]},
+      { key:'defense', title:'ЗАЩИТА', rows:[
+        makeRow('maxHp','Макс. здоровье',profile.maxHp,'integer'),
+        makeRow('blockIncomingMultiplier','Блок: входящий урон',profile.combat.blockIncomingMultiplier,'multiplier'),
+        makeRow('blockStaminaDrain','Расход блока',profile.combat.blockStaminaDrain,'number2'),
+      ]},
+      { key:'mobility', title:'МОБИЛЬНОСТЬ', rows:[
+        makeRow('speed','Скорость',profile.speed,'number2'),
+        makeRow('staminaRegen','Регенерация выносливости',profile.combat.staminaRegen,'number2','/с'),
+        makeRow('dodgeStaminaCost','Стоимость рывка',profile.combat.dodgeStaminaCost,'number2'),
+        makeRow('dodgeCooldown','Перезарядка рывка',profile.combat.dodgeCooldown,'cooldown',' с'),
+      ]},
+      { key:'recovery', title:'ВОССТАНОВЛЕНИЕ', rows:[
+        makeRow('healingMultiplier','Лечение',profile.healingMultiplier,'multiplier'),
+        makeRow('secondWindHeal','Второе дыхание: лечение',profile.combat.secondWindHeal,'integer'),
+        makeRow('secondWindCooldown','Второе дыхание: перезарядка',profile.combat.secondWindCooldown,'cooldown',' с'),
+      ]},
+    ];
+    const html = `<section class="buildSummary"><h3>Текущий билд</h3><div class="buildLoadout">${loadoutRows.map(row => `<div class="buildStatRow"><span>${row.label}</span><b>${escapeHTML(row.value)}</b></div>`).join('')}</div>${groups.map(group => `<div class="buildGroup"><div class="buildGroupTitle">${group.title}</div>${group.rows.map(row => `<div class="buildStatRow"><span>${row.label}</span><b>${escapeHTML(row.text)}</b></div>`).join('')}</div>`).join('')}</section>`;
+    return { loadout:loadoutRows, groups, html };
+  }
   function openEquipment() {
     const inCombat = isInCombat();
-    const currentWeapon = GEAR[player.loadout.weapon] || GEAR.starterBlade,
-      currentArmor = GEAR[player.loadout.armor] || GEAR.starterArmor;
+    const buildSummary = buildSummaryView(buildProfile, player.loadout, player.runes);
     const gearCards = Object.entries(GEAR).map(([id, item]) => {
       const owned = ownsGear(id), worn = player.loadout[item.slot] === id;
-      let stats = '';
-      if (item.slot === 'offhand') {
-        stats = id === 'buckler' ? 'Блок: входящий урон ×0,18 вместо ×0,26 с оружием.' : 'Блок оружием: входящий урон ×0,26.';
-      } else if (item.slot === 'weapon') {
-        const delta = (item.damage || 0) - (currentWeapon.damage || 0);
-        stats = `Урон: ${player.damage + delta} <b>(${signed(delta)})</b><br>Комбо: до +20% · крит: 12%, ×1,5`;
-      } else {
-        const delta = (item.health || 0) - (currentArmor.health || 0);
-        stats = `Макс. здоровье: ${player.maxHp + delta} <b>(${signed(delta)})</b>`;
-        if (id === 'guardianArmor') stats += '<br>Особенность: расход выносливости блока −30%.';
-        else if (id === 'wardenArmor') stats += '<br>Особенность: максимальный запас здоровья.';
-      }
+      const preview = equipmentPreview(id);
+      const stats = preview?.html || 'Без изменения характеристик';
       const disabled = !owned || worn || inCombat;
       const label = worn ? 'Надето' : !owned ? 'Не получено' : inCombat ? 'Недоступно во время боя' : 'Надеть';
       return `<article class="card">${itemArt(item.icon)}<h3>${item.name}</h3><p>${stats}</p><button class="btn" id="equip-${id}" ${disabled ? 'disabled' : ''}>${label}</button></article>`;
@@ -1369,7 +1500,7 @@
       const useReason = inCombat ? 'Недоступно во время боя' : supplyUseReason(id);
       return `<article class="card">${itemArt('potion')}<h3>${item.name} · ${player.supplies[id]} шт.</h3><p>${item.note}<br>Расход: 1 шт. за применение.</p><div class="cardActions"><button class="btn" id="supply-${id}" ${player.loadout.quick === id || inCombat ? 'disabled' : ''}>${player.loadout.quick === id ? 'В быстром слоте' : inCombat ? 'Недоступно во время боя' : 'В быстрый слот'}</button><button class="btn secondary" id="use-supply-${id}" ${useReason ? 'disabled' : ''}>${useReason || 'Использовать сейчас'}</button></div></article>`;
     }).join('');
-    openModal('Экипировка персонажа', `<p class="note">Смена снаряжения не изменяет постоянные усиления. Расходники можно применить прямо отсюда или назначить в быстрый слот.</p><div class="shopList">${gearCards}</div><div class="sectionTitle">БЫСТРЫЙ РАСХОДНИК</div><div class="shopList">${supplyCards}</div><button class="btn" id="supply-clear" ${inCombat ? 'disabled' : ''}>${inCombat ? 'Недоступно во время боя' : 'Освободить быстрый слот'}</button><button class="btn" id="customizationEntry" ${inCombat ? 'disabled' : ''}>Руны и внешний вид</button><button class="btn" id="equipmentBack">Вернуться в сумку</button>`);
+    openModal('Экипировка персонажа', `${buildSummary.html}<p class="note">Смена снаряжения не изменяет постоянные усиления. Расходники можно применить прямо отсюда или назначить в быстрый слот.</p><div class="shopList">${gearCards}</div><div class="sectionTitle">БЫСТРЫЙ РАСХОДНИК</div><div class="shopList">${supplyCards}</div><button class="btn" id="supply-clear" ${inCombat ? 'disabled' : ''}>${inCombat ? 'Недоступно во время боя' : 'Освободить быстрый слот'}</button><button class="btn" id="customizationEntry" ${inCombat ? 'disabled' : ''}>Руны и внешний вид</button><button class="btn" id="equipmentBack">Вернуться в сумку</button>`);
     for (const id of Object.keys(GEAR)) bindTap($('equip-' + id), () => equipItem(id));
     for (const id of Object.keys(SUPPLIES)) {
       bindTap($('supply-' + id), () => selectSupply(id));
@@ -1503,9 +1634,17 @@
   }
   function openCustomization() {
     const inCombat = isInCombat(), shards = player.inv.emberShard || 0;
-    const runeCards = ['weapon', 'armor'].map(slot => `<div class="card"><h3>${slot === 'weapon' ? 'Руна оружия' : 'Руна брони'}</h3>${Object.entries(RUNES[slot]).map(([id, rune]) => `<button class="btn runeChoice ${player.runes[slot] === id ? 'active' : ''}" id="rune-${slot}-${id}" ${inCombat || player.runes[slot] === id || (id !== 'none' && shards < 1) ? 'disabled' : ''}>${rune.name}${rune.note ? ' · ' + rune.note : ''}${id !== 'none' ? ' · 1 осколок' : ''}</button>`).join('')}</div>`).join('');
+    const buildSummary = buildSummaryView(buildProfile, player.loadout, player.runes);
+    const runeCards = ['weapon', 'armor'].map(slot => `<div class="card"><h3>${slot === 'weapon' ? 'Руна оружия' : 'Руна брони'}</h3>${Object.entries(RUNES[slot]).map(([id, rune]) => {
+      const preview = runePreview(slot, id);
+      const active = player.runes[slot] === id;
+      const disabled = inCombat || active || (id !== 'none' && shards < 1);
+      const priceText = id === 'none' ? (active ? '' : ' · Снять бесплатно') : ' · 1 осколок';
+      const previewText = preview?.html ? `<br>${preview.html}` : '';
+      return `<button class="btn runeChoice ${active ? 'active' : ''}" id="rune-${slot}-${id}" ${disabled ? 'disabled' : ''}>${rune.name}${rune.note ? ' · ' + rune.note : ''}${priceText}${previewText}</button>`;
+    }).join('')}</div>`).join('');
     const accentNames = { teal: 'Бирюза', gold: 'Золото', ember: 'Уголь' }, trailNames = { steel: 'Сталь', aether: 'Эфир', ember: 'Пепел' };
-    openModal('Руны и внешний вид', `<p class="note">Руны дают небольшие специализации и стоят по 1 Осколку пламени. Внешний вид характеристик не меняет.</p><div class="stats"><div class="stat"><b>${shards}</b>Осколков</div><div class="stat"><b>${player.damage}</b>Урон</div><div class="stat"><b>${player.maxHp}</b>HP</div></div>${runeCards}<div class="sectionTitle">ЦВЕТ ГЕРОЯ</div><div class="seg cosmeticSeg">${Object.keys(COSMETICS.accents).map(id => `<button id="accent-${id}" class="${player.cosmetics.accent === id ? 'active' : ''}">${accentNames[id]}</button>`).join('')}</div><div class="sectionTitle">СЛЕД ЭФФЕКТОВ</div><div class="seg cosmeticSeg">${Object.keys(COSMETICS.trails).map(id => `<button id="trail-${id}" class="${player.cosmetics.trail === id ? 'active' : ''}">${trailNames[id]}</button>`).join('')}</div><button class="btn" id="customBack">Назад к экипировке</button>`);
+    openModal('Руны и внешний вид', `${buildSummary.html}<p class="note">Руны дают небольшие специализации и стоят по 1 Осколку пламени. Внешний вид характеристик не меняет.</p><div class="stats"><div class="stat"><b>${shards}</b>Осколков</div><div class="stat"><b>${player.damage}</b>Урон</div><div class="stat"><b>${player.maxHp}</b>HP</div></div>${runeCards}<div class="sectionTitle">ЦВЕТ ГЕРОЯ</div><div class="seg cosmeticSeg">${Object.keys(COSMETICS.accents).map(id => `<button id="accent-${id}" class="${player.cosmetics.accent === id ? 'active' : ''}">${accentNames[id]}</button>`).join('')}</div><div class="sectionTitle">СЛЕД ЭФФЕКТОВ</div><div class="seg cosmeticSeg">${Object.keys(COSMETICS.trails).map(id => `<button id="trail-${id}" class="${player.cosmetics.trail === id ? 'active' : ''}">${trailNames[id]}</button>`).join('')}</div><button class="btn" id="customBack">Назад к экипировке</button>`);
     for (const slot of ['weapon', 'armor']) for (const id of Object.keys(RUNES[slot])) bindTap($(`rune-${slot}-${id}`), () => installRune(slot, id));
     for (const id of Object.keys(COSMETICS.accents)) bindTap($('accent-' + id), () => setCosmetic('accent', id));
     for (const id of Object.keys(COSMETICS.trails)) bindTap($('trail-' + id), () => setCosmetic('trail', id));
@@ -2428,6 +2567,7 @@
   });
   function openInventory() {
     const stats = statSources(), inCombat = isInCombat();
+    const buildSummary = buildSummaryView(buildProfile, player.loadout, player.runes);
     const bladeReason = inCombat ? 'Недоступно во время боя' : player.progression.forgeRank >= MAX_UPGRADE_RANK ? 'Максимальный ранг' : player.inv.wood < 3 || player.inv.ore < 2 ? `Нужно: ${Math.max(0, 3 - player.inv.wood)} древесины, ${Math.max(0, 2 - player.inv.ore)} руды` : '';
     const vitalityReason = inCombat ? 'Недоступно во время боя' : player.progression.vitalityRank >= MAX_UPGRADE_RANK ? 'Максимальный ранг' : player.inv.herb < 3 || player.inv.wood < 1 ? `Нужно: ${Math.max(0, 3 - player.inv.herb)} травы, ${Math.max(0, 1 - player.inv.wood)} древесины` : '';
     const recipeReason = id => {
@@ -2438,7 +2578,7 @@
       return missing.length ? 'Нужно: ' + missing.join(', ') : '';
     };
     const discovered = player.discoveries.filter(id => id.startsWith(zoneId + ':')).length;
-    openModal('Сумка и экипировка', `<button class="btn" id="equipmentEntry">Экипировка, расходники и руны</button><div class="grid"><div class="card">${itemArt('sword')}<h3>Оружие</h3><p>${escapeHTML(player.equipment.weapon)}<br>Урон: <b>${player.damage}</b></p></div><div class="card">${itemArt('armor')}<h3>Броня</h3><p>${escapeHTML(player.equipment.armor)}<br>Макс. здоровье: <b>${player.maxHp}</b></p></div><div class="card"><h3>Ресурсы</h3><p>Древесина: ${player.inv.wood}<br>Руда: ${player.inv.ore}<br>Трава: ${player.inv.herb}</p></div><div class="card"><h3>Прогресс</h3><p>Золото: <b>${player.gold}</b><br>Знаки: ${player.inv.guardianToken || 0}<br>Осколки: ${player.inv.emberShard || 0}<br>Циклы: ${player.progression.completedCycles}<br>Открыто мест: ${discovered}/${LANDMARKS[zoneId].length}</p></div></div><div class="card"><h3>Источники характеристик</h3><p>Урон: ${stats.damage.base} база + ${stats.damage.level} уровни + ${stats.damage.permanent} постоянные + ${stats.damage.gear} оружие + ${stats.damage.rune} руна = <b>${stats.damage.total}</b><br>HP: ${stats.hp.base} база + ${stats.hp.level} уровни + ${stats.hp.permanent} постоянные + ${stats.hp.gear} броня + ${stats.hp.rune} руна = <b>${stats.hp.total}</b></p></div><div class="sectionTitle">РАСХОДНИКИ</div><div class="shopList">${Object.entries(SUPPLIES).map(([id,item]) => `<article class="card">${itemArt('potion')}<h3>${item.name} · ${player.supplies[id]} шт.</h3><p>${item.note}</p><button class="btn" id="inv-use-${id}" ${supplyUseReason(id) || inCombat ? 'disabled' : ''}>${inCombat ? 'Недоступно во время боя' : supplyUseReason(id) || 'Использовать сейчас'}</button></article>`).join('')}</div><div class="sectionTitle">КРАФТ РАСХОДНИКОВ</div><button class="btn" id="brew-potion" ${recipeReason('potion') ? 'disabled' : ''}>${recipeReason('potion') || 'Зелье лечения · 3 травы + 1 древесина'}</button><button class="btn" id="brew-tonic" ${recipeReason('tonic') ? 'disabled' : ''}>${recipeReason('tonic') || 'Тоник выносливости · 1 трава + 1 руда'}</button><button class="btn" id="brew-fieldKit" ${recipeReason('fieldKit') ? 'disabled' : ''}>${recipeReason('fieldKit') || 'Походный эликсир · 2 травы + 1 древесина + 1 руда'}</button><div class="sectionTitle">ПОСТОЯННЫЕ УСИЛЕНИЯ</div><button class="btn" id="craftBtn" ${bladeReason ? 'disabled' : ''}>${bladeReason || `Закалить меч · ранг ${player.progression.forgeRank + 1}/${MAX_UPGRADE_RANK} · 3 древесины + 2 руды`}</button><button class="btn" id="potionBtn" ${vitalityReason ? 'disabled' : ''}>${vitalityReason || `Эликсир жизни · ранг ${player.progression.vitalityRank + 1}/${MAX_UPGRADE_RANK} · +12 HP · 3 травы + 1 древесина`}</button>`);
+    openModal('Сумка и экипировка', `${buildSummary.html}<button class="btn" id="equipmentEntry">Экипировка, расходники и руны</button><div class="grid"><div class="card">${itemArt('sword')}<h3>Оружие</h3><p>${escapeHTML(player.equipment.weapon)}<br>Урон: <b>${player.damage}</b></p></div><div class="card">${itemArt('armor')}<h3>Броня</h3><p>${escapeHTML(player.equipment.armor)}<br>Макс. здоровье: <b>${player.maxHp}</b></p></div><div class="card"><h3>Ресурсы</h3><p>Древесина: ${player.inv.wood}<br>Руда: ${player.inv.ore}<br>Трава: ${player.inv.herb}</p></div><div class="card"><h3>Прогресс</h3><p>Золото: <b>${player.gold}</b><br>Знаки: ${player.inv.guardianToken || 0}<br>Осколки: ${player.inv.emberShard || 0}<br>Циклы: ${player.progression.completedCycles}<br>Открыто мест: ${discovered}/${LANDMARKS[zoneId].length}</p></div></div><div class="card"><h3>Источники характеристик</h3><p>Урон: ${stats.damage.base} база + ${stats.damage.level} уровни + ${stats.damage.permanent} постоянные + ${stats.damage.gear} оружие + ${stats.damage.rune} руна = <b>${stats.damage.total}</b><br>HP: ${stats.hp.base} база + ${stats.hp.level} уровни + ${stats.hp.permanent} постоянные + ${stats.hp.gear} броня + ${stats.hp.rune} руна = <b>${stats.hp.total}</b></p></div><div class="sectionTitle">РАСХОДНИКИ</div><div class="shopList">${Object.entries(SUPPLIES).map(([id,item]) => `<article class="card">${itemArt('potion')}<h3>${item.name} · ${player.supplies[id]} шт.</h3><p>${item.note}</p><button class="btn" id="inv-use-${id}" ${supplyUseReason(id) || inCombat ? 'disabled' : ''}>${inCombat ? 'Недоступно во время боя' : supplyUseReason(id) || 'Использовать сейчас'}</button></article>`).join('')}</div><div class="sectionTitle">КРАФТ РАСХОДНИКОВ</div><button class="btn" id="brew-potion" ${recipeReason('potion') ? 'disabled' : ''}>${recipeReason('potion') || 'Зелье лечения · 3 травы + 1 древесина'}</button><button class="btn" id="brew-tonic" ${recipeReason('tonic') ? 'disabled' : ''}>${recipeReason('tonic') || 'Тоник выносливости · 1 трава + 1 руда'}</button><button class="btn" id="brew-fieldKit" ${recipeReason('fieldKit') ? 'disabled' : ''}>${recipeReason('fieldKit') || 'Походный эликсир · 2 травы + 1 древесина + 1 руда'}</button><div class="sectionTitle">ПОСТОЯННЫЕ УСИЛЕНИЯ</div><button class="btn" id="craftBtn" ${bladeReason ? 'disabled' : ''}>${bladeReason || `Закалить меч · ранг ${player.progression.forgeRank + 1}/${MAX_UPGRADE_RANK} · 3 древесины + 2 руды`}</button><button class="btn" id="potionBtn" ${vitalityReason ? 'disabled' : ''}>${vitalityReason || `Эликсир жизни · ранг ${player.progression.vitalityRank + 1}/${MAX_UPGRADE_RANK} · +12 HP · 3 травы + 1 древесина`}</button>`);
     bindTap($('craftBtn'), () => craft('blade'));
     bindTap($('potionBtn'), () => craft('potion'));
     bindTap($('equipmentEntry'), openEquipment);
@@ -2450,7 +2590,7 @@
   const SHOP_ITEMS = [{
     id: 'buckler',
     name: 'Щит дозорного',
-    note: 'Левая рука. При блоке снижает входящий урон на 82% (с округлением).',
+    note: 'Сильнее блок: входящий урон ×0,18; скорость ×0,98. Один раз.',
     price: 220,
     gear: true
   }, {
@@ -2501,13 +2641,13 @@
   }, {
     id: 'dawnBlade',
     name: 'Клинок рассвета',
-    note: 'Экипируется сразу: +15 к текущему урону. Все прежние усиления сохраняются. Один раз.',
+    note: 'Экипируется сразу: +15 урона; урон навыка ×1,10; стоимость навыка ×1,20; регенерация выносливости ×0,90. Один раз.',
     price: 350,
     damage: 15
   }, {
     id: 'wardenArmor',
     name: 'Доспех хранителя',
-    note: 'Бонус при ношении: +40 макс. здоровья относительно базовой брони. Экипируется сразу. Один раз.',
+    note: 'При ношении: +40 макс. здоровья; лечение ×1,15; перезарядка «Второго дыхания» ×0,90; скорость ×0,98. Один раз.',
     price: 450,
     health: 40
   }];
@@ -2522,9 +2662,14 @@
     return '';
   }
   function openShop() {
+    const cards = SHOP_ITEMS.map(item => {
+      const buildPreview = Object.hasOwn(GEAR, item.id) ? equipmentPreview(item.id) : null;
+      const buildPreviewHtml = buildPreview ? `<div class="shopBuildPreview">${buildPreview.html}</div>` : '';
+      return `<article class="card">${itemArt(item.id)}<h3>${item.name}</h3><p>${item.note}</p>${buildPreviewHtml}<button class="btn" id="buy-${item.id}" ${unavailableItem(item) ? 'disabled' : ''}>${unavailableItem(item) || 'Купить · ' + item.price + ' золота'}</button></article>`;
+    }).join('');
     openModal('Магазин', `<div class="shopWallet">Золото: <b>${player.gold}</b></div>
       <p class="note">Снаряжение надевается сразу; его можно сменить в экипировке. Зелья и тоники поступают в сумку. Лечение у торговца применяется сразу.</p>
-      <div class="shopList">${SHOP_ITEMS.map(item => `<article class="card">${itemArt(item.id)}<h3>${item.name}</h3><p>${item.note}</p><button class="btn" id="buy-${item.id}" ${unavailableItem(item) ? 'disabled' : ''}>${unavailableItem(item) || 'Купить · ' + item.price + ' золота'}</button></article>`).join('')}</div>
+      <div class="shopList">${cards}</div>
       <button class="btn" id="shopBack">Вернуться в игру</button>`);
     shopOpen = true;
     for (const item of SHOP_ITEMS) bindTap($('buy-' + item.id), () => buyItem(item.id));
@@ -4848,6 +4993,7 @@
       updateImpactFeedback,
       resetImpactFeedback,
       impactFeedbackState,
+      applyIncomingCombatImpact,
       screenPos,
       hitTarget,
       addEnemy,
@@ -4871,6 +5017,13 @@
       openShop,
       buyItem,
       openEquipment,
+      equipmentPreview,
+      buildCandidateProfile,
+      buildCandidateRuneProfile,
+      runePreview,
+      buildPreviewRows,
+      renderBuildDeltaGroups,
+      buildSummaryView,
       openCustomization,
       openCamp,
       acceptContract,

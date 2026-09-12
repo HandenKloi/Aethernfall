@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '4.0.10';
+const VERSION = '4.0.13';
 // Scope isolates caches of different GitHub Pages repositories on the same origin.
 const PREFIX = 'aethernfall:' + self.registration.scope + ':';
 const CACHE_NAME = PREFIX + VERSION;
