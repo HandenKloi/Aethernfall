@@ -34,11 +34,14 @@
     return Object.freeze({
       resolveBasicDamage(input = {}) {
         const damage = Number(input.damage), combo = Number(input.combo), critRoll = Number(input.critRoll);
-        if (!Number.isFinite(damage) || damage <= 0 || !Number.isFinite(critRoll) || critRoll < 0 || critRoll >= 1) return { valid: false, amount: 0, critical: false };
+        const riposteMultiplier = input.riposte === true ? Number(input.riposteMultiplier) : 1;
+        if (!Number.isFinite(damage) || damage <= 0 || !Number.isFinite(critRoll) || critRoll < 0 || critRoll >= 1 || !Number.isFinite(riposteMultiplier) || riposteMultiplier <= 0) return { valid: false, amount: 0, critical: false };
         const critical = critRoll < rules.critChance;
         const comboStep = Math.max(0, (Number.isFinite(combo) ? combo : 1) - 1);
-        const amount = Math.round(damage * (critical ? rules.critMultiplier : 1) * (1 + rules.comboDamageStep * comboStep));
-        return { valid: Number.isFinite(amount) && amount > 0, amount: Number.isFinite(amount) && amount > 0 ? amount : 0, critical };
+        const amount = Math.round(damage * (critical ? rules.critMultiplier : 1) * (1 + rules.comboDamageStep * comboStep) * riposteMultiplier);
+        const output = { valid: Number.isFinite(amount) && amount > 0, amount: Number.isFinite(amount) && amount > 0 ? amount : 0, critical };
+        if (input.riposte === true) output.riposte = true;
+        return output;
       },
       resolveIncomingDamage(input = {}) {
         const damage = Number(input.damage);
@@ -46,6 +49,10 @@
         if (!Number.isFinite(damage) || damage <= 0 || tuning.supplied && !tuning.values) return { valid: false, avoided: false, blocked: false, damage: 0 };
         if (input.dodging === true) return { valid: true, avoided: true, blocked: false, damage: 0 };
         if (input.blocking === true) {
+          const blockAge = Number(input.blockAge), perfectWindow = Number(input.perfectWindow);
+          if (Number.isFinite(blockAge) && blockAge >= 0 && Number.isFinite(perfectWindow) && perfectWindow >= 0 && blockAge <= perfectWindow) {
+            return { valid:true, avoided:true, blocked:true, perfect:true, damage:0 };
+          }
           const multiplier = tuning.supplied ? tuning.values.blockIncomingMultiplier : input.buckler === true ? rules.bucklerIncomingMultiplier : rules.blockIncomingMultiplier;
           return { valid: true, avoided: false, blocked: true, damage: Math.ceil(damage * multiplier) };
         }

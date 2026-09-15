@@ -3,8 +3,8 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '4.1.0';
-  const SAVE_SCHEMA = 4;
+  const BUILD_VERSION = '5.0.0';
+  const SAVE_SCHEMA = 5;
   const BASE_STATS = Object.freeze({ startLevel: 6, damage: 32, maxHp: 240, maxStamina: 100, speed: 205, damagePerLevel: 3, hpPerLevel: 18 });
   const MAX_UPGRADE_RANK = 5;
   const SUPPLY_COOLDOWN = 1.2;
@@ -39,7 +39,9 @@
   });
   const combatEngine = window.AetherCombat.createEngine(COMBAT_RULES);
   const art = window.AetherArt;
-  const audio = window.AetherAudio || { unlock: async () => false, configure() {}, setZone() {}, sfx() {}, suspend() {}, resume() {}, snapshot: () => ({ available: false }) };
+  const audio = window.AetherAudio || { unlock: async () => false, configure() {}, setZone() {}, setMode() {}, sfx() {}, speak() { return false; }, stopVoice() {}, suspend() {}, resume() {}, snapshot: () => ({ available: false, voiceAvailable:false }) };
+  const storyApi = window.AetherStory;
+  const storyEngine = storyApi?.createEngine({ npcs:storyApi.NPCS, nodes:storyApi.NODES, endings:storyApi.ENDINGS });
   const GEAR = {
     emptyHand: {
       slot: 'offhand',
@@ -264,6 +266,7 @@
     playerHit: Object.freeze({ priority: 4, camera: 3.5, duration: .11, flash: .38, haptic: 12, sfx: 'hit' }),
     enemyKill: Object.freeze({ priority: 5, camera: 3, duration: .10, flash: 0, haptic: 10, sfx: 'kill' }),
     guardianKill: Object.freeze({ priority: 6, camera: 5, duration: .14, flash: 0, haptic: 24, sfx: 'kill' })
+    ,parry: Object.freeze({ priority: 7, camera: 4, duration: .10, flash: .08, haptic: 18, sfx: 'parry' })
   });
   const DAMAGE_FLASH_DECAY = .38 / .16;
   const QUALITY = {
@@ -374,7 +377,7 @@
     return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : fallback;
   }
   let settings = {
-    quality: storage.getItem('aef_quality') || detected,
+    quality: storage.getItem('aef_quality') || 'auto',
     fps: Number(storage.getItem('aef_fps') || 60),
     controls: storage.getItem('aef_controls') === 'left' ? 'left' : 'right',
     controlSize: ['compact', 'normal', 'large'].includes(storage.getItem('aef_control_size')) ? storage.getItem('aef_control_size') : 'normal',
@@ -388,11 +391,13 @@
     musicVolume: finiteSetting(storage.getItem('aef_music_volume'), .55),
     ambientVolume: finiteSetting(storage.getItem('aef_ambient_volume'), .65),
     sfxVolume: finiteSetting(storage.getItem('aef_sfx_volume'), .8),
-    musicEnabled: storage.getItem('aef_music_enabled') !== '0'
+    musicEnabled: storage.getItem('aef_music_enabled') !== '0',
+    voiceEnabled: storage.getItem('aef_voice_enabled') !== '0',
+    voiceVolume: finiteSetting(storage.getItem('aef_voice_volume'), .7)
   };
-  if (!Object.hasOwn(QUALITY, settings.quality)) settings.quality = detected;
+  if (settings.quality !== 'auto' && !Object.hasOwn(QUALITY, settings.quality)) settings.quality = 'auto';
   if (!FPS.includes(settings.fps)) settings.fps = 60;
-  let profile = QUALITY[settings.quality];
+  let profile = QUALITY[settings.quality === 'auto' ? detected : settings.quality];
   let W = innerWidth,
     H = innerHeight,
     DPR = 1,
@@ -419,7 +424,9 @@
   const LANDMARKS = {
     mistwood: [[940,440,'FOREST','Шепчущая чаща'],[1540,1030,'RUIN','Затонувшие руины'],[2150,540,'SHRINE','Святилище росы'],[2440,1320,'SHRINE','Камень туманного дозора']],
     stonevale:[[820,480,'VILLAGE','Старый дозор'],[1500,840,'MINE','Серебряный рудник'],[2180,520,'RUIN','Расколотая арка'],[2360,1320,'RUIN','Раскол дозорных']],
-    ashfield:[[940,500,'OUTPOST','Пепельный пост'],[1760,1240,'BOSS','Обугленная арена'],[1260,930,'SHRINE','Святилище искры'],[700,1360,'OUTPOST','Пепельный маяк']]
+    ashfield:[[940,500,'OUTPOST','Пепельный пост'],[1760,1240,'BOSS','Обугленная арена'],[1260,930,'SHRINE','Святилище искры'],[700,1360,'OUTPOST','Пепельный маяк']],
+    frostmere:[[720,520,'VILLAGE','Приют ледоходов'],[1480,780,'SHRINE','Круг инея'],[2260,480,'RUIN','Башня дозорных'],[2100,1370,'BOSS','Зеркало зимы']],
+    starreach:[[620,1370,'OUTPOST','Последний привал'],[1260,980,'RUIN','Разбитая обсерватория'],[2050,520,'SHRINE','Колодец звёзд'],[2310,1260,'BOSS','Сердце разлома']]
   };
   const WORLD_IDENTITIES = Object.freeze({
     mistwood: Object.freeze({
@@ -452,6 +459,26 @@
         resources:Object.freeze(['wood','wood','ore','ore']),
       }),
     }),
+    frostmere: Object.freeze({
+      resourceKinds:['herb','ore'],
+      ambientEnemies:Object.freeze({boar:6,marksman:8}),
+      ambientResources:Object.freeze({herb:16,ore:12}),
+      signature:Object.freeze({
+        id:'frostmere-ward-tower', name:'Осада башни дозорных', landmarkIndex:2,
+        enemies:Object.freeze(['marksman','marksman','boar']),
+        resources:Object.freeze(['ore','ore','herb','herb']),
+      }),
+    }),
+    starreach: Object.freeze({
+      resourceKinds:['wood','ore'],
+      ambientEnemies:Object.freeze({raider:8,marksman:6}),
+      ambientResources:Object.freeze({wood:10,ore:18}),
+      signature:Object.freeze({
+        id:'starreach-observatory-rift', name:'Разлом обсерватории', landmarkIndex:1,
+        enemies:Object.freeze(['raider','marksman','raider']),
+        resources:Object.freeze(['ore','ore','wood','wood']),
+      }),
+    }),
   });
   const worldEngine = window.AetherWorld.createEngine({ identities:WORLD_IDENTITIES, landmarks:LANDMARKS });
   const SAVE = 'aethernfall_save_v30';
@@ -479,6 +506,7 @@
         y: 850
       },
       questId: 'mist',
+      npcId: 'mira',
       next: 'stonevale',
       resources: ['herb', 'wood'],
       boss: { type:'briarMatriarch', x:2320, y:1320 }
@@ -503,6 +531,7 @@
         y: 820
       },
       questId: 'stone',
+      npcId: 'lyra',
       next: 'ashfield',
       resources: ['ore', 'herb'],
       boss: { type:'guardian', x:1680, y:720 }
@@ -527,9 +556,22 @@
         y: 420
       },
       questId: 'ash',
-      next: 'mistwood',
+      npcId: 'toren',
+      next: 'frostmere',
       resources: ['wood', 'ore'],
       boss: { type:'cinderWarden', x:1760, y:1240 }
+    },
+    frostmere: {
+      name:'Морозная низина', badge:'ИНЕЙ', base:'#111a29', ground:'#40576a', accent:'#9ed9ef', water:'#455d86',
+      scout:{ x:520, y:520 }, camp:{ x:360, y:560 }, portal:{ x:2420, y:760 },
+      questId:'frost', npcId:'mira', next:'starreach', resources:['herb','ore'],
+      boss:{ type:'frostboundSeer', x:2100, y:1370 }
+    },
+    starreach: {
+      name:'Звёздный предел', badge:'РАЗЛОМ', base:'#160f25', ground:'#443b61', accent:'#c6a8ff', water:'#3b4778',
+      scout:{ x:540, y:1320 }, camp:{ x:420, y:1420 }, portal:{ x:360, y:340 },
+      questId:'star', npcId:'lyra', next:'mistwood', resources:['wood','ore'],
+      boss:{ type:'riftSovereign', x:2310, y:1260 }
     }
   };
   const BOSS_DEFINITIONS = Object.freeze({
@@ -565,6 +607,28 @@
         wave:Object.freeze({attack:'wave',damage:20,windup:.88,recovery1:.96,recovery2:.74,startRange:300})
       }),
       reward:Object.freeze({xp:110,gold:85,supply:'fieldKit'})
+    }),
+    frostboundSeer:Object.freeze({
+      name:'Морозный провидец', artType:'guardian', accent:'#8fdcff', height:118,
+      stats:Object.freeze({r:39,hp:680,speed:55,damage:23}),
+      sequences:Object.freeze({1:Object.freeze(['bolt','wave','slam']),2:Object.freeze(['wave','bolt','wave','slam'])}),
+      profiles:Object.freeze({
+        slam:Object.freeze({attack:'slam',damage:25,windup:.74,recovery1:.88,recovery2:.68,startRange:130}),
+        bolt:Object.freeze({attack:'bolt',damage:22,windup:.66,recovery1:.88,recovery2:.68,startRange:470}),
+        wave:Object.freeze({attack:'wave',damage:21,windup:.92,recovery1:.98,recovery2:.76,startRange:310})
+      }),
+      reward:Object.freeze({xp:135,gold:105,supply:'tonic'})
+    }),
+    riftSovereign:Object.freeze({
+      name:'Владыка разлома', artType:'guardian', accent:'#bc85ff', height:128,
+      stats:Object.freeze({r:42,hp:820,speed:62,damage:25}),
+      sequences:Object.freeze({1:Object.freeze(['slam','bolt','wave']),2:Object.freeze(['bolt','wave','slam','bolt','wave'])}),
+      profiles:Object.freeze({
+        slam:Object.freeze({attack:'slam',damage:28,windup:.72,recovery1:.86,recovery2:.64,startRange:135}),
+        bolt:Object.freeze({attack:'bolt',damage:25,windup:.60,recovery1:.84,recovery2:.64,startRange:490}),
+        wave:Object.freeze({attack:'wave',damage:24,windup:.86,recovery1:.94,recovery2:.70,startRange:320})
+      }),
+      reward:Object.freeze({xp:170,gold:140,supply:'fieldKit'})
     })
   });
   function bossDefinition(value) {
@@ -572,6 +636,16 @@
     return BOSS_DEFINITIONS[type] || null;
   }
   function isBoss(value) { return !!bossDefinition(value); }
+  const ARENA_DEFINITIONS = Object.freeze(Object.fromEntries(Object.entries(zones).map(([id, zone], index) => [id, Object.freeze({
+    radius:index < 3 ? 330 : 350,
+    cap:4,
+    waves:Object.freeze(index < 2
+      ? [Object.freeze(['boar','raider']), Object.freeze(['raider','marksman','raider'])]
+      : [Object.freeze(['raider','marksman']), Object.freeze(['marksman','raider','marksman'])]),
+    boss:zone.boss.type,
+    reward:Object.freeze({ gold:35 + index * 15, xp:30 + index * 10, supply:index === 3 ? 'tonic' : index === 4 ? 'fieldKit' : 'potion' })
+  })])));
+  const arenaEngine = window.AetherArenas?.createEngine(ARENA_DEFINITIONS);
   const MAIN_QUESTS = Object.freeze({
     mist: {
       title:'Следы в тумане',
@@ -600,7 +674,27 @@
         {id:'ash-wood',type:'gather',target:'wood',match:'target',counter:'wood',required:4,text:'Соберите 4 древесины',progressText:'Соберите древесину'},
         {id:'ash-beacon',type:'discover',target:'ashfield:3',match:'target',text:'Доберитесь до Пепельного маяка'},
         {id:'ash-warden',type:'kill',target:'cinderWarden',match:'target',counter:'kills',required:1,text:'Победите Пепельного хранителя'},
-        {id:'ash-portal',type:'portal',text:'Вернитесь в Туманный лес',effect:'questCycleCompleted'},
+        {id:'ash-portal',type:'portal',text:'Следуйте к Морозной низине'},
+      ],
+    },
+    frost: {
+      title:'Клятва подо льдом',
+      objectives:[
+        {id:'frost-mira',type:'talk',target:'scout',text:'Решите судьбу ледяных дозорных'},
+        {id:'frost-ore',type:'gather',target:'ore',match:'target',counter:'ore',required:3,text:'Соберите 3 кристаллические руды',progressText:'Соберите руду'},
+        {id:'frost-tower',type:'discover',target:'frostmere:2',match:'target',text:'Доберитесь до Башни дозорных'},
+        {id:'frost-seer',type:'kill',target:'frostboundSeer',match:'target',counter:'kills',required:1,text:'Победите Морозного провидца'},
+        {id:'frost-portal',type:'portal',text:'Откройте путь в Звёздный предел'},
+      ],
+    },
+    star: {
+      title:'Сердце Aethernfall',
+      objectives:[
+        {id:'star-council',type:'talk',target:'scout',text:'Соберите последний совет'},
+        {id:'star-herb',type:'gather',target:'wood',match:'target',counter:'herb',required:3,text:'Соберите 3 звёздных корня',progressText:'Соберите корни'},
+        {id:'star-well',type:'discover',target:'starreach:2',match:'target',text:'Настройте Колодец звёзд'},
+        {id:'star-sovereign',type:'kill',target:'riftSovereign',match:'target',counter:'kills',required:1,text:'Победите Владыку разлома'},
+        {id:'star-portal',type:'portal',text:'Завершите судьбу Осколка',effect:'questCycleCompleted'},
       ],
     },
   });
@@ -608,6 +702,8 @@
     mistwood: { title:'Травы для дозора', kind:'gather', target:'herb', match:'target', required:4, gold:45, supply:'potion', note:'Соберите 4 травы для походной аптечки дозора.' },
     stonevale: { title:'Серебро для укреплений', kind:'gather', target:'ore', match:'target', required:3, gold:70, supply:'tonic', note:'Добудьте 3 единицы руды у старых выработок.' },
     ashfield: { title:'Зачистка пепельной тропы', kind:'kill', target:'enemy', match:'category', required:5, gold:100, supply:'fieldKit', note:'Победите 5 противников в Пепельных полях.' },
+    frostmere: { title:'Запас для ледоходов', kind:'gather', target:'herb', match:'target', required:4, gold:115, supply:'tonic', note:'Соберите 4 морозных травы для дозорных низины.' },
+    starreach: { title:'Тишина обсерватории', kind:'kill', target:'enemy', match:'category', required:5, gold:135, supply:'fieldKit', note:'Победите 5 порождений у разбитой обсерватории.' },
   });
   function validateZoneQuestBindings(definitions, zoneDefinitions) {
     for (const [id, zone] of Object.entries(zoneDefinitions)) {
@@ -678,6 +774,8 @@
     dodgeUntil: 0,
     dodgeCd: 0,
     blocking: false,
+    blockStartedAt: -1000000,
+    riposteUntil: 0,
     combo: 0,
     comboTimer: 0,
     inv: {
@@ -707,6 +805,8 @@
       mistwood: { state: 0, progress: 0, cycle: 0 },
       stonevale: { state: 0, progress: 0, cycle: 0 },
       ashfield: { state: 0, progress: 0, cycle: 0 }
+      ,frostmere: { state: 0, progress: 0, cycle: 0 }
+      ,starreach: { state: 0, progress: 0, cycle: 0 }
     },
     discoveries: [],
     progression: {
@@ -731,8 +831,20 @@
         step: 0,
         wood: 0,
         kills: 0
+      },
+      frost: {
+        step: 0,
+        ore: 0,
+        kills: 0
+      },
+      star: {
+        step: 0,
+        herb: 0,
+        kills: 0
       }
-    }
+    },
+    story: storyEngine?.initialState() || { flags:{}, choices:{}, relations:{ lyra:0, toren:0, mira:0 }, seen:[], ending:'' },
+    arenas: Object.fromEntries(Object.keys(zones).map(id => [id, arenaEngine?.initialState() || { phase:'idle', waveIndex:0, remaining:0, attempts:0, completedCycle:-1, rewardedCycle:-1 }]))
   };
   const TUTORIAL_ACTIONS = Object.freeze([
     Object.freeze({id:'move',bit:1,hint:'Двигайтесь: стик или WASD'}),
@@ -859,6 +971,7 @@
     nextUIAt = 0,
     nextSaveAt = 15000,
     nextDiscoveryAt = 0,
+    nextAudioModeAt = 0,
     atmosphereGradient = null;
   let blockPointer = null;
   const keyboardDirections = new Set();
@@ -1170,10 +1283,14 @@
         mist: [0,1,3,4],
         stone:[0,1,3,4],
         ash:  [0,1,3,4],
+        frost:[0],
+        star:[0],
       },
     },
-    qualityIds: Object.keys(QUALITY),
+    qualityIds: ['auto', ...Object.keys(QUALITY)],
     fpsValues: FPS,
+    storyEngine,
+    arenaEngine,
     settingsOptions: {
       controlSizes: ['compact', 'normal', 'large'],
       brightness: [85, 100, 115],
@@ -1183,7 +1300,7 @@
     defaults: {
       player: defaults,
       settings: {
-        quality: detected,
+        quality: 'auto',
         fps: 60,
         controls: 'right',
         controlSize: 'normal',
@@ -1197,7 +1314,9 @@
         musicVolume: .55,
         ambientVolume: .65,
         sfxVolume: .8,
-        musicEnabled: true
+        musicEnabled: true,
+        voiceEnabled: true,
+        voiceVolume: .7
       }
     }
   });
@@ -1296,6 +1415,14 @@
     player.discoveries = saved.discoveries.slice();
     player.progression = { ...saved.progression };
     player.quests = Object.fromEntries(Object.entries(saved.quests).map(([id, quest]) => [id, { ...quest }]));
+    player.story = storyEngine?.normalize(saved.story) || { ...saved.story };
+    player.arenas = Object.fromEntries(Object.entries(saved.arenas || {}).map(([id, arena]) => [id, { ...arena }]));
+    if (storyEngine && !player.story.choices.shardDoctrine && (saved.quests.stone?.step > 0 || ['ashfield','frostmere','starreach'].includes(zoneId) || saved.progression.completedCycles > 0)) {
+      player.story = storyEngine.choose(player.story, 'stone_doctrine', 'seal').state;
+    }
+    if (storyEngine && !player.story.choices.wardenFate && (saved.quests.frost?.step > 0 || zoneId === 'starreach' || saved.progression.completedCycles > 0)) {
+      player.story = storyEngine.choose(player.story, 'frost_wardens', 'protect').state;
+    }
     player.hp = saved.hp;
     player.stamina = saved.stamina;
     recomputeDerivedStats();
@@ -1303,6 +1430,8 @@
     player.stamina = clamp(player.stamina, 0, player.maxStamina);
     Object.assign(settings, snapshot.settings);
     player.attackCd = player.attackQueuedUntil = player.secondWindCd = player.supplyCd = player.dodgeCd = player.dodgeUntil = player.combo = player.comboTimer = 0;
+    player.blockStartedAt = -1000000;
+    player.riposteUntil = 0;
     player.dashRemaining = 0;
     player.blocking = false;
     saveRevision = snapshot.meta.revision;
@@ -1800,7 +1929,7 @@
     perfAvgRenderMs = 0;
   }
   function applyGraphics() {
-    profile = QUALITY[settings.quality] || QUALITY.medium;
+    profile = QUALITY[settings.quality === 'auto' ? detected : settings.quality] || QUALITY.medium;
     const viewportScale = window.visualViewport?.scale || 1;
     document.body.classList.toggle('browser-zoomed', viewportScale > 1.01);
     W = Math.round((window.visualViewport?.width || innerWidth) * viewportScale);
@@ -1997,9 +2126,9 @@
     e.hp = e.maxHp = Math.round(e.baseStats.hp * (1 + extra * .09));
     e.damage = scaledEnemyDamage(e.baseStats.damage, level);
   }
-  function addEnemy(type, x, y) {
+  function addEnemy(type, x, y, options = {}) {
     const cap = entities.reduce((n, e) => n + (e.kind === 'enemy' && !isBoss(e) && e.hp > 0), 0);
-    if (!bossDefinition(type) && cap >= 17) return;
+    if (!bossDefinition(type) && !options.arenaOwned && cap >= 17) return null;
     const e = {
       kind: 'enemy',
       type,
@@ -2013,6 +2142,7 @@
       cd: 0,
       hit: 0,
       seed: rng(x + y),
+      arenaOwned: options.arenaOwned === true,
     };
     if (type === 'raider') Object.assign(e, {
       r: 21,
@@ -2067,6 +2197,7 @@
       y: e.y
     };
     e.aiState = 'idle';
+    return e;
   }
   function addResource(kind, x, y) {
     entities.push({
@@ -2186,9 +2317,130 @@
       addResource(resourcePlan.ambient[i], x, y);
     }
     for (const entry of eventPlan.resources) addResource(entry.type, eventX + entry.dx, eventY + entry.dy);
-    addEnemy(z.boss.type, z.boss.x, z.boss.y);
+    const zoneBoss = addEnemy(z.boss.type, z.boss.x, z.boss.y, { arenaOwned:true });
+    if (zoneBoss) zoneBoss.arenaDormant = true;
     makeAmbient();
     buildObstacles();
+  }
+  let arenaTransitionAt = 0;
+  function currentArenaState() {
+    if (!player.arenas) player.arenas = {};
+    if (!player.arenas[zoneId]) player.arenas[zoneId] = arenaEngine?.initialState() || { phase:'idle', waveIndex:0, remaining:0, attempts:0, completedCycle:-1, rewardedCycle:-1 };
+    return player.arenas[zoneId];
+  }
+  function arenaCombatPhase(phase = currentArenaState()?.phase) {
+    return ['entering','active','transition','boss'].includes(phase);
+  }
+  function cleanupArenaThreats(resetBoss = true) {
+    entities = entities.filter(e => !e.arenaOwned || isBoss(e));
+    projectiles = projectiles.filter(p => p.owner !== 'enemy');
+    if (!resetBoss) return;
+    const boss = entities.find(e => isBoss(e) && e.type === zones[zoneId].boss.type);
+    if (boss) {
+      resetGuardianEncounter(boss);
+      boss.arenaDormant = true;
+      boss.aiState = 'idle';
+    }
+  }
+  function spawnArenaWave(effect) {
+    const z = zones[zoneId], count = Math.min(effect.cap, effect.enemies.length);
+    for (let i = 0; i < count; i++) {
+      const angle = -Math.PI / 2 + i * Math.PI * 2 / count;
+      const radius = 135 + (i % 2) * 34;
+      const enemy = addEnemy(effect.enemies[i], z.boss.x + Math.cos(angle) * radius, z.boss.y + Math.sin(angle) * radius, { arenaOwned:true });
+      if (enemy) enemy.aiState = 'chase';
+    }
+    if (zoneId === 'starreach' && player.story?.choices?.wardenFate === 'protect') {
+      player.hp = Math.min(player.maxHp, player.hp + 18);
+      player.stamina = Math.min(player.maxStamina, player.stamina + 22);
+      addFloatingText('ПОМОЩЬ ДОЗОРА', player.x, player.y - 52, '#9ed9ef');
+    }
+  }
+  function activateArenaBoss(type) {
+    const z = zones[zoneId];
+    let boss = entities.find(e => isBoss(e) && e.type === type);
+    if (!boss) boss = addEnemy(type, z.boss.x, z.boss.y, { arenaOwned:true });
+    if (!boss) return;
+    resetGuardianEncounter(boss);
+    boss.arenaDormant = false;
+    boss.aiState = 'chase';
+    audio.setMode?.('boss');
+    feedback('boss', 22);
+    toast('БОСС · ' + bossDefinition(type).name);
+  }
+  function applyArenaResult(result) {
+    if (!result?.state) return false;
+    player.arenas[zoneId] = { ...result.state };
+    for (const effect of result.effects || []) {
+      if (effect.type === 'cleanup') cleanupArenaThreats(result.state.phase !== 'victory');
+      else if (effect.type === 'closeGate') {
+        cleanupArenaThreats(true);
+        audio.setMode?.('arena');
+        toast('Арена запечатана');
+      } else if (effect.type === 'spawnWave') {
+        spawnArenaWave(effect);
+        toast(`Волна ${effect.waveIndex + 1}/${ARENA_DEFINITIONS[zoneId].waves.length}`);
+      } else if (effect.type === 'waveCleared') {
+        arenaTransitionAt = time + .8;
+        feedback('quest', 10);
+      } else if (effect.type === 'spawnBoss') activateArenaBoss(effect.boss);
+      else if (effect.type === 'grantReward') {
+        player.gold += Math.max(0, Number(effect.reward.gold) || 0);
+        gainXP(Math.max(0, Number(effect.reward.xp) || 0));
+        const supply = effect.reward.supply;
+        if (Object.hasOwn(SUPPLIES, supply)) player.supplies[supply] = Math.min(9999, (player.supplies[supply] || 0) + 1);
+      } else if (effect.type === 'unlockExit') audio.setMode?.('victory');
+      else if (effect.type === 'openGate') audio.setMode?.('defeat');
+    }
+    return true;
+  }
+  function startArena() {
+    if (!arenaEngine) return false;
+    const objective = inspectCurrentQuest()?.active, z = zones[zoneId], cycle = player.progression.completedCycles;
+    if (objective?.type !== 'kill' || objective.target !== z.boss.type) return false;
+    const state = currentArenaState();
+    if (state.completedCycle === cycle) return false;
+    const entered = state.phase === 'defeat' ? arenaEngine.restart(zoneId, state, cycle) : arenaEngine.enter(zoneId, state, cycle);
+    if (entered.state.phase !== 'entering') return false;
+    applyArenaResult(entered);
+    applyArenaResult(arenaEngine.activate(zoneId, currentArenaState(), cycle));
+    save();
+    return true;
+  }
+  function advanceArena() {
+    if (!arenaEngine || currentArenaState().phase !== 'transition') return false;
+    applyArenaResult(arenaEngine.advance(zoneId, currentArenaState(), player.progression.completedCycles));
+    save();
+    return true;
+  }
+  function defeatArena() {
+    if (!arenaEngine || !arenaCombatPhase()) return false;
+    applyArenaResult(arenaEngine.defeat(zoneId, currentArenaState(), player.progression.completedCycles));
+    save();
+    toast('Арена ждёт новой попытки');
+    return true;
+  }
+  function finishArenaBoss() {
+    if (!arenaEngine || currentArenaState().phase !== 'boss') return false;
+    applyArenaResult(arenaEngine.bossDefeated(zoneId, currentArenaState(), player.progression.completedCycles));
+    applyArenaResult(arenaEngine.complete(zoneId, currentArenaState(), player.progression.completedCycles));
+    save();
+    toast('Арена очищена · награда получена');
+    return true;
+  }
+  function updateArena() {
+    if (!arenaEngine) return;
+    const state = currentArenaState(), z = zones[zoneId], distance = Math.hypot(player.x - z.boss.x, player.y - z.boss.y);
+    if ((state.phase === 'idle' || state.phase === 'defeat') && distance < ARENA_DEFINITIONS[zoneId].radius * .78) startArena();
+    if (currentArenaState().phase === 'transition' && time >= arenaTransitionAt) advanceArena();
+    if (!arenaCombatPhase()) return;
+    const limit = ARENA_DEFINITIONS[zoneId].radius - player.r - 12;
+    if (distance > limit) {
+      const angle = Math.atan2(player.y - z.boss.y, player.x - z.boss.x);
+      player.x = z.boss.x + Math.cos(angle) * limit;
+      player.y = z.boss.y + Math.sin(angle) * limit;
+      physics?.relocate(player);
+    }
   }
   function burst(x, y, color, count = 10, speed = 110) {
     const room = Math.max(0, profile.particles - particles.length);
@@ -2253,13 +2505,22 @@
     }
   }
   function isInCombat() {
-    return entities.some(e => e.kind === 'enemy' && e.hp > 0 && e.aiState === 'chase');
+    return arenaCombatPhase() || entities.some(e => e.kind === 'enemy' && e.hp > 0 && e.aiState === 'chase');
   }
   function cancelBlock() {
     if (!player.blocking) return;
     keyboardBlock = false;
     player.blocking = false;
+    player.blockStartedAt = -1000000;
     ui.blockBtn?.classList.remove('pressed');
+  }
+  function beginBlock() {
+    if (isPaused() || player.stamina <= 0) return false;
+    if (!player.blocking) player.blockStartedAt = time;
+    player.blocking = true;
+    noteTutorial('defend');
+    ui.blockBtn?.classList.add('pressed');
+    return true;
   }
   function kill(e) {
     e.hp = 0;
@@ -2285,11 +2546,13 @@
       toast(`${boss.name} повержен · ${SUPPLIES[boss.reward.supply].name} +1`);
     }
     applyQuestProgressEvent({ type: 'kill', target: e.type, category: enemyQuestCategory(e), amount: 1 });
+    if (e.arenaOwned && boss) finishArenaBoss();
+    else if (e.arenaOwned && arenaEngine) applyArenaResult(arenaEngine.enemyDefeated(zoneId, currentArenaState(), player.progression.completedCycles));
     burst(e.x, e.y, boss?.accent || '#e27677', 24, 155);
     save();
   }
   function hitTarget(e, dmg) {
-    if (!e || e.hp <= 0 || !Number.isFinite(dmg) || dmg <= 0) return;
+    if (!e || e.hp <= 0 || e.arenaDormant || !Number.isFinite(dmg) || dmg <= 0) return;
     if (!Number.isFinite(e.hp)) e.hp = 0;
     const homeDistance = Math.hypot(e.x - (e.homeX ?? e.x), e.y - (e.homeY ?? e.y));
     const playerFromHome = Math.hypot(player.x - (e.homeX ?? e.x), player.y - (e.homeY ?? e.y));
@@ -2327,6 +2590,9 @@
     const a = player.dir;
     motions.get(player).dir = a;
     let hits = 0;
+    const riposte = player.riposteUntil > time;
+    const doctrineMultiplier = player.story?.choices?.shardDoctrine === 'bind' ? 2 : 1.75;
+    const arenaSurge = zoneId === 'starreach' && player.story?.choices?.wardenFate === 'break' ? 1.12 : 1;
     for (const e of entities) {
       if (e.hp <= 0 || e.kind !== 'enemy') continue;
       const d = dist(player, e),
@@ -2334,11 +2600,15 @@
       if (d >= hitRange || physics && !physics.clearLine(player.x, player.y, e.x, e.y, 2)) continue;
       const ea = Math.atan2(e.y - player.y, e.x - player.x);
       if (Math.abs(angleDiff(ea, a)) >= 1.05) continue;
-      const resolved = combatEngine.resolveBasicDamage({ damage: player.damage, combo: player.combo, critRoll: Math.random() });
+      const resolved = combatEngine.resolveBasicDamage({ damage: player.damage * arenaSurge, combo: player.combo, critRoll: Math.random(), riposte, riposteMultiplier:doctrineMultiplier });
       if (!resolved.valid) continue;
       hitTarget(e, resolved.amount);
-      addFloatingText(resolved.critical ? 'КРИТ!' : String(resolved.amount), e.x, e.y - e.r - 18, resolved.critical ? '#ffe08a' : '#f4d3a3');
+      addFloatingText(resolved.riposte ? `ОТВЕТ · ${resolved.amount}` : resolved.critical ? 'КРИТ!' : String(resolved.amount), e.x, e.y - e.r - 18, resolved.riposte || resolved.critical ? '#ffe08a' : '#f4d3a3');
       hits++;
+    }
+    if (riposte && hits) {
+      player.riposteUntil = 0;
+      feedback('parry', 14);
     }
     burst(player.x + Math.cos(a) * 36, player.y + Math.sin(a) * 36, COSMETICS.trails[player.cosmetics.trail] || '#e4bf69', hits ? 12 + player.combo * 2 : 5, 95);
     return true;
@@ -2579,12 +2849,48 @@
       toast(`Открыто место: ${name} · +10 золота`); feedback('discovery', 15); break;
     }
   }
+  const STORY_NODE_BY_ZONE = Object.freeze({ mistwood:'mist_oath', stonevale:'stone_doctrine', ashfield:'ash_warning', frostmere:'frost_wardens', starreach:'star_council' });
+  function completeNpcTalk() {
+    const active = inspectCurrentQuest()?.active;
+    if (active?.type === 'talk') applyMainQuestEvent({ type:'talk', target:'scout' });
+    save();
+    closeModal();
+    if (active?.type === 'talk') toast('Новая цель: ' + currentObjective());
+    return true;
+  }
+  function chooseStoryChoice(nodeId, choiceId) {
+    if (!storyEngine) return false;
+    const result = storyEngine.choose(player.story, nodeId, choiceId);
+    if (!result.changed) return false;
+    player.story = result.state;
+    for (const effect of result.effects) {
+      if (effect.type === 'storyBoon') toast(effect.id === 'guardedResolve' ? 'Дар: Стойкость печати' : 'Дар: Связанная сила');
+      else if (effect.type === 'arenaModifier') toast(effect.id === 'wardensAid' ? 'Дозорные придут на помощь' : 'Энергия башни подчинена');
+    }
+    audio.sfx('story');
+    return completeNpcTalk();
+  }
   function openNpcDialog() {
-    const z = zones[zoneId];
-    const name = zoneId === 'ashfield' ? 'Смотритель Вейл' : 'Разведчик Ари';
-    const text = zoneId === 'ashfield' ? 'Пепел движется. Хранитель пробудился. Будьте готовы.' : 'Мы нашли след. Помоги очистить тропу и добраться до следующей долины.';
-    openModal(name, `<div class="dialogue"><div class="dialogueName">${name}</div><p>${text}</p><p class="note">Новая цель: ${currentObjective()}</p><button class="btn" id="dialogContinue">Продолжить</button></div>`);
-    bindTap($('dialogContinue'), closeModal);
+    const z = zones[zoneId], nodeId = STORY_NODE_BY_ZONE[zoneId], view = storyEngine?.inspect(player.story, nodeId);
+    const npc = storyApi?.NPCS[z.npcId], name = npc?.name || 'Дозорный';
+    if (!view?.available) {
+      openModal(name, `<div class="dialogue"><div class="dialogueName">${escapeHTML(name)}</div><p>След Aethernfall ещё не сложился. Завершите предыдущую часть пути.</p><button class="btn" id="dialogContinue">Вернуться</button></div>`);
+      bindTap($('dialogContinue'), closeModal);
+      return false;
+    }
+    const lines = view.lines.map(line => {
+      const speaker = storyApi.NPCS[line.speaker];
+      return `<div class="dialogueLine"><b>${escapeHTML(speaker.name)}</b><p>${escapeHTML(line.text)}</p></div>`;
+    }).join('');
+    const choices = view.choices.length
+      ? `<div class="dialogueChoices">${view.choices.map(choice => `<button class="btn" id="story-${choice.id}">${escapeHTML(choice.label)}</button>`).join('')}</div>`
+      : `<button class="btn" id="dialogContinue">Продолжить</button>`;
+    openModal(name, `<div class="dialogue"><div class="dialogueName">${escapeHTML(name)} · ${escapeHTML(npc.role)}</div>${lines}<p class="note">${escapeHTML(npc.motivation)}</p>${choices}</div>`);
+    const voiced = view.lines[0];
+    if (voiced) audio.speak?.(voiced.speaker, voiced.text, { enabled:settings.voiceEnabled, volume:settings.voiceVolume });
+    for (const choice of view.choices) bindTap($('story-' + choice.id), () => chooseStoryChoice(nodeId, choice.id));
+    bindTap($('dialogContinue'), completeNpcTalk);
+    return true;
   }
   function canUsePortal() {
     return inspectCurrentQuest()?.active?.type === 'portal';
@@ -2607,11 +2913,6 @@
       return;
     }
     if (hit.type === 'scout') {
-      const s = questState();
-      if (s.step === 0) {
-        applyMainQuestEvent({ type: 'talk', target: 'scout' });
-        save();
-      }
       openNpcDialog();
       return;
     }
@@ -2673,6 +2974,10 @@
       applyMainQuestEvent({ type: 'portal' });
       const cycleCompleted = player.progression.completedCycles > cyclesBefore;
       const firstCampaignCompletion = cyclesBefore === 0 && cycleCompleted;
+      if (cycleCompleted && storyEngine) {
+        const ending = storyEngine.deriveEnding(player.story);
+        player.story = storyEngine.normalize({ ...player.story, ending:ending.id });
+      }
       zoneId = zones[zoneId].next;
       markZoneVisited(zoneId);
       audio.setZone(zoneId);
@@ -2692,7 +2997,10 @@
     return Number(player.progression?.completedCycles) > 0;
   }
   function openCampaignFinale() {
-    openModal('Кампания завершена', `<article class="card campaignFinale"><h3>Осколок Aethernfall очищен</h3><p>Матриарх чащи повержен, Страж руин пал, а Пепельный хранитель больше не удерживает разлом. Ари вернулась в Туманный лес с Осколком пламени — путь трёх земель завершён.</p><p class="note">Кампания пройдена. Можно продолжить исследование, завершить поручения и собрать другой build.</p></article><button class="btn" id="campaignContinue">Продолжить игру</button>`);
+    const ending = storyEngine?.deriveEnding(player.story) || { id:'restoration', title:'Печать пяти земель', text:'Разлом затих.' };
+    player.story = storyEngine?.normalize({ ...player.story, ending:ending.id }) || player.story;
+    audio.setMode?.('story'); audio.sfx('victory');
+    openModal('Кампания завершена', `<article class="card campaignFinale"><p class="note">ФИНАЛ · ${ending.id === 'restoration' ? 'ВОССТАНОВЛЕНИЕ' : 'ВОЗНЕСЕНИЕ'}</p><h3>${escapeHTML(ending.title)}</h3><p>${escapeHTML(ending.text)}</p><p class="note">Пять арен очищены. Можно продолжить исследование, поручения и сбор другого build; новый цикл вновь откроет испытания без повторной награды текущего цикла.</p></article><button class="btn" id="campaignContinue">Продолжить игру</button>`);
     bindTap($('campaignContinue'), closeModal);
   }
   let previousModalFocus = null;
@@ -2769,9 +3077,7 @@
       event.preventDefault();
       if (!isPaused() && player.stamina > 0) {
         keyboardBlock = true;
-        player.blocking = true;
-        noteTutorial('defend');
-        ui.blockBtn?.classList.add('pressed');
+        beginBlock();
       }
       return;
     }
@@ -2799,6 +3105,7 @@
     keyboardBlock = false;
     if (blockPointer === null) {
       player.blocking = false;
+      player.blockStartedAt = -1000000;
       ui.blockBtn?.classList.remove('pressed');
     }
   });
@@ -2973,6 +3280,7 @@
   }
   function devicePanel() {
     const names = {
+      auto: `Auto (${detected})`,
       low: 'Низкое',
       medium: 'Среднее',
       high: 'Высокое',
@@ -3085,56 +3393,52 @@
   }
   function setUiSetting(key, value) {
     settings[key] = value;
-    const storageKeys = { controlSize:'control_size', brightness:'brightness', uiScale:'ui_scale', minimapSize:'minimap_size', combatNumbers:'combat_numbers', haptics:'haptics', musicEnabled:'music_enabled' };
+    const storageKeys = { controlSize:'control_size', brightness:'brightness', uiScale:'ui_scale', minimapSize:'minimap_size', combatNumbers:'combat_numbers', haptics:'haptics', musicEnabled:'music_enabled', voiceEnabled:'voice_enabled' };
     persistSetting(storageKeys[key] || key, typeof value === 'boolean' ? (value ? '1' : '0') : value);
+    if (key === 'voiceEnabled' && !value) audio.stopVoice?.();
     applyInterfaceSettings(); save(); openMenu();
   }
   function setVolume(key, value) {
     const n = Math.max(0, Math.min(1, Number(value) / 100));
     settings[key] = n;
-    const storageKeys = { masterVolume:'master_volume', musicVolume:'music_volume', ambientVolume:'ambient_volume', sfxVolume:'sfx_volume' };
+    const storageKeys = { masterVolume:'master_volume', musicVolume:'music_volume', ambientVolume:'ambient_volume', sfxVolume:'sfx_volume', voiceVolume:'voice_volume' };
     persistSetting(storageKeys[key], n);
     syncAudioSettings();
   }
   function volumeRow(id, label, value) {
     return `<label class="rangeRow" for="${id}"><span>${label}</span><input id="${id}" type="range" min="0" max="100" step="5" value="${Math.round(value * 100)}"><b id="${id}Value">${Math.round(value * 100)}%</b></label>`;
   }
-  function openMenu() {
-    openModal('Настройки · v' + BUILD_VERSION, `<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div>
-      <div class="sectionTitle">ЗВУК</div>
-      <button class="btn" id="musicToggle">${settings.musicEnabled ? 'Музыка: включена' : 'Музыка: выключена'}</button>
-      <button class="btn secondary" id="audioTestBtn">Проверить звук</button><p class="note" id="audioStatus">${audioStatusText()}</p>
-      ${volumeRow('masterVolume','Общая громкость',settings.masterVolume)}${volumeRow('musicVolume','Музыка',settings.musicVolume)}${volumeRow('ambientVolume','Окружение',settings.ambientVolume)}${volumeRow('sfxVolume','Эффекты',settings.sfxVolume)}
-      <div class="sectionTitle">УПРАВЛЕНИЕ</div><div class="seg" id="controlsSeg"><button id="control-right" class="${settings.controls === 'right' ? 'active' : ''}">Правша</button><button id="control-left" class="${settings.controls === 'left' ? 'active' : ''}">Левша</button></div>
-      <p class="note">Расположение зон управления можно зеркалить. Размер меняется без изменения игровой физики.</p><div class="seg"><button id="controlSize-compact" class="${settings.controlSize === 'compact' ? 'active' : ''}">Компактно</button><button id="controlSize-normal" class="${settings.controlSize === 'normal' ? 'active' : ''}">Обычно</button><button id="controlSize-large" class="${settings.controlSize === 'large' ? 'active' : ''}">Крупно</button></div>
-      <div class="sectionTitle">ИНТЕРФЕЙС</div><div class="seg"><button id="bright-85" class="${settings.brightness === 85 ? 'active' : ''}">Темнее</button><button id="bright-100" class="${settings.brightness === 100 ? 'active' : ''}">Обычно</button><button id="bright-115" class="${settings.brightness === 115 ? 'active' : ''}">Ярче</button></div><div class="seg"><button id="ui-normal" class="${settings.uiScale === 'normal' ? 'active' : ''}">Текст 100%</button><button id="ui-large" class="${settings.uiScale === 'large' ? 'active' : ''}">Текст 115%</button></div><div class="seg"><button id="map-normal" class="${settings.minimapSize === 'normal' ? 'active' : ''}">Карта обычная</button><button id="map-large" class="${settings.minimapSize === 'large' ? 'active' : ''}">Карта крупная</button></div><button class="btn" id="numbersToggle">Цифры урона: ${settings.combatNumbers ? 'включены' : 'выключены'}</button><button class="btn" id="hapticsToggle" ${hapticsAvailable ? '' : 'disabled'}>${hapticsAvailable ? `Виброотклик: ${settings.haptics ? 'включён' : 'выключен'}` : 'Виброотклик: недоступен в браузере'}</button>${hapticsAvailable ? '' : '<p class="note">Safari/iOS не предоставляет веб-страницам Vibration API. На поддерживаемых Android-браузерах виброотклик работает.</p>'}
-      <div class="sectionTitle">КАЧЕСТВО ГРАФИКИ</div><div class="settingRow"><div class="seg" id="qualitySeg">${['low', 'medium', 'high', 'very-high', 'ultra'].map(q => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}">${q === 'very-high' ? 'Very High' : q === 'ultra' ? 'Ultra' : q[0].toUpperCase() + q.slice(1)}</button>`).join('')}</div><div class="note">Ultra повышает детализацию, освещение и эффекты; яркость мира настраивается отдельно выше.</div></div>
-      <div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="settingRow"><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div></div>
-      <div class="sectionTitle">МОНИТОР ПРОИЗВОДИТЕЛЬНОСТИ</div><button class="btn" id="perfBtn">${perfMonitorEnabled ? 'Выключить frame-time monitor' : 'Включить frame-time monitor'}</button>${devicePanel()}<div class="sectionTitle">СОХРАНЕНИЕ</div>${saveStatusText() ? `<p class="saveWarningText">${escapeHTML(saveStatusText())}</p>` : ''}<button class="btn" id="saveBtn">Сохранить прогресс</button>`);
-    document.querySelectorAll('#qualitySeg button').forEach(b => bindTap(b, () => { settings.quality = b.dataset.q; persistSetting('quality', settings.quality); applyGraphics(); save(); openMenu(); }));
-    document.querySelectorAll('#fpsSeg button').forEach(b => bindTap(b, () => { settings.fps = Number(b.dataset.f); persistSetting('fps', settings.fps); resetFrameLimiter(); save(); openMenu(); }));
-    bindTap($('control-right'), () => setControls('right')); bindTap($('control-left'), () => setControls('left'));
+  const SETTINGS_TABS = Object.freeze([['game','Игра'],['graphics','Графика'],['audio','Аудио'],['controls','Управление'],['interface','Интерфейс'],['system','Система']]);
+  let settingsCategory = 'game';
+  function resetSettings() {
+    Object.assign(settings, { quality:'auto', fps:60, controls:'right', controlSize:'normal', brightness:100, uiScale:'normal', minimapSize:'normal', combatNumbers:true, haptics:true, musicEnabled:true, masterVolume:.8, musicVolume:.55, ambientVolume:.65, sfxVolume:.8, voiceEnabled:true, voiceVolume:.7 });
+    for (const [key,value] of Object.entries({ quality:settings.quality, fps:settings.fps, controls:settings.controls, control_size:settings.controlSize, brightness:settings.brightness, ui_scale:settings.uiScale, minimap_size:settings.minimapSize, combat_numbers:1, haptics:1, music_enabled:1, master_volume:settings.masterVolume, music_volume:settings.musicVolume, ambient_volume:settings.ambientVolume, sfx_volume:settings.sfxVolume, voice_enabled:1, voice_volume:settings.voiceVolume })) persistSetting(key, value);
+    applyControlLayout(); applyInterfaceSettings(); applyGraphics(); resetFrameLimiter(); syncAudioSettings(); save(); openMenu('game');
+  }
+  function openMenu(category = settingsCategory) {
+    settingsCategory = SETTINGS_TABS.some(([id]) => id === category) ? category : settingsCategory;
+    const tabs = `<nav class="settingsTabs" aria-label="Категории настроек">${SETTINGS_TABS.map(([id,label]) => `<button data-settings-tab="${id}" class="${settingsCategory === id ? 'active' : ''}" aria-pressed="${settingsCategory === id}">${label}</button>`).join('')}</nav>`;
+    let content = '';
+    if (settingsCategory === 'game') content = `<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><article class="card"><h3>Путь пяти земель</h3><p>${campaignComplete() ? 'Кампания завершена · ' + escapeHTML(storyEngine?.deriveEnding(player.story).title || '') : escapeHTML(zones[zoneId].name + ' · ' + currentObjective())}</p></article><button class="btn" id="menuTraining">Тренировка и управление</button>`;
+    else if (settingsCategory === 'graphics') content = `<div class="sectionTitle">КАЧЕСТВО</div><div class="seg" id="qualitySeg">${[['auto','Auto'],['low','Performance'],['medium','Balanced'],['high','Quality'],['ultra','Ultra']].map(([q,label]) => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}">${label}</button>`).join('')}</div><p class="note">Auto выбирает профиль по памяти, ядрам и мобильной платформе. Активный базовый профиль: ${detected}.</p><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div>`;
+    else if (settingsCategory === 'audio') content = `<button class="btn" id="musicToggle">Музыка: ${settings.musicEnabled ? 'включена' : 'выключена'}</button><button class="btn" id="voiceToggle">Голоса: ${settings.voiceEnabled ? 'включены' : 'выключены'}</button><button class="btn secondary" id="audioTestBtn">Проверить звук</button><p class="note" id="audioStatus">${audioStatusText()}</p>${volumeRow('masterVolume','Общая громкость',settings.masterVolume)}${volumeRow('musicVolume','Музыка',settings.musicVolume)}${volumeRow('ambientVolume','Окружение',settings.ambientVolume)}${volumeRow('sfxVolume','Эффекты',settings.sfxVolume)}${volumeRow('voiceVolume','Голоса',settings.voiceVolume)}`;
+    else if (settingsCategory === 'controls') content = `<div class="seg"><button id="control-right" class="${settings.controls === 'right' ? 'active' : ''}">Правша</button><button id="control-left" class="${settings.controls === 'left' ? 'active' : ''}">Левша</button></div><p class="note">WASD · Space атака · F блок/парирование · Shift уклонение · E действие · Q расходник.</p><div class="seg"><button id="controlSize-compact" class="${settings.controlSize === 'compact' ? 'active' : ''}">Компактно</button><button id="controlSize-normal" class="${settings.controlSize === 'normal' ? 'active' : ''}">Обычно</button><button id="controlSize-large" class="${settings.controlSize === 'large' ? 'active' : ''}">Крупно</button></div><button class="btn" id="hapticsToggle" ${hapticsAvailable ? '' : 'disabled'}>${hapticsAvailable ? `Виброотклик: ${settings.haptics ? 'включён' : 'выключен'}` : 'Виброотклик: недоступен'}</button>`;
+    else if (settingsCategory === 'interface') content = `<div class="seg"><button id="bright-85" class="${settings.brightness === 85 ? 'active' : ''}">Темнее</button><button id="bright-100" class="${settings.brightness === 100 ? 'active' : ''}">Обычно</button><button id="bright-115" class="${settings.brightness === 115 ? 'active' : ''}">Ярче</button></div><div class="seg"><button id="ui-normal" class="${settings.uiScale === 'normal' ? 'active' : ''}">Текст 100%</button><button id="ui-large" class="${settings.uiScale === 'large' ? 'active' : ''}">Текст 115%</button></div><div class="seg"><button id="map-normal" class="${settings.minimapSize === 'normal' ? 'active' : ''}">Карта обычная</button><button id="map-large" class="${settings.minimapSize === 'large' ? 'active' : ''}">Карта крупная</button></div><button class="btn" id="numbersToggle">Цифры урона: ${settings.combatNumbers ? 'включены' : 'выключены'}</button>`;
+    else content = `${devicePanel()}<button class="btn" id="perfBtn">${perfMonitorEnabled ? 'Выключить frame-time monitor' : 'Включить frame-time monitor'}</button>${saveStatusText() ? `<p class="saveWarningText">${escapeHTML(saveStatusText())}</p>` : ''}<button class="btn" id="saveBtn">Сохранить прогресс</button><button class="btn secondary" id="resetSettingsBtn">Сбросить настройки</button>`;
+    openModal('Меню · v' + BUILD_VERSION, tabs + `<section class="settingsPanel" data-category="${settingsCategory}">${content}</section>`);
+    document.querySelectorAll('[data-settings-tab]').forEach(button => bindTap(button, () => openMenu(button.dataset.settingsTab)));
+    document.querySelectorAll('#qualitySeg button').forEach(button => bindTap(button, () => { settings.quality = button.dataset.q; persistSetting('quality', settings.quality); applyGraphics(); save(); openMenu(); }));
+    document.querySelectorAll('#fpsSeg button').forEach(button => bindTap(button, () => { settings.fps = Number(button.dataset.f); persistSetting('fps', settings.fps); resetFrameLimiter(); save(); openMenu(); }));
+    bindTap($('menuTraining'), openTraining); bindTap($('control-right'), () => setControls('right')); bindTap($('control-left'), () => setControls('left'));
     for (const size of ['compact','normal','large']) bindTap($('controlSize-' + size), () => setUiSetting('controlSize', size));
-    for (const b of [85,100,115]) bindTap($('bright-' + b), () => setUiSetting('brightness', b));
-    bindTap($('ui-normal'), () => setUiSetting('uiScale', 'normal')); bindTap($('ui-large'), () => setUiSetting('uiScale', 'large'));
-    bindTap($('map-normal'), () => setUiSetting('minimapSize', 'normal')); bindTap($('map-large'), () => setUiSetting('minimapSize', 'large'));
-    bindTap($('numbersToggle'), () => setUiSetting('combatNumbers', !settings.combatNumbers));
-    if (hapticsAvailable) bindTap($('hapticsToggle'), () => setUiSetting('haptics', !settings.haptics));
-    bindTap($('musicToggle'), () => { audio.unlock(); setUiSetting('musicEnabled', !settings.musicEnabled); });
-    bindTap($('audioTestBtn'), async () => {
-      const ok = await audio.unlock();
-      syncAudioSettings();
-      if (ok) { audio.sfx('test'); setText($('audioStatus'), 'Аудио: активно'); toast('Тестовый звук воспроизведён'); }
-      else { setText($('audioStatus'), audioStatusText()); toast('Браузер не разблокировал аудио. Коснитесь кнопки ещё раз.'); }
-    });
-    for (const [id,key] of [['masterVolume','masterVolume'],['musicVolume','musicVolume'],['ambientVolume','ambientVolume'],['sfxVolume','sfxVolume']]) {
-      const input = $(id); if (!input) continue;
-      input.addEventListener('input', () => { const value = Math.round(Number(input.value) || 0); setText($(id + 'Value'), value + '%'); setVolume(key, value); }, { passive: true });
-      input.addEventListener('change', () => save(), { passive: true });
-    }
-    bindTap($('saveBtn'), () => toast(save() ? 'Прогресс сохранён' : saveStatusText() || 'Не удалось сохранить: хранилище недоступно'));
-    bindTap($('perfBtn'), () => { perfMonitorEnabled = !perfMonitorEnabled; storage.setItem('aef_perf_monitor', perfMonitorEnabled ? '1' : '0'); refreshPerformanceMonitorVisibility(); openMenu(); });
-    bindTap($('economyBtn'), () => applyPreset('low', 30)); bindTap($('balancedBtn'), () => applyPreset('medium', 60));
+    for (const value of [85,100,115]) bindTap($('bright-' + value), () => setUiSetting('brightness', value));
+    bindTap($('ui-normal'), () => setUiSetting('uiScale', 'normal')); bindTap($('ui-large'), () => setUiSetting('uiScale', 'large')); bindTap($('map-normal'), () => setUiSetting('minimapSize', 'normal')); bindTap($('map-large'), () => setUiSetting('minimapSize', 'large'));
+    bindTap($('numbersToggle'), () => setUiSetting('combatNumbers', !settings.combatNumbers)); if (hapticsAvailable) bindTap($('hapticsToggle'), () => setUiSetting('haptics', !settings.haptics));
+    bindTap($('musicToggle'), () => { audio.unlock(); setUiSetting('musicEnabled', !settings.musicEnabled); }); bindTap($('voiceToggle'), () => setUiSetting('voiceEnabled', !settings.voiceEnabled));
+    bindTap($('audioTestBtn'), async () => { const ok = await audio.unlock(); syncAudioSettings(); if (ok) { audio.sfx('test'); setText($('audioStatus'), 'Аудио: активно'); } else setText($('audioStatus'), audioStatusText()); });
+    for (const [id,key] of [['masterVolume','masterVolume'],['musicVolume','musicVolume'],['ambientVolume','ambientVolume'],['sfxVolume','sfxVolume'],['voiceVolume','voiceVolume']]) { const input = $(id); if (!input) continue; input.addEventListener('input', () => { const value = Math.round(Number(input.value) || 0); setText($(id + 'Value'), value + '%'); setVolume(key, value); }, { passive:true }); input.addEventListener('change', () => save(), { passive:true }); }
+    bindTap($('saveBtn'), () => toast(save() ? 'Прогресс сохранён' : saveStatusText() || 'Хранилище недоступно')); bindTap($('resetSettingsBtn'), resetSettings);
+    bindTap($('perfBtn'), () => { perfMonitorEnabled = !perfMonitorEnabled; storage.setItem('aef_perf_monitor', perfMonitorEnabled ? '1' : '0'); refreshPerformanceMonitorVisibility(); openMenu(); }); bindTap($('economyBtn'), () => applyPreset('low', 30)); bindTap($('balancedBtn'), () => applyPreset('medium', 60));
   }
   let audioGestureUnlocked = false;
   const AUDIO_UNLOCK_EVENTS = ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'];
@@ -3275,9 +3579,7 @@
         e.stopPropagation();
         if (isPaused() || player.stamina <= 0 || blockPointer !== null) return;
         blockPointer = e.pointerId;
-        player.blocking = true;
-        noteTutorial('defend');
-        btn.classList.add('pressed');
+        beginBlock();
         capture(btn, e.pointerId);
       }, {
         passive: false
@@ -3286,6 +3588,7 @@
         if (e.pointerId !== blockPointer) return;
         blockPointer = null;
         player.blocking = keyboardBlock;
+        if (!player.blocking) player.blockStartedAt = -1000000;
         btn.classList.toggle('pressed', keyboardBlock);
       };
       ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => btn.addEventListener(ev, release, {
@@ -3325,7 +3628,7 @@
   // Pinch zoom remains available for accessibility in UI surfaces; double-tap zoom is suppressed to avoid sticky mobile browser zoom.
   function updateEnemyPatrol(dt) {
     for (const e of entities) {
-      if (e.kind !== 'enemy' || e.hp <= 0) continue;
+      if (e.kind !== 'enemy' || e.hp <= 0 || e.arenaDormant) continue;
       if (!Number.isFinite(e.patrolT)) e.patrolT = 0;
       if (!Number.isFinite(e.dir)) e.dir = e.seed * 6.283185;
       if (e.aiState === 'idle') {
@@ -3367,10 +3670,17 @@
       moveActor(player, movement.x * speed * walkStep, movement.y * speed * walkStep);
       player.dir = Math.atan2(movement.y, movement.x);
     }
+    updateArena();
     updateEnemies(dt);
     updateProjectiles(dt);
     updateEffects(dt);
     checkDiscoveries();
+    if (time >= nextAudioModeAt) {
+      nextAudioModeAt = time + .4;
+      if (currentArenaState().phase === 'boss') audio.setMode?.('boss');
+      else if (arenaCombatPhase()) audio.setMode?.('arena');
+      else audio.setMode?.(entities.some(e => e.kind === 'enemy' && e.hp > 0 && e.aiState === 'chase') ? 'danger' : 'exploration');
+    }
     flushImpactFeedback();
   }
   function enemyDetectionRange(e) {
@@ -3573,8 +3883,24 @@
     return true;
   }
   function applyIncomingCombatImpact({ damage, sourceX, sourceY }) {
-    const impact = combatEngine.resolveIncomingDamage({ damage, blocking: player.blocking, dodging: time < player.dodgeUntil, tuning: buildProfile.combat });
+    const perfectWindow = player.story?.choices?.shardDoctrine === 'seal' ? .22 : .16;
+    const impact = combatEngine.resolveIncomingDamage({ damage, blocking: player.blocking, dodging: time < player.dodgeUntil, blockAge:time - player.blockStartedAt, perfectWindow, tuning: buildProfile.combat });
     if (!impact.valid) return impact;
+    if (impact.perfect) {
+      player.riposteUntil = time + 2.2;
+      player.stamina = Math.min(player.maxStamina, player.stamina + 8);
+      const source = entities.find(e => e.kind === 'enemy' && e.hp > 0 && Math.hypot(e.x - sourceX, e.y - sourceY) < 8);
+      if (source) {
+        source.aiState = 'stagger';
+        source.cd = .62;
+        source.attackPhase = 'recovery';
+      }
+      animate(player, 'block', .22);
+      addFloatingText('ИДЕАЛЬНЫЙ БЛОК', player.x, player.y - 52, '#ffe08a');
+      burst(player.x, player.y, '#ffe08a', 14, 125);
+      queueImpactFeedback('parry', sourceX, sourceY, player.x, player.y);
+      return impact;
+    }
     if (impact.avoided) {
       burst(player.x, player.y, '#91c6cc', 5, 105);
       queueImpactFeedback('evade', sourceX, sourceY, player.x, player.y);
@@ -3589,6 +3915,7 @@
     if (player.hp <= 0) {
       animate(player, 'death', .75);
       flushImpactFeedback();
+      defeatArena();
       player.hp = player.maxHp;
       player.x = zones[zoneId].camp.x;
       player.y = zones[zoneId].camp.y;
@@ -3643,9 +3970,13 @@
   }
   function updateEnemies(dt) {
     for (const e of entities) {
-      if (e.hp <= 0 || e.kind !== 'enemy') continue;
+      if (e.hp <= 0 || e.kind !== 'enemy' || e.arenaDormant) continue;
       e.cd = Math.max(0, e.cd - dt);
       e.hit = Math.max(0, e.hit - dt);
+      if (e.aiState === 'stagger') {
+        if (e.cd <= 0) { e.aiState = 'chase'; e.attackPhase = ''; }
+        else continue;
+      }
       const d = dist(player, e);
       if (!Number.isFinite(e.homeX)) {
         e.homeX = e.x;
@@ -3676,6 +4007,12 @@
             e.aiState = 'idle';
             continue;
           }
+        } else if (zoneId === 'frostmere') {
+          const y = (y0 + time * (7 + i % 4)) % H;
+          ctx.globalAlpha = .13 + (i % 3) * .04; ctx.fillStyle = i % 2 ? '#d8f4ff' : '#8fcce7'; ctx.beginPath(); ctx.arc(x, y, 1 + i % 2, 0, Math.PI * 2); ctx.fill();
+        } else if (zoneId === 'starreach') {
+          const y = (y0 + Math.sin(phase + i) * 32 + H) % H;
+          ctx.globalAlpha = .18 + .16 * (Math.sin(phase * 1.7) * .5 + .5); ctx.fillStyle = i % 2 ? '#d7b9ff' : '#8ed9ff'; ctx.beginPath(); ctx.arc(x, y, 1.2 + i % 3, 0, Math.PI * 2); ctx.fill();
         } else {
           e.attackPhase = '';
           if (homeDistance > 8) {
@@ -4694,7 +5031,8 @@
       ctx.textAlign = 'center';
       const active = dist(player, z.scout) < 130;
       ctx.fillStyle = 'rgba(8,14,12,.76)';
-      const label = active ? '✦  ' + (zoneId === 'ashfield' ? 'Смотритель' : 'Разведчик') : zoneId === 'ashfield' ? 'Смотритель' : 'Разведчик';
+      const npcName = storyApi?.NPCS[z.npcId]?.name || 'Дозорный';
+      const label = active ? '✦  ' + npcName : npcName;
       const w = ctx.measureText(label).width + 18;
       const labelY = s.y - (art?.has('scout') ? 106 : 58);
       ctx.fillRect(s.x - w / 2, labelY, w, 20);
@@ -4963,10 +5301,32 @@
     ctx.fillRect(W - band, band, band, Math.max(0, H - band * 2));
     ctx.restore();
   }
+  function drawArenaPresentation() {
+    const z = zones[zoneId], state = currentArenaState(), objective = inspectCurrentQuest()?.active;
+    if (objective?.target !== z.boss.type && state.completedCycle !== player.progression.completedCycles) return;
+    const p = screenPos(z.boss.x, z.boss.y), radius = ARENA_DEFINITIONS[zoneId].radius;
+    if (p.x < -radius || p.x > W + radius || p.y < -radius || p.y > H + radius) return;
+    const active = arenaCombatPhase(state.phase), pulse = reduceMotion ? 0 : Math.sin(time * 4) * 4;
+    ctx.save();
+    ctx.strokeStyle = active ? zones[zoneId].accent : state.phase === 'completed' ? 'rgba(126,241,225,.52)' : 'rgba(240,213,142,.30)';
+    ctx.globalAlpha = active ? .72 : .42;
+    ctx.lineWidth = active ? 5 : 3;
+    ctx.setLineDash(active ? [18,10] : [8,14]);
+    ctx.beginPath(); ctx.ellipse(p.x, p.y, radius + pulse, (radius + pulse) * .82, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    if (active) {
+      ctx.globalAlpha = .14; ctx.fillStyle = zones[zoneId].accent; ctx.beginPath(); ctx.ellipse(p.x, p.y, radius - 4, (radius - 4) * .82, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = .9; ctx.fillStyle = '#fff2bf'; ctx.font = '800 12px system-ui'; ctx.textAlign = 'center';
+      const label = state.phase === 'boss' ? 'БОСС' : state.phase === 'transition' ? 'АРЕНА · ПЕРЕХОД' : `АРЕНА · ВОЛНА ${state.waveIndex + 1}`;
+      ctx.fillText(label, p.x, p.y - Math.min(H * .34, radius * .58));
+    }
+    ctx.restore();
+  }
   function drawWorld() {
     const z = zones[zoneId];
     drawGround(z);
     drawAtmosphere();
+    drawArenaPresentation();
     drawLandmarks(z);
     drawWorldLandmarkOverlay();
     drawQueue.length = 0;
@@ -5239,6 +5599,16 @@
         }
       }),
       persistence: { codecActive: true },
+      arena: {
+        engineActive:Boolean(arenaEngine),
+        state:currentArenaState,
+        start:startArena,
+        advance:advanceArena,
+        defeat:defeatArena,
+        restart:startArena,
+        definitions:ARENA_DEFINITIONS
+      },
+      story: { engineActive:Boolean(storyEngine), state:() => player.story },
       build: { engineActive: Boolean(buildEngine), profile: () => buildProfile },
       world: {
         engineActive:Boolean(worldEngine),
@@ -5290,6 +5660,9 @@
       buildSummaryView,
       openCustomization,
       openCamp,
+      openNpcDialog,
+      chooseStoryChoice,
+      storyNodeForZone:id => STORY_NODE_BY_ZONE[id],
       openTraining,
       tutorialProgress,
       noteTutorial,
@@ -5315,6 +5688,7 @@
       brewSupply,
       setUiSetting,
       setVolume,
+      resetSettings,
       applyInterfaceSettings,
       applyPreset,
       suspend,
@@ -5379,7 +5753,7 @@
         resetFrameLimiter();
       },
       setQuality: q => {
-        if (!Object.hasOwn(QUALITY, q)) return false;
+        if (q !== 'auto' && !Object.hasOwn(QUALITY, q)) return false;
         settings.quality = q;
         applyGraphics();
         return true;

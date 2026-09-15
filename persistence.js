@@ -83,10 +83,23 @@
           const contracts = object(p.contracts);
           if (!finiteFields(supplies, ['fieldKit'])) return false;
           if (!stringFields(runes, ['weapon', 'armor']) || !stringFields(cosmetics, ['accent', 'trail'])) return false;
-          for (const id of contractIds) if (!finiteFields(object(contracts[id]), ['state', 'progress', 'cycle'])) return false;
+          const savedContractIds = schema >= 5 ? contractIds : contractIds.filter(id => ['mistwood', 'stonevale', 'ashfield'].includes(id));
+          for (const id of savedContractIds) if (!finiteFields(object(contracts[id]), ['state', 'progress', 'cycle'])) return false;
           if (!Array.isArray(p.discoveries) || p.discoveries.some(id => typeof id !== 'string')) return false;
           if (typeof config.controlSize !== 'string' || typeof config.brightness !== 'number' || !Number.isFinite(config.brightness) || typeof config.uiScale !== 'string' || typeof config.minimapSize !== 'string' || typeof config.combatNumbers !== 'boolean' || typeof config.haptics !== 'boolean') return false;
           if (!finiteFields(config, ['masterVolume', 'musicVolume', 'ambientVolume', 'sfxVolume']) || typeof config.musicEnabled !== 'boolean') return false;
+          if (schema >= 5) {
+            const story = object(p.story), arenas = object(p.arenas);
+            if (!isObject(story.flags) || !isObject(story.choices) || !isObject(story.relations) || !Array.isArray(story.seen) || typeof story.ending !== 'string') return false;
+            for (const [questId, fields] of Object.entries(object(rules.defaults?.player?.quests))) {
+              if (!finiteFields(object(quests[questId]), Object.keys(fields))) return false;
+            }
+            for (const id of rules.zoneIds) {
+              const arena = object(arenas[id]);
+              if (typeof arena.phase !== 'string' || !finiteFields(arena, ['waveIndex', 'remaining', 'attempts', 'completedCycle', 'rewardedCycle'])) return false;
+            }
+            if (typeof config.voiceEnabled !== 'boolean' || typeof config.voiceVolume !== 'number' || !Number.isFinite(config.voiceVolume)) return false;
+          }
         }
         return true;
       }
@@ -266,6 +279,21 @@
         };
       }
 
+      if (rules.saveSchema >= 5) {
+        const storyEngine = rules.storyEngine;
+        const arenaEngine = rules.arenaEngine;
+        player.story = storyEngine?.normalize
+          ? storyEngine.normalize(saved.story)
+          : object(saved.story);
+        player.arenas = {};
+        const savedArenas = object(saved.arenas);
+        for (const id of rules.zoneIds) {
+          player.arenas[id] = arenaEngine?.normalize
+            ? arenaEngine.normalize(id, savedArenas[id], player.progression.completedCycles)
+            : object(savedArenas[id]);
+        }
+      }
+
       const config = object(data?.settings);
       const fallbackSettings = object(fallbacks.settings);
       const defaultsSettings = rules.defaults.settings;
@@ -289,6 +317,10 @@
         sfxVolume: finiteSetting(config.sfxVolume, .8),
         musicEnabled: config.musicEnabled !== false
       };
+      if (rules.saveSchema >= 5) {
+        settings.voiceEnabled = config.voiceEnabled !== false;
+        settings.voiceVolume = finiteSetting(config.voiceVolume, finiteSetting(defaultsSettings.voiceVolume, .7));
+      }
 
       return {
         schemaVersion: rules.saveSchema,
@@ -328,12 +360,7 @@
         persistentQuests[id] = {};
         for (const field of Object.keys(fields)) persistentQuests[id][field] = q[field];
       }
-      return {
-        schemaVersion: rules.saveSchema,
-        version: meta?.buildVersion,
-        meta: { revision: meta?.revision, updatedAt: meta?.updatedAt, sessionId: meta?.sessionId },
-        zoneId: runtimeSnapshot?.zoneId,
-        player: {
+      const persistentPlayer = {
           x: player.x,
           y: player.y,
           hp: player.hp,
@@ -359,8 +386,18 @@
             completedCycles: progression.completedCycles
           },
           quests: persistentQuests
-        },
-        settings: {
+        };
+      if (rules.saveSchema >= 5) {
+        persistentPlayer.story = rules.storyEngine?.normalize ? rules.storyEngine.normalize(player.story) : { ...object(player.story) };
+        persistentPlayer.arenas = {};
+        const arenas = object(player.arenas);
+        for (const id of rules.zoneIds) {
+          persistentPlayer.arenas[id] = rules.arenaEngine?.normalize
+            ? rules.arenaEngine.normalize(id, arenas[id], progression.completedCycles)
+            : { ...object(arenas[id]) };
+        }
+      }
+      const persistentSettings = {
           quality: settings.quality,
           fps: settings.fps,
           controls: settings.controls,
@@ -376,7 +413,18 @@
           ambientVolume: settings.ambientVolume,
           sfxVolume: settings.sfxVolume,
           musicEnabled: settings.musicEnabled
-        }
+        };
+      if (rules.saveSchema >= 5) {
+        persistentSettings.voiceEnabled = settings.voiceEnabled !== false;
+        persistentSettings.voiceVolume = finiteSetting(settings.voiceVolume, .7);
+      }
+      return {
+        schemaVersion: rules.saveSchema,
+        version: meta?.buildVersion,
+        meta: { revision: meta?.revision, updatedAt: meta?.updatedAt, sessionId: meta?.sessionId },
+        zoneId: runtimeSnapshot?.zoneId,
+        player: persistentPlayer,
+        settings: persistentSettings
       };
     }
 

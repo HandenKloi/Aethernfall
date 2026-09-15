@@ -1,6 +1,6 @@
 "use strict";
 
-/* Aethernfall 4.0.2 — local procedural audio mixer, no network assets. */
+/* Aethernfall 5.0.0 — local procedural audio mixer, no network assets. */
 (() => {
   'use strict';
 
@@ -12,7 +12,8 @@
     ambient: .65,
     sfx: .8,
     musicEnabled: true,
-    zone: 'mistwood'
+    zone: 'mistwood',
+    mode: 'exploration'
   };
 
   let ctx = null, masterGain = null, musicGain = null, ambientGain = null, sfxGain = null;
@@ -110,6 +111,8 @@
   function zoneTone() {
     if (state.zone === 'stonevale') return { root: 92.5, fifth: 138.6, third: 184.8, filter: 340, rustle: 960, type: 'triangle' };
     if (state.zone === 'ashfield') return { root: 82.4, fifth: 123.5, third: 164.8, filter: 270, rustle: 1450, type: 'sawtooth' };
+    if (state.zone === 'frostmere') return { root: 98, fifth: 146.8, third: 196, filter: 520, rustle: 1820, type: 'sine' };
+    if (state.zone === 'starreach') return { root: 73.4, fifth: 110, third: 174.6, filter: 610, rustle: 2100, type: 'triangle' };
     return { root: 110, fifth: 164.8, third: 220, filter: 420, rustle: 1180, type: 'sine' };
   }
 
@@ -136,13 +139,16 @@
     if (!ctx || !unlocked || ctx.state !== 'running') return;
     stopNodes(musicNodes); stopNodes(ambientNodes);
     const tone = zoneTone(), now = ctx.currentTime;
+    const modeScale = { exploration:1, danger:1.06, arena:1.12, boss:.75, victory:1.5, defeat:.68, story:.94 }[state.mode] || 1;
+    const modeLevel = { exploration:.22, danger:.25, arena:.28, boss:.32, victory:.24, defeat:.16, story:.18 }[state.mode] || .22;
     // 4.0.2 raises the default clarity on phone speakers and replaces the raw
     // white-noise ambience bed with shaped, filtered environmental layers.
-    const musicBus = gain(.22, musicGain), ambienceBus = gain(.12, ambientGain);
+    const musicBus = gain(.0001, musicGain), ambienceBus = gain(.12, ambientGain);
+    musicBus.gain.setTargetAtTime(modeLevel, now, .18);
     musicNodes.push(musicBus); ambientNodes.push(ambienceBus);
     for (const [freq, detune, level, wave] of [[tone.root, -5, .55, tone.type], [tone.fifth, 3, .26, tone.type], [tone.third, 7, .15, 'triangle']]) {
       const osc = ctx.createOscillator(), g = gain(level, musicBus);
-      osc.type = wave; osc.frequency.value = freq; osc.detune.value = detune;
+      osc.type = wave; osc.frequency.value = freq * modeScale; osc.detune.value = detune;
       osc.connect(g);
       g.gain.setValueAtTime(Math.max(.0001, level * .75), now);
       g.gain.setTargetAtTime(level, now + .2, 1.6);
@@ -174,9 +180,18 @@
   }
 
   function setZone(zone) {
-    if (!['mistwood', 'stonevale', 'ashfield'].includes(zone) || zone === state.zone) return;
+    if (!['mistwood', 'stonevale', 'ashfield', 'frostmere', 'starreach'].includes(zone) || zone === state.zone) return false;
     state.zone = zone;
+    state.mode = 'exploration';
     rebuildBed();
+    return true;
+  }
+
+  function setMode(mode) {
+    if (!['exploration','danger','arena','boss','victory','defeat','story'].includes(mode) || mode === state.mode) return false;
+    state.mode = mode;
+    rebuildBed();
+    return true;
   }
 
   function tone(freq, duration, level = .10, type = 'sine', slide = 1) {
@@ -208,6 +223,11 @@
     discovery: [523, .30, .09, 'sine', 1.5],
     block: [145, .11, .10, 'triangle', .85],
     boss: [82, .28, .14, 'sawtooth', .45],
+    arena: [196, .18, .10, 'triangle', .72],
+    victory: [392, .32, .11, 'triangle', 1.5],
+    defeat: [110, .34, .10, 'sawtooth', .55],
+    story: [294, .20, .08, 'sine', 1.5],
+    parry: [740, .10, .12, 'triangle', .72],
     ui: [330, .05, .06, 'sine', 1.05],
     test: [660, .18, .12, 'sine', 1.18]
   };
@@ -226,6 +246,7 @@
 
   function suspend() {
     unlocked = false;
+    stopVoice();
     try { return ctx?.suspend?.(); } catch { return undefined; }
   }
 
@@ -237,9 +258,38 @@
       available: !!AudioCtor,
       unlocked,
       contextState: contextState(),
-      lastError
+      lastError,
+      voiceAvailable:typeof globalThis.speechSynthesis?.speak === 'function' && typeof globalThis.SpeechSynthesisUtterance === 'function'
     };
   }
 
-  window.AetherAudio = { unlock, configure, setZone, sfx, suspend, resume, snapshot };
+  const VOICE_PROFILES = Object.freeze({
+    lyra:Object.freeze({ rate:.94, pitch:1.12 }),
+    toren:Object.freeze({ rate:.88, pitch:.78 }),
+    mira:Object.freeze({ rate:1.02, pitch:.98 })
+  });
+  function stopVoice() {
+    try { globalThis.speechSynthesis?.cancel?.(); } catch {}
+  }
+  function speak(profileId, text, options = {}) {
+    const synth = globalThis.speechSynthesis, Voice = globalThis.SpeechSynthesisUtterance;
+    if (options.enabled === false || typeof synth?.speak !== 'function' || typeof Voice !== 'function' || typeof text !== 'string' || !text.trim()) return false;
+    try {
+      stopVoice();
+      const utterance = new Voice(text.slice(0, 420)), profile = VOICE_PROFILES[profileId] || VOICE_PROFILES.mira;
+      utterance.lang = 'ru-RU';
+      utterance.rate = profile.rate;
+      utterance.pitch = profile.pitch;
+      utterance.volume = clamp(options.volume === undefined ? .7 : options.volume);
+      const voices = typeof synth.getVoices === 'function' ? synth.getVoices() : [];
+      utterance.voice = voices.find(voice => /^ru\b/i.test(voice.lang || '')) || null;
+      synth.speak(utterance);
+      return true;
+    } catch (err) {
+      lastError = err?.message || String(err || 'Voice playback failed');
+      return false;
+    }
+  }
+
+  window.AetherAudio = { unlock, configure, setZone, setMode, sfx, speak, stopVoice, suspend, resume, snapshot };
 })();
