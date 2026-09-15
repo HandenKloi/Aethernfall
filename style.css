@@ -149,6 +149,21 @@ button:active {
   flex-direction:column;
   gap:4px;
 }
+.onboardingHint {
+  position:fixed;
+  z-index:7;
+  top:calc(env(safe-area-inset-top) + 122px);
+  left:50%;
+  width:min(88vw,520px);
+  transform:translateX(-50%);
+  padding:9px 13px;
+  border-radius:14px;
+  color:#f8edbf;
+  font-size:12px;
+  line-height:1.35;
+  text-align:center;
+  pointer-events:none;
+}
 #questProgress {
   color:#b8c7c0;
 }

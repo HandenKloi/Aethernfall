@@ -3,7 +3,7 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '4.0.13';
+  const BUILD_VERSION = '4.1.0';
   const SAVE_SCHEMA = 4;
   const BASE_STATS = Object.freeze({ startLevel: 6, damage: 32, maxHp: 240, maxStamina: 100, speed: 205, damagePerLevel: 3, hpPerLevel: 18 });
   const MAX_UPGRADE_RANK = 5;
@@ -226,6 +226,7 @@
     perfScale: $('perfScale'),
     perfDevice: $('perfDevice'),
     lootTicker: $('lootTicker'),
+    onboardingHint: $('onboardingHint'),
     perfPill: $('perfPill'),
     perfPillFps: $('perfPillFps'),
     perfPillMs: $('perfPillMs'),
@@ -420,6 +421,39 @@
     stonevale:[[820,480,'VILLAGE','Старый дозор'],[1500,840,'MINE','Серебряный рудник'],[2180,520,'RUIN','Расколотая арка'],[2360,1320,'RUIN','Раскол дозорных']],
     ashfield:[[940,500,'OUTPOST','Пепельный пост'],[1760,1240,'BOSS','Обугленная арена'],[1260,930,'SHRINE','Святилище искры'],[700,1360,'OUTPOST','Пепельный маяк']]
   };
+  const WORLD_IDENTITIES = Object.freeze({
+    mistwood: Object.freeze({
+      resourceKinds:['herb','wood'],
+      ambientEnemies:Object.freeze({boar:8,raider:6}),
+      ambientResources:Object.freeze({herb:18,wood:10}),
+      signature:Object.freeze({
+        id:'mistwood-boar-den', name:'Логово вепрей', landmarkIndex:0,
+        enemies:Object.freeze(['boar','boar','boar']),
+        resources:Object.freeze(['herb','herb','herb','herb']),
+      }),
+    }),
+    stonevale: Object.freeze({
+      resourceKinds:['ore','herb'],
+      ambientEnemies:Object.freeze({raider:8,marksman:6}),
+      ambientResources:Object.freeze({ore:18,herb:10}),
+      signature:Object.freeze({
+        id:'stonevale-silver-patrol', name:'Патруль серебряной выработки', landmarkIndex:1,
+        enemies:Object.freeze(['marksman','marksman','marksman']),
+        resources:Object.freeze(['ore','ore','ore','ore']),
+      }),
+    }),
+    ashfield: Object.freeze({
+      resourceKinds:['wood','ore'],
+      ambientEnemies:Object.freeze({raider:7,marksman:7}),
+      ambientResources:Object.freeze({wood:14,ore:14}),
+      signature:Object.freeze({
+        id:'ashfield-beacon-ambush', name:'Пепельная засада', landmarkIndex:3,
+        enemies:Object.freeze(['raider','raider','marksman']),
+        resources:Object.freeze(['wood','wood','ore','ore']),
+      }),
+    }),
+  });
+  const worldEngine = window.AetherWorld.createEngine({ identities:WORLD_IDENTITIES, landmarks:LANDMARKS });
   const SAVE = 'aethernfall_save_v30';
   const SAVE_BACKUP = SAVE + '_backup';
   const RECOVERY_PREFIX = SAVE + '_recovery_';
@@ -446,7 +480,8 @@
       },
       questId: 'mist',
       next: 'stonevale',
-      resources: ['herb', 'wood']
+      resources: ['herb', 'wood'],
+      boss: { type:'briarMatriarch', x:2320, y:1320 }
     },
     stonevale: {
       name: 'Каменная долина',
@@ -469,7 +504,8 @@
       },
       questId: 'stone',
       next: 'ashfield',
-      resources: ['ore', 'herb']
+      resources: ['ore', 'herb'],
+      boss: { type:'guardian', x:1680, y:720 }
     },
     ashfield: {
       name: 'Пепельные поля',
@@ -492,9 +528,50 @@
       },
       questId: 'ash',
       next: 'mistwood',
-      resources: ['wood', 'ore']
+      resources: ['wood', 'ore'],
+      boss: { type:'cinderWarden', x:1760, y:1240 }
     }
   };
+  const BOSS_DEFINITIONS = Object.freeze({
+    briarMatriarch:Object.freeze({
+      name:'Матриарх чащи', artType:'boar', accent:'#79b86d', height:92,
+      stats:Object.freeze({r:34,hp:440,speed:68,damage:18}),
+      sequences:Object.freeze({1:Object.freeze(['slam','wave','slam']),2:Object.freeze(['wave','bolt','slam','wave'])}),
+      profiles:Object.freeze({
+        slam:Object.freeze({attack:'slam',damage:20,windup:.62,recovery1:.78,recovery2:.62,startRange:125}),
+        bolt:Object.freeze({attack:'bolt',damage:18,windup:.82,recovery1:.92,recovery2:.72,startRange:420}),
+        wave:Object.freeze({attack:'wave',damage:17,windup:1.05,recovery1:.88,recovery2:.70,startRange:300})
+      }),
+      reward:Object.freeze({xp:90,gold:65,supply:'potion'})
+    }),
+    guardian:Object.freeze({
+      name:'Guardian', artType:'guardian', accent:'#c99be8', height:122,
+      stats:Object.freeze({r:40,hp:620,speed:48,damage:22}),
+      sequences:Object.freeze({1:Object.freeze(['slam','bolt','wave']),2:Object.freeze(['bolt','slam','wave','slam'])}),
+      profiles:Object.freeze({
+        slam:Object.freeze({attack:'slam',damage:26,windup:.75,recovery1:.85,recovery2:.68,startRange:125}),
+        bolt:Object.freeze({attack:'bolt',damage:24,windup:.70,recovery1:.90,recovery2:.72,startRange:460}),
+        wave:Object.freeze({attack:'wave',damage:22,windup:.95,recovery1:1.00,recovery2:.80,startRange:300})
+      }),
+      reward:Object.freeze({xp:120,gold:90,item:'guardianToken'})
+    }),
+    cinderWarden:Object.freeze({
+      name:'Пепельный хранитель', artType:'raider', accent:'#ef8d55', height:112,
+      stats:Object.freeze({r:38,hp:560,speed:58,damage:21}),
+      sequences:Object.freeze({1:Object.freeze(['bolt','slam','wave']),2:Object.freeze(['wave','bolt','slam','bolt'])}),
+      profiles:Object.freeze({
+        slam:Object.freeze({attack:'slam',damage:23,windup:.68,recovery1:.82,recovery2:.64,startRange:125}),
+        bolt:Object.freeze({attack:'bolt',damage:21,windup:.62,recovery1:.86,recovery2:.66,startRange:460}),
+        wave:Object.freeze({attack:'wave',damage:20,windup:.88,recovery1:.96,recovery2:.74,startRange:300})
+      }),
+      reward:Object.freeze({xp:110,gold:85,supply:'fieldKit'})
+    })
+  });
+  function bossDefinition(value) {
+    const type = typeof value === 'string' ? value : value?.type;
+    return BOSS_DEFINITIONS[type] || null;
+  }
+  function isBoss(value) { return !!bossDefinition(value); }
   const MAIN_QUESTS = Object.freeze({
     mist: {
       title:'Следы в тумане',
@@ -502,7 +579,7 @@
         {id:'mist-scout',type:'talk',target:'scout',text:'Поговорите с разведчиком'},
         {id:'mist-herb',type:'gather',target:'herb',match:'target',counter:'herb',required:3,text:'Соберите 3 травы',progressText:'Соберите траву'},
         {id:'mist-watchstone',type:'discover',target:'mistwood:3',match:'target',text:'Найдите Камень туманного дозора'},
-        {id:'mist-raiders',type:'kill',target:'raider',match:'target',counter:'kills',required:4,text:'Победите 4 налётчиков',progressText:'Победите налётчиков'},
+        {id:'mist-matriarch',type:'kill',target:'briarMatriarch',match:'target',counter:'kills',required:1,text:'Победите Матриарха чащи'},
         {id:'mist-portal',type:'portal',text:'Перейдите в Каменную долину'},
       ],
     },
@@ -522,7 +599,7 @@
         {id:'ash-scout',type:'talk',target:'scout',text:'Поговорите с хранителем'},
         {id:'ash-wood',type:'gather',target:'wood',match:'target',counter:'wood',required:4,text:'Соберите 4 древесины',progressText:'Соберите древесину'},
         {id:'ash-beacon',type:'discover',target:'ashfield:3',match:'target',text:'Доберитесь до Пепельного маяка'},
-        {id:'ash-enemies',type:'kill',target:'enemy',match:'category',counter:'kills',required:6,spawnTarget:'raider',text:'Победите 6 врагов',progressText:'Победите врагов'},
+        {id:'ash-warden',type:'kill',target:'cinderWarden',match:'target',counter:'kills',required:1,text:'Победите Пепельного хранителя'},
         {id:'ash-portal',type:'portal',text:'Вернитесь в Туманный лес',effect:'questCycleCompleted'},
       ],
     },
@@ -657,6 +734,34 @@
       }
     }
   };
+  const TUTORIAL_ACTIONS = Object.freeze([
+    Object.freeze({id:'move',bit:1,hint:'Двигайтесь: стик или WASD'}),
+    Object.freeze({id:'attack',bit:2,hint:'Атакуйте: кнопка меча или Space'}),
+    Object.freeze({id:'defend',bit:4,hint:'Удерживайте блок или уклонитесь через телеграф'}),
+    Object.freeze({id:'interact',bit:8,hint:'Подойдите к цели и используйте ДЕЙСТВИЕ или E'}),
+    Object.freeze({id:'supply',bit:16,hint:'Получите расходник и используйте быстрый слот или Q'}),
+    Object.freeze({id:'equipment',bit:32,hint:'Откройте экипировку в сумке или лагере'})
+  ]);
+  const TUTORIAL_ALL = TUTORIAL_ACTIONS.reduce((mask, item) => mask | item.bit, 0);
+  let tutorialFlags = Math.max(0, Math.min(TUTORIAL_ALL, Math.floor(Number(storage.getItem('aef_tutorial_flags')) || 0)));
+  function tutorialProgress() {
+    const next = TUTORIAL_ACTIONS.find(item => !(tutorialFlags & item.bit));
+    return { flags:tutorialFlags, complete:!next, hint:next?.hint || '' };
+  }
+  function updateTutorialUI() {
+    if (!ui.onboardingHint) return;
+    const progress = tutorialProgress();
+    ui.onboardingHint.classList.toggle('hidden', progress.complete || campaignComplete());
+    if (!progress.complete) setText(ui.onboardingHint, progress.hint);
+  }
+  function noteTutorial(action) {
+    const item = TUTORIAL_ACTIONS.find(entry => entry.id === action);
+    if (!item || tutorialFlags & item.bit) return false;
+    tutorialFlags |= item.bit;
+    storage.setItem('aef_tutorial_flags', tutorialFlags);
+    updateTutorialUI();
+    return true;
+  }
   function validateLiveQuestStateBindings(definitions, questStates, zoneDefinitions = zones, landmarkDefinitions = LANDMARKS) {
     const definitionIds = Object.keys(definitions).sort();
     const stateIds = Object.keys(questStates).sort();
@@ -694,6 +799,23 @@
     textureImages = {},
     patterns = {},
     interactionLock = 0;
+  const VISITED_ZONES_KEY = 'aef_visited_zones_v1';
+  function readVisitedZones() {
+    try {
+      const parsed = JSON.parse(storage.getItem(VISITED_ZONES_KEY) || '[]');
+      return Array.isArray(parsed) ? parsed.filter(id => typeof id === 'string' && Object.hasOwn(zones, id)) : [];
+    } catch {
+      return [];
+    }
+  }
+  const visitedZones = new Set(['mistwood', ...readVisitedZones()]);
+  function markZoneVisited(id) {
+    if (!Object.hasOwn(zones, id)) return false;
+    if (visitedZones.has(id)) return true;
+    visitedZones.add(id);
+    storage.setItem(VISITED_ZONES_KEY, JSON.stringify([...visitedZones]));
+    return true;
+  }
   let lootDrops = [],
     floatingTexts = [];
   const LOOT_TABLE = {
@@ -739,6 +861,8 @@
     nextDiscoveryAt = 0,
     atmosphereGradient = null;
   let blockPointer = null;
+  const keyboardDirections = new Set();
+  let keyboardBlock = false;
   let impactPendingKind = '', impactPendingPriority = 0, impactPendingDirX = 0, impactPendingDirY = 0;
   let cameraImpactX = 0, cameraImpactY = 0, cameraImpactBaseX = 0, cameraImpactBaseY = 0, cameraImpactLife = 0, cameraImpactDuration = 0, damageFlash = 0;
   let impactLastKind = '', impactLastSfx = '', impactLastHaptic = 0;
@@ -856,6 +980,8 @@
   }
   function resetInput() {
     resetJoy();
+    keyboardDirections.clear();
+    keyboardBlock = false;
     player.dashRemaining = 0;
     player.dodgeUntil = 0;
     player.attackQueuedUntil = 0;
@@ -1150,6 +1276,7 @@
   }
   function applyCanonicalSave(snapshot) {
     zoneId = snapshot.zoneId;
+    markZoneVisited(zoneId);
     const saved = snapshot.player;
     player.level = saved.level;
     player.xp = saved.xp;
@@ -1345,6 +1472,7 @@
     })) return false;
     cancelBlock();
     player.supplyCd = time + SUPPLY_COOLDOWN;
+    noteTutorial('supply');
     animate(player, 'drink', .65);
     burst(player.x, player.y, player.cosmetics?.trail ? COSMETICS.trails[player.cosmetics.trail] : '#92dcc3', 12, 65);
     feedback('drink');
@@ -1486,6 +1614,7 @@
     return { loadout:loadoutRows, groups, html };
   }
   function openEquipment() {
+    noteTutorial('equipment');
     const inCombat = isInCombat();
     const buildSummary = buildSummaryView(buildProfile, player.loadout, player.runes);
     const gearCards = Object.entries(GEAR).map(([id, item]) => {
@@ -1869,8 +1998,8 @@
     e.damage = scaledEnemyDamage(e.baseStats.damage, level);
   }
   function addEnemy(type, x, y) {
-    const cap = entities.reduce((n, e) => n + (e.kind === 'enemy' && e.type !== 'guardian' && e.hp > 0), 0);
-    if (type !== 'guardian' && cap >= 17) return;
+    const cap = entities.reduce((n, e) => n + (e.kind === 'enemy' && !isBoss(e) && e.hp > 0), 0);
+    if (!bossDefinition(type) && cap >= 17) return;
     const e = {
       kind: 'enemy',
       type,
@@ -1907,12 +2036,13 @@
       retreatSpeed: 88,
       damage: 14
     });
-    if (type === 'guardian') Object.assign(e, {
-      r: 40,
-      hp: 620,
-      maxHp: 620,
-      speed: 48,
-      damage: 22,
+    const boss = bossDefinition(type);
+    if (boss) Object.assign(e, {
+      r: boss.stats.r,
+      hp: boss.stats.hp,
+      maxHp: boss.stats.hp,
+      speed: boss.stats.speed,
+      damage: boss.stats.damage,
       bossPhase: 1,
       bossAttack: '',
       bossSequenceStep: 0,
@@ -2009,11 +2139,6 @@
     actor.x = clamp(actor.x, edge, WORLD.w - edge);
     actor.y = clamp(actor.y, edge, WORLD.h - edge);
   }
-  const ENEMY_SPAWN_TYPES = Object.freeze({
-    mistwood: Object.freeze(['boar','raider','raider','raider','boar','raider','raider','raider','boar','raider','raider','raider','boar','raider','raider','raider','boar']),
-    stonevale: Object.freeze(['boar','raider','raider','marksman','boar','raider','raider','marksman','boar','raider','raider','marksman','boar','raider','raider','raider','boar']),
-    ashfield: Object.freeze(['boar','raider','marksman','raider','boar','marksman','raider','marksman','boar','raider','marksman','raider','boar','raider','raider','marksman','boar'])
-  });
   function resetZone() {
     resetImpactFeedback();
     physics?.set([]);
@@ -2044,19 +2169,24 @@
     player.x = z.camp.x;
     player.y = z.camp.y;
     player.dir = 0;
-    const enemySpawnTypes = ENEMY_SPAWN_TYPES[zoneId] || ENEMY_SPAWN_TYPES.mistwood;
-    for (let i = 0; i < enemySpawnTypes.length; i++) {
+    const enemyPlan = worldEngine.enemyPlan(zoneId);
+    const eventPlan = worldEngine.eventPlan(zoneId);
+    for (let i = 0; i < enemyPlan.ambient.length; i++) {
       const x = 150 + rng(i + 300 + zoneId.length) * (WORLD.w - 300),
         y = 150 + rng(i + 620 + zoneId.length * 7) * (WORLD.h - 300);
-      addEnemy(enemySpawnTypes[i], x, y);
+      addEnemy(enemyPlan.ambient[i], x, y);
     }
-    for (let i = 0; i < 32; i++) {
+    const [eventX,eventY] = LANDMARKS[zoneId][eventPlan.landmarkIndex];
+    for (const entry of eventPlan.enemies) addEnemy(entry.type, eventX + entry.dx, eventY + entry.dy);
+
+    const resourcePlan = worldEngine.resourcePlan(zoneId);
+    for (let i = 0; i < resourcePlan.ambient.length; i++) {
       const x = 150 + rng(i + 1200 + zoneId.length) * (WORLD.w - 300),
-        y = 150 + rng(i + 1700 + zoneId.length * 3) * (WORLD.h - 300),
-        kind = i % 3 === 0 ? z.resources[0] : z.resources[1];
-      addResource(kind, x, y);
+        y = 150 + rng(i + 1700 + zoneId.length * 3) * (WORLD.h - 300);
+      addResource(resourcePlan.ambient[i], x, y);
     }
-    if (zoneId === 'stonevale') addEnemy('guardian', 1680, 720);
+    for (const entry of eventPlan.resources) addResource(entry.type, eventX + entry.dx, eventY + entry.dy);
+    addEnemy(z.boss.type, z.boss.x, z.boss.y);
     makeAmbient();
     buildObstacles();
   }
@@ -2102,7 +2232,7 @@
     }
   }
   function spawnLootFromEnemy(e, excludeGuardianToken = false) {
-    const table = e.type === 'guardian' ? LOOT_TABLE.guardian : LOOT_TABLE.common;
+    const table = isBoss(e) ? LOOT_TABLE.guardian : LOOT_TABLE.common;
     const allowed = excludeGuardianToken ? table.filter(item => item.id !== 'guardianToken') : table;
     const total = allowed.reduce((sum, item) => sum + item.chance, 0);
     const roll = Math.random() * total;
@@ -2113,7 +2243,7 @@
         lootDrops.push({
           id: d.id,
           label: d.label,
-          count: d.count + (d.id === 'coin' && e.type === 'guardian' ? Math.floor(Math.random() * 20) : 0),
+          count: d.count + (d.id === 'coin' && isBoss(e) ? Math.floor(Math.random() * 20) : 0),
           x: e.x + (Math.random() * 24 - 12),
           y: e.y + (Math.random() * 24 - 12),
           life: 22
@@ -2127,27 +2257,35 @@
   }
   function cancelBlock() {
     if (!player.blocking) return;
+    keyboardBlock = false;
     player.blocking = false;
     ui.blockBtn?.classList.remove('pressed');
   }
   function kill(e) {
     e.hp = 0;
     e._corpseUntil = time + 0.75;
-    gainXP(e.type === 'guardian' ? 120 : 18);
-    player.gold += e.type === 'guardian' ? 90 : 4 + Math.floor(Math.random() * 5);
+    const boss = bossDefinition(e);
+    if (boss) audio.sfx('boss');
+    gainXP(boss ? boss.reward.xp : 18);
+    player.gold += boss ? boss.reward.gold : 4 + Math.floor(Math.random() * 5);
     const objective = inspectCurrentQuest()?.active;
-    const guardianQuestActive = zoneId === 'stonevale' && e.type === 'guardian'
-      && objective?.type === 'kill' && objective.match === 'target' && objective.target === 'guardian';
+    const bossQuestActive = !!boss && objective?.type === 'kill' && objective.match === 'target' && objective.target === e.type;
+    const guardianQuestActive = bossQuestActive && e.type === 'guardian';
     const firstGuardianUnlock = guardianQuestActive && !(player.inv.guardianToken > 0);
     spawnLootFromEnemy(e, firstGuardianUnlock);
+    if (bossQuestActive && boss.reward.supply) {
+      player.supplies[boss.reward.supply] = Math.min(9999, (player.supplies[boss.reward.supply] || 0) + 1);
+    }
     if (guardianQuestActive) {
       if (firstGuardianUnlock) {
         player.inv.guardianToken = 1;
         toast('Получен Знак стража · броня открыта');
       } else toast('Страж руин повержен!');
+    } else if (bossQuestActive) {
+      toast(`${boss.name} повержен · ${SUPPLIES[boss.reward.supply].name} +1`);
     }
     applyQuestProgressEvent({ type: 'kill', target: e.type, category: enemyQuestCategory(e), amount: 1 });
-    burst(e.x, e.y, e.type === 'guardian' ? '#ceb1ea' : '#e27677', 24, 155);
+    burst(e.x, e.y, boss?.accent || '#e27677', 24, 155);
     save();
   }
   function hitTarget(e, dmg) {
@@ -2161,7 +2299,7 @@
     e.hit = .16;
     animate(e, 'hit', .2);
     if (lethal) {
-      queueImpactFeedback(e.type === 'guardian' ? 'guardianKill' : 'enemyKill', player.x, player.y, e.x, e.y);
+      queueImpactFeedback(isBoss(e) ? 'guardianKill' : 'enemyKill', player.x, player.y, e.x, e.y);
       kill(e);
     } else {
       burst(e.x, e.y, '#efcfa8', 9, 118);
@@ -2172,6 +2310,7 @@
     const begun = combatEngine.beginAttack(combatStateSnapshot());
     applyCombatState(begun.state);
     feedback('attack', 6);
+    noteTutorial('attack');
     animate(player, 'attack', COMBAT_RULES.attackCooldown);
     let target = null,
       bestDist = Infinity;
@@ -2219,10 +2358,12 @@
     if (!requested.accepted) return false;
     cancelBlock();
     applyCombatState(requested.state);
+    noteTutorial('defend');
     animate(player, 'dodge', requested.action.duration);
-    const moving = Math.hypot(joy.x, joy.y) > .08;
-    const mx = moving ? joy.x : Math.cos(player.dir),
-      my = moving ? joy.y : Math.sin(player.dir),
+    const movement = movementAxes();
+    const moving = Math.hypot(movement.x, movement.y) > .08;
+    const mx = moving ? movement.x : Math.cos(player.dir),
+      my = moving ? movement.y : Math.sin(player.dir),
       mag = Math.hypot(mx, my) || 1;
     player.dashX = mx / mag;
     player.dashY = my / mag;
@@ -2391,14 +2532,36 @@
     player.hp = player.maxHp; player.stamina = player.maxStamina; player.supplyCd = 0; player.secondWindCd = 0;
     save(); updateUI(); openCamp(); toast('Отдых восстановил силы'); return true;
   }
+  function unlockedZones() {
+    if (campaignComplete()) return [...Object.keys(zones)];
+    return Object.keys(zones).filter(id => visitedZones.has(id));
+  }
+  function fastTravel(destination) {
+    if (!Object.hasOwn(zones, destination) || destination === zoneId || isInCombat() || transitioning || !unlockedZones().includes(destination)) return false;
+    resetInput();
+    zoneId = destination;
+    markZoneVisited(zoneId);
+    audio.setZone(zoneId);
+    resetZone();
+    save();
+    closeModal();
+    toast('Быстрый путь · ' + zones[zoneId].name);
+    return true;
+  }
+  function openTraining() {
+    openModal('Тренировка и управление', `<article class="card"><h3>Бой</h3><p>Атакуйте сериями, уклоняйтесь через телеграф атаки и удерживайте блок, когда уйти нельзя. Выносливость нужна для блока, уклонения и навыков.</p></article><article class="card"><h3>Клавиатура</h3><p><b>WASD</b> — движение · <b>Space</b> — атака · <b>Shift</b> — уклонение · <b>F</b> — блок · <b>1–3</b> — навыки · <b>E</b> — действие · <b>Q</b> — расходник · <b>I/J/M</b> — сумка/задания/меню.</p></article><article class="card"><h3>Развитие</h3><p>Собирайте ресурсы, готовьте расходники и сравнивайте итоговый профиль экипировки. Жёлтая отметка на миникарте ведёт к текущей цели.</p></article><button class="btn" id="trainingBack">Вернуться в лагерь</button>`);
+    bindTap($('trainingBack'), openCamp);
+  }
   function openCamp() {
     if (isInCombat()) { toast('Лагерь недоступен во время боя'); return false; }
     const def = CONTRACTS[zoneId], c = refreshLiveContract(zoneId);
     const stateText = c.state === 0 ? 'Доступно новое поручение' : c.state === 1 ? `Прогресс: ${c.progress}/${def.required}` : c.state === 2 ? 'Задание выполнено · заберите награду' : 'Поручение этого цикла завершено';
     const action = c.state === 0 ? `<button class="btn" id="contractAction">Принять поручение</button>` : c.state === 2 ? `<button class="btn" id="contractAction">Забрать награду · ${def.gold} золота</button>` : '';
-    openModal('Лагерь · ' + zones[zoneId].name, `<article class="card"><h3>Доска поручений</h3><p><b>${def.title}</b><br>${def.note}</p><p class="note">${stateText}</p>${action}</article><button class="btn" id="campRest">Отдохнуть · восстановить HP и выносливость</button><button class="btn" id="campCustomize">Руны и внешний вид</button><button class="btn" id="campClose">Вернуться в игру</button>`);
+    const travel = unlockedZones().filter(id => id !== zoneId).map(id => `<button class="btn secondary" id="travel-${id}">${escapeHTML(zones[id].name)}</button>`).join('') || '<p class="note">Новые маршруты откроются после достижения порталов.</p>';
+    openModal('Лагерь · ' + zones[zoneId].name, `<article class="card"><h3>Доска поручений</h3><p><b>${def.title}</b><br>${def.note}</p><p class="note">${stateText}</p>${action}</article><div class="campServices"><button class="btn" id="campRest">Отдохнуть · восстановить HP и выносливость</button><button class="btn" id="campCraft">Ремесло и расходники</button><button class="btn" id="campShop">Торговец</button><button class="btn" id="campEquipment">Экипировка и руны</button><button class="btn" id="campTraining">Тренировка</button></div><div class="sectionTitle">БЫСТРЫЙ ПУТЬ</div>${travel}<button class="btn" id="campClose">Вернуться в игру</button>`);
     if (c.state === 0) bindTap($('contractAction'), acceptContract); else if (c.state === 2) bindTap($('contractAction'), claimContract);
-    bindTap($('campRest'), restAtCamp); bindTap($('campCustomize'), openCustomization); bindTap($('campClose'), closeModal);
+    bindTap($('campRest'), restAtCamp); bindTap($('campCraft'), openInventory); bindTap($('campShop'), openShop); bindTap($('campEquipment'), openEquipment); bindTap($('campTraining'), openTraining); bindTap($('campClose'), closeModal);
+    for (const id of unlockedZones()) if (id !== zoneId) bindTap($('travel-' + id), () => fastTravel(id));
     return true;
   }
   function checkDiscoveries() {
@@ -2431,6 +2594,7 @@
     interactionLock = time + .16;
     const hit = nearbyInteraction();
     if (!hit) return;
+    noteTutorial('interact');
     animate(player, 'gather', .5);
     if (hit.type === 'camp') { openCamp(); return; }
     if (hit.type === 'portal' || hit.type === 'portalLocked') {
@@ -2508,7 +2672,9 @@
       const cyclesBefore = player.progression.completedCycles;
       applyMainQuestEvent({ type: 'portal' });
       const cycleCompleted = player.progression.completedCycles > cyclesBefore;
+      const firstCampaignCompletion = cyclesBefore === 0 && cycleCompleted;
       zoneId = zones[zoneId].next;
+      markZoneVisited(zoneId);
       audio.setZone(zoneId);
       resetZone();
       save();
@@ -2516,10 +2682,18 @@
         resetFrameLimiter();
         ui.loading.classList.add('hidden');
         transitioning = false;
-        toast(cycleCompleted ? zones[zoneId].name + ' · получен Осколок пламени' : zones[zoneId].name);
+        if (firstCampaignCompletion) openCampaignFinale();
+        else toast(cycleCompleted ? zones[zoneId].name + ' · получен Осколок пламени' : zones[zoneId].name);
       }, 120);
     }
     requestAnimationFrame(tick);
+  }
+  function campaignComplete() {
+    return Number(player.progression?.completedCycles) > 0;
+  }
+  function openCampaignFinale() {
+    openModal('Кампания завершена', `<article class="card campaignFinale"><h3>Осколок Aethernfall очищен</h3><p>Матриарх чащи повержен, Страж руин пал, а Пепельный хранитель больше не удерживает разлом. Ари вернулась в Туманный лес с Осколком пламени — путь трёх земель завершён.</p><p class="note">Кампания пройдена. Можно продолжить исследование, завершить поручения и собрать другой build.</p></article><button class="btn" id="campaignContinue">Продолжить игру</button>`);
+    bindTap($('campaignContinue'), closeModal);
   }
   let previousModalFocus = null;
   function modalFocusable() {
@@ -2563,6 +2737,69 @@
     } else if (!event.shiftKey && document.activeElement === last) {
       event.preventDefault();
       first.focus();
+    }
+  });
+  const KEYBOARD_DIRECTIONS = Object.freeze({
+    KeyW: [0, -1], ArrowUp: [0, -1],
+    KeyS: [0, 1], ArrowDown: [0, 1],
+    KeyA: [-1, 0], ArrowLeft: [-1, 0],
+    KeyD: [1, 0], ArrowRight: [1, 0]
+  });
+  function keyboardTargetIsEditable(target) {
+    const tag = String(target?.tagName || '').toUpperCase();
+    return target?.isContentEditable === true || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+  }
+  function movementAxes() {
+    let x = joy.x, y = joy.y;
+    for (const code of keyboardDirections) {
+      const direction = KEYBOARD_DIRECTIONS[code];
+      if (direction) { x += direction[0]; y += direction[1]; }
+    }
+    const magnitude = Math.hypot(x, y);
+    return magnitude > 1 ? { x:x / magnitude, y:y / magnitude } : { x, y };
+  }
+  document.addEventListener('keydown', event => {
+    if (keyboardTargetIsEditable(event.target) || !ui.modal.classList.contains('hidden')) return;
+    if (KEYBOARD_DIRECTIONS[event.code]) {
+      event.preventDefault();
+      keyboardDirections.add(event.code);
+      return;
+    }
+    if (event.code === 'KeyF') {
+      event.preventDefault();
+      if (!isPaused() && player.stamina > 0) {
+        keyboardBlock = true;
+        player.blocking = true;
+        noteTutorial('defend');
+        ui.blockBtn?.classList.add('pressed');
+      }
+      return;
+    }
+    if (event.repeat) return;
+    const action = {
+      Space: attack,
+      ShiftLeft: dodge,
+      ShiftRight: dodge,
+      KeyE: interact,
+      KeyQ: () => useSupply(),
+      Digit1: () => skill(1),
+      Digit2: () => skill(2),
+      Digit3: () => skill(3),
+      KeyI: openInventory,
+      KeyJ: openQuests,
+      KeyM: openMenu
+    }[event.code];
+    if (!action) return;
+    event.preventDefault();
+    action();
+  });
+  document.addEventListener('keyup', event => {
+    if (KEYBOARD_DIRECTIONS[event.code]) keyboardDirections.delete(event.code);
+    if (event.code !== 'KeyF') return;
+    keyboardBlock = false;
+    if (blockPointer === null) {
+      player.blocking = false;
+      ui.blockBtn?.classList.remove('pressed');
     }
   });
   function openInventory() {
@@ -3039,6 +3276,7 @@
         if (isPaused() || player.stamina <= 0 || blockPointer !== null) return;
         blockPointer = e.pointerId;
         player.blocking = true;
+        noteTutorial('defend');
         btn.classList.add('pressed');
         capture(btn, e.pointerId);
       }, {
@@ -3047,8 +3285,8 @@
       const release = e => {
         if (e.pointerId !== blockPointer) return;
         blockPointer = null;
-        player.blocking = false;
-        btn.classList.remove('pressed');
+        player.blocking = keyboardBlock;
+        btn.classList.toggle('pressed', keyboardBlock);
       };
       ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => btn.addEventListener(ev, release, {
         passive: false
@@ -3096,7 +3334,7 @@
           e.patrolT = 0;
           e.dir += (rng(Math.floor(time * 3) + Math.floor(e.x) + Math.floor(e.y)) - .5) * 0.9;
         }
-        const speed = e.type === 'guardian' ? 12 : 18;
+        const speed = isBoss(e) ? 12 : 18;
         if (Math.hypot(e.x - e.homeX, e.y - e.homeY) > 70) e.dir = Math.atan2(e.homeY - e.y, e.homeX - e.x);
         moveActor(e, Math.cos(e.dir) * speed * dt, Math.sin(e.dir) * speed * dt);
       }
@@ -3113,7 +3351,9 @@
     applyCombatState(combatTick.state);
     if (combatTick.exhausted) cancelBlock();
     for (const effect of combatTick.effects) if (effect.type === 'executeBufferedAttack') beginPlayerAttack();
-    const moving = Math.hypot(joy.x, joy.y) > .06;
+    const movement = movementAxes();
+    const moving = Math.hypot(movement.x, movement.y) > .06;
+    if (moving) noteTutorial('move');
     const dodgeUntil = Number.isFinite(player.dodgeUntil) ? player.dodgeUntil : 0;
     player.dodgeUntil = dodgeUntil;
     const speed = player.speed * (player.blocking ? .58 : 1) * (player.dodgeUntil > time ? .9 : 1);
@@ -3124,8 +3364,8 @@
     }
     const walkStep = dt - dashStep;
     if (moving && time >= dodgeUntil && walkStep > 0) {
-      moveActor(player, joy.x * speed * walkStep, joy.y * speed * walkStep);
-      player.dir = Math.atan2(joy.y, joy.x);
+      moveActor(player, movement.x * speed * walkStep, movement.y * speed * walkStep);
+      player.dir = Math.atan2(movement.y, movement.x);
     }
     updateEnemies(dt);
     updateProjectiles(dt);
@@ -3134,14 +3374,16 @@
     flushImpactFeedback();
   }
   function enemyDetectionRange(e) {
+    if (isBoss(e) && e?.type !== 'guardian') return 260;
     return e?.type === 'marksman' ? 420 : 220;
   }
   function enemyActivationHomeRange(e) {
+    if (isBoss(e) && e?.type !== 'guardian') return 340;
     return e?.type === 'marksman' ? 420 : 300;
   }
   function enemyDisengageDistance(e) {
     if (e?.type === 'marksman') return 520;
-    if (e?.type === 'guardian') return 480;
+    if (isBoss(e)) return 480;
     return 440;
   }
   function marksmanDistanceIntent(distance, phase = '') {
@@ -3152,15 +3394,12 @@
     if (distance <= 460) return phase === 'recovery' ? 'approach' : 'far';
     return 'approach';
   }
-  const GUARDIAN_SEQUENCES = Object.freeze({
-    1: Object.freeze(['slam', 'bolt', 'wave']),
-    2: Object.freeze(['bolt', 'slam', 'wave', 'slam'])
-  });
-  const GUARDIAN_PROFILES = Object.freeze({
-    slam: Object.freeze({ attack: 'slam', damage: 26, windup: .75, recovery1: .85, recovery2: .68, startRange: 125 }),
-    bolt: Object.freeze({ attack: 'bolt', damage: 24, windup: .70, recovery1: .90, recovery2: .72, startRange: 460 }),
-    wave: Object.freeze({ attack: 'wave', damage: 22, windup: .95, recovery1: 1.00, recovery2: .80, startRange: 300 })
-  });
+  const GUARDIAN_SEQUENCES = BOSS_DEFINITIONS.guardian.sequences;
+  const GUARDIAN_PROFILES = BOSS_DEFINITIONS.guardian.profiles;
+  function bossSequence(type, phase = 1) {
+    const definition = bossDefinition(type) || BOSS_DEFINITIONS.guardian;
+    return definition.sequences[phase === 2 ? 2 : 1];
+  }
   function guardianSequence(phase = 1) {
     return GUARDIAN_SEQUENCES[phase === 2 ? 2 : 1];
   }
@@ -3173,6 +3412,16 @@
     const base = GUARDIAN_PROFILES[attack] || GUARDIAN_PROFILES.slam;
     return { attack: base.attack, damage: base.damage, windup: base.windup, recovery: phase === 2 ? base.recovery2 : base.recovery1, startRange: base.startRange };
   }
+  function bossAttackProfile(type, attack, phase = 1) {
+    const definition = bossDefinition(type) || BOSS_DEFINITIONS.guardian;
+    const base = definition.profiles[attack] || definition.profiles.slam;
+    return { attack:base.attack, damage:base.damage, windup:base.windup, recovery:phase === 2 ? base.recovery2 : base.recovery1, startRange:base.startRange };
+  }
+  function bossNextAttack(e) {
+    const sequence = bossSequence(e?.type, e?.bossPhase);
+    const step = Math.max(0, Math.floor(Number(e?.bossSequenceStep) || 0));
+    return sequence[step % sequence.length];
+  }
   function guardianNextAttack(e) {
     const seq = guardianSequence(e?.bossPhase);
     const step = Math.max(0, Math.floor(Number(e?.bossSequenceStep) || 0));
@@ -3181,6 +3430,11 @@
   function guardianAttackEligible(e, attack, distance, hasLos) {
     if (!e || e.type !== 'guardian' || !hasLos) return false;
     const profile = guardianAttackProfile(attack, e.bossPhase);
+    return Number.isFinite(distance) && distance <= profile.startRange;
+  }
+  function bossAttackEligible(e, attack, distance, hasLos) {
+    if (!isBoss(e) || !hasLos) return false;
+    const profile = bossAttackProfile(e.type, attack, e.bossPhase);
     return Number.isFinite(distance) && distance <= profile.startRange;
   }
   function guardianAttackDamage(e, baseDamage) {
@@ -3201,7 +3455,7 @@
     e.bossPhasePending = false;
   }
   function triggerGuardianPhase(e) {
-    if (!e || e.type !== 'guardian' || e.hp <= 0 || e.bossPhase === 2 || guardianPhaseForHp(e.hp, e.maxHp) !== 2) return false;
+    if (!isBoss(e) || e.hp <= 0 || e.bossPhase === 2 || guardianPhaseForHp(e.hp, e.maxHp) !== 2) return false;
     e.bossPhase = 2;
     e.bossPhaseTransitioned = true;
     e.bossPhaseTransitionSerial = (Number(e.bossPhaseTransitionSerial) || 0) + 1;
@@ -3211,7 +3465,7 @@
     return true;
   }
   function resetGuardianEncounter(e) {
-    if (!e || e.type !== 'guardian') return;
+    if (!isBoss(e)) return;
     e.hp = e.maxHp;
     e.bossPhase = 1;
     e.bossSequenceStep = 0;
@@ -3224,7 +3478,7 @@
   }
   function startGuardianAttack(e, attack) {
     const phase = e.bossPhase === 2 ? 2 : 1;
-    const profile = guardianAttackProfile(attack, phase);
+    const profile = bossAttackProfile(e.type, attack, phase);
     e.bossAttack = attack;
     e.attackBossPhase = phase;
     e.attackWindup = profile.windup;
@@ -3236,7 +3490,7 @@
   }
   function advanceGuardianSequence(e) {
     if (e.bossPhasePending || e.bossPhase !== e.attackBossPhase) return;
-    const seq = guardianSequence(e.attackBossPhase);
+    const seq = bossSequence(e.type, e.attackBossPhase);
     e.bossSequenceStep = (Math.max(0, Math.floor(Number(e.bossSequenceStep) || 0)) + 1) % seq.length;
   }
   function finishGuardianRecovery(e) {
@@ -3251,9 +3505,9 @@
   }
   function enemyAttackTiming(e) {
     if (e.type === 'marksman') return { windup: .55, recovery: 1.15 };
-    if (e.type === 'guardian') {
+    if (isBoss(e)) {
       if (e.attackPhase && Number.isFinite(e.attackWindup) && Number.isFinite(e.attackRecovery)) return { windup: e.attackWindup, recovery: e.attackRecovery };
-      const profile = guardianAttackProfile(guardianNextAttack(e), e.bossPhase);
+      const profile = bossAttackProfile(e.type, bossNextAttack(e), e.bossPhase);
       return { windup: profile.windup, recovery: profile.recovery };
     }
     const windup = e.type === 'boar' ? .30 : .35;
@@ -3352,14 +3606,14 @@
   function resolveGuardianSlam(e) {
     if (!e || e.hp <= 0 || e.aiState !== 'chase') return false;
     if (dist(player, e) > 115) return false;
-    const impact = applyIncomingCombatImpact({ damage: guardianAttackDamage(e, 26), sourceX: e.x, sourceY: e.y });
+    const impact = applyIncomingCombatImpact({ damage: guardianAttackDamage(e, bossAttackProfile(e.type, 'slam', e.attackBossPhase).damage), sourceX: e.x, sourceY: e.y });
     return !!impact?.valid && !impact.avoided;
   }
   function resolveGuardianWave(e) {
     if (!e || e.hp <= 0 || e.aiState !== 'chase') return false;
     const d = dist(player, e);
     if (d < 140 || d > 260) return false;
-    const impact = applyIncomingCombatImpact({ damage: guardianAttackDamage(e, 22), sourceX: e.x, sourceY: e.y });
+    const impact = applyIncomingCombatImpact({ damage: guardianAttackDamage(e, bossAttackProfile(e.type, 'wave', e.attackBossPhase).damage), sourceX: e.x, sourceY: e.y });
     return !!impact?.valid && !impact.avoided;
   }
   function releaseGuardianBolt(e) {
@@ -3368,16 +3622,16 @@
     const nx = dx / len, ny = dy / len;
     projectiles.push({
       owner: 'enemy',
-      style: 'guardianBolt',
+      style: e.type === 'guardian' ? 'guardianBolt' : 'bossBolt',
       x: e.x + nx * (e.r + 12),
       y: e.y + ny * (e.r + 12),
       vx: nx * 220,
       vy: ny * 220,
-      damage: guardianAttackDamage(e, 24),
+      damage: guardianAttackDamage(e, bossAttackProfile(e.type, 'bolt', e.attackBossPhase).damage),
       life: 2.4,
       r: 9,
       collisionPad: 11,
-      color: '#c99be8'
+      color: bossDefinition(e)?.accent || '#c99be8'
     });
     return true;
   }
@@ -3403,13 +3657,13 @@
       const playerFromHome = Math.hypot(player.x - e.homeX, player.y - e.homeY);
       if (e.aiState === 'chase' && (d > enemyDisengageDistance(e) || homeDistance > 420 || playerFromHome > 480)) {
         e.aiState = 'return';
-        if (e.type === 'guardian') {
+        if (isBoss(e)) {
           resetGuardianAttack(e);
           settleGuardianPhasePending(e);
         } else e.attackPhase = '';
       }
       if (e.aiState === 'return') {
-        if (e.type === 'guardian') {
+        if (isBoss(e)) {
           resetGuardianAttack(e);
           const canReaggro = d < enemyDetectionRange(e) && playerFromHome < enemyActivationHomeRange(e) && (!physics || physics.clearLine(e.x, e.y, player.x, player.y, 2));
           if (canReaggro && homeDistance > 8) e.aiState = 'chase';
@@ -3434,12 +3688,12 @@
       if (e.aiState === 'idle' && d < enemyDetectionRange(e) && playerFromHome < enemyActivationHomeRange(e) && (!physics || physics.clearLine(e.x, e.y, player.x, player.y, 2))) e.aiState = 'chase';
       if (e.aiState !== 'chase') continue;
 
-      if (e.type === 'guardian') {
+      if (isBoss(e)) {
         triggerGuardianPhase(e);
         const currentDistance = dist(player, e);
         const hasLos = !physics || physics.clearLine(e.x, e.y, player.x, player.y, 2);
         if (e.attackPhase === 'windup') {
-          if (e.bossAttack === 'bolt' && (!hasLos || currentDistance > 460)) {
+          if (e.bossAttack === 'bolt' && (!hasLos || currentDistance > bossAttackProfile(e.type, 'bolt', e.bossPhase).startRange)) {
             resetGuardianAttack(e);
             settleGuardianPhasePending(e);
             continue;
@@ -3469,8 +3723,8 @@
             continue;
           }
         }
-        const attack = guardianNextAttack(e);
-        if (guardianAttackEligible(e, attack, currentDistance, hasLos) && e.cd <= 0) {
+        const attack = bossNextAttack(e);
+        if (bossAttackEligible(e, attack, currentDistance, hasLos) && e.cd <= 0) {
           startGuardianAttack(e, attack);
         } else {
           const a = Math.atan2(player.y - e.y, player.x - e.x);
@@ -3611,12 +3865,13 @@
     if (button.getAttribute('aria-label') !== view.ariaLabel) button.setAttribute('aria-label', view.ariaLabel);
   }
   function updateUI() {
+    updateTutorialUI();
     setWidth(ui.hp, player.hp / player.maxHp * 100 + '%');
-    const guardian = entities.find(e => e.kind === 'enemy' && e.type === 'guardian' && e.hp > 0 && e.aiState === 'chase');
+    const guardian = entities.find(e => e.kind === 'enemy' && isBoss(e) && e.hp > 0 && e.aiState === 'chase');
     const bossActive = !!guardian;
     ui.bossHud?.classList.toggle('hidden', !bossActive);
     if (bossActive) {
-      setText(ui.bossName, 'Guardian');
+      setText(ui.bossName, bossDefinition(guardian)?.name || 'Guardian');
       setText(ui.bossPhase, guardian.bossPhase === 2 ? 'II' : 'I');
       setText(ui.bossHpText, `${Math.ceil(guardian.hp)} / ${Math.ceil(guardian.maxHp)}`);
       setWidth(ui.bossHpFill, clamp(guardian.hp / guardian.maxHp * 100, 0, 100) + '%');
@@ -4029,10 +4284,11 @@
     ctx.restore();
   }
   function drawEntity(e) {
-    const artType = e.type === 'marksman' ? 'raider' : e.type;
+    const boss = bossDefinition(e);
+    const artType = boss?.artType || (e.type === 'marksman' ? 'raider' : e.type);
     if (art?.has(artType)) {
       const p = screenPos(e.x, e.y),
-        height = e.type === 'guardian' ? 122 : e.type === 'boar' ? 54 : 80;
+        height = boss?.height || (e.type === 'boar' ? 54 : 80);
       groundShadow(p.x, p.y + 14, e.r * 1.15);
       ctx.save();
       ctx.globalAlpha = e.hp <= 0 ? clamp((e._corpseUntil - time) / .75, 0, 1) * .5 : e.hit > 0 ? .65 : 1;
@@ -4056,21 +4312,21 @@
         ctx.stroke();
         ctx.restore();
       }
-      if (e.type === 'guardian' && e.hp > 0 && e.bossPhase === 2) {
+      if (boss && e.hp > 0 && e.bossPhase === 2) {
         ctx.save();
         ctx.globalAlpha = reduceMotion ? .62 : .52 + Math.sin(time * 4) * .08;
-        ctx.strokeStyle = '#d5a6ef';
+        ctx.strokeStyle = boss.accent;
         ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.arc(p.x, p.y + 4, e.r + 11, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
       }
-      if (e.hp > 0 && !(e.type === 'guardian' && e.aiState === 'chase')) {
+      if (e.hp > 0 && !(boss && e.aiState === 'chase')) {
         const width = e.r * 2.1;
         ctx.fillStyle = '#111b19';
         ctx.fillRect(p.x - width / 2, p.y - height + 10, width, 5);
-        ctx.fillStyle = e.type === 'guardian' ? '#d5b077' : e.type === 'marksman' ? '#d5aa68' : '#dc7772';
+        ctx.fillStyle = boss?.accent || (e.type === 'marksman' ? '#d5aa68' : '#dc7772');
         ctx.fillRect(p.x - width / 2, p.y - height + 10, width * clamp(e.hp / e.maxHp, 0, 1), 5);
       }
       return;
@@ -4088,7 +4344,7 @@
       ctx.scale(1, .45);
       ctx.rotate(.25);
     }
-    ctx.fillStyle = e.type === 'guardian' ? '#76588a' : e.type === 'raider' ? '#9c4d56' : '#6b4d38';
+    ctx.fillStyle = boss?.accent || (e.type === 'raider' ? '#9c4d56' : '#6b4d38');
     ctx.beginPath();
     ctx.arc(0, 0, e.r, 0, Math.PI * 2);
     ctx.fill();
@@ -4096,7 +4352,7 @@
     ctx.beginPath();
     ctx.arc(0, -e.r * .82, e.r * .45, 0, Math.PI * 2);
     ctx.fill();
-    if (e.type === 'guardian') {
+    if (boss) {
       ctx.strokeStyle = '#d7b56b';
       ctx.lineWidth = 5;
       ctx.beginPath();
@@ -4107,18 +4363,18 @@
       ctx.fillStyle = '#161d1b';
       ctx.fillRect(-e.r * .45, -e.r * .92, e.r * .9, 4);
     }
-    if (e.type === 'guardian' && e.hp > 0 && e.bossPhase === 2) {
-      ctx.strokeStyle = '#d5a6ef';
+    if (boss && e.hp > 0 && e.bossPhase === 2) {
+      ctx.strokeStyle = boss.accent;
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.arc(0, 3, e.r + 11, 0, Math.PI * 2);
       ctx.stroke();
     }
-    if (!(e.type === 'guardian' && e.aiState === 'chase')) {
+    if (!(boss && e.aiState === 'chase')) {
       const hpw = e.r * 2.1;
       ctx.fillStyle = 'rgba(0,0,0,.48)';
       ctx.fillRect(-hpw / 2, -e.r - 15, hpw, 4);
-      ctx.fillStyle = e.type === 'guardian' ? '#d8a1e8' : '#df6f73';
+      ctx.fillStyle = boss?.accent || '#df6f73';
       ctx.fillRect(-hpw / 2, -e.r - 15, hpw * Math.max(0, e.hp / e.maxHp), 4);
     }
     ctx.restore();
@@ -4571,19 +4827,20 @@
       if (e.attackPhase === 'windup') {
         const progress = phaseProgress(time - Number(e.attackStartedAt), Number(e.attackWindup)),
           end = start + Math.PI * 2 * progress;
-        if (e.type === 'guardian') {
+        if (isBoss(e)) {
+          const boss = bossDefinition(e);
           ctx.save();
           if (e.bossAttack === 'bolt') {
             const target = screenPos(player.x, player.y), sourceRadius = e.r + 7, timingRadius = e.r + 14;
             ctx.globalAlpha = .78;
-            ctx.strokeStyle = 'rgba(201,155,232,.82)';
+            ctx.strokeStyle = boss.accent;
             ctx.lineWidth = 2.5;
             ctx.beginPath();
             ctx.moveTo(s.x, s.y);
             ctx.lineTo(target.x, target.y);
             ctx.stroke();
             ctx.globalAlpha = 1;
-            ctx.strokeStyle = 'rgba(201,155,232,.92)';
+            ctx.strokeStyle = boss.accent;
             ctx.lineWidth = 2.5;
             ctx.beginPath();
             ctx.arc(s.x, s.y, sourceRadius, 0, Math.PI * 2);
@@ -4596,14 +4853,14 @@
           } else if (e.bossAttack === 'wave') {
             if (profile.detail > 0) {
               ctx.globalAlpha = .08 + progress * .06;
-              ctx.strokeStyle = 'rgba(201,155,232,.45)';
+              ctx.strokeStyle = boss.accent;
               ctx.lineWidth = 120;
               ctx.beginPath();
               ctx.arc(s.x, s.y, 200, 0, Math.PI * 2);
               ctx.stroke();
             }
             ctx.globalAlpha = 1;
-            ctx.strokeStyle = 'rgba(201,155,232,.80)';
+            ctx.strokeStyle = boss.accent;
             ctx.lineWidth = 2.5;
             ctx.beginPath(); ctx.arc(s.x, s.y, 140, 0, Math.PI * 2); ctx.stroke();
             ctx.beginPath(); ctx.arc(s.x, s.y, 260, 0, Math.PI * 2); ctx.stroke();
@@ -4614,11 +4871,11 @@
             const dangerRadius = 115;
             if (profile.detail > 0) {
               ctx.globalAlpha = .07 + progress * .07;
-              ctx.fillStyle = '#c99be8';
+              ctx.fillStyle = boss.accent;
               ctx.beginPath(); ctx.arc(s.x, s.y, dangerRadius, 0, Math.PI * 2); ctx.fill();
             }
             ctx.globalAlpha = 1;
-            ctx.strokeStyle = 'rgba(201,155,232,.78)';
+            ctx.strokeStyle = boss.accent;
             ctx.lineWidth = 2.5;
             ctx.beginPath(); ctx.arc(s.x, s.y, dangerRadius, 0, Math.PI * 2); ctx.stroke();
             ctx.strokeStyle = 'rgba(240,205,255,.98)';
@@ -4783,7 +5040,7 @@
     }
     for (const e of entities) {
       if (e.hp <= 0 || e.kind === 'resource') continue;
-      mctx.fillStyle = e.type === 'guardian' ? '#d29ae7' : '#ca6a6e';
+      mctx.fillStyle = isBoss(e) ? bossDefinition(e).accent : '#ca6a6e';
       mctx.fillRect(e.x / WORLD.w * 240, e.y / WORLD.h * 240, 2.5, 2.5);
     }
     mctx.fillStyle = '#e6c874';
@@ -4983,6 +5240,13 @@
       }),
       persistence: { codecActive: true },
       build: { engineActive: Boolean(buildEngine), profile: () => buildProfile },
+      world: {
+        engineActive:Boolean(worldEngine),
+        identity:id => worldEngine.identity(id),
+        enemyPlan:id => worldEngine.enemyPlan(id),
+        resourcePlan:id => worldEngine.resourcePlan(id),
+        eventPlan:id => worldEngine.eventPlan(id),
+      },
       recoveryCopies: () => [...testStorage.entries()].filter(([key]) => key.startsWith(RECOVERY_PREFIX)),
       saveHealth: () => ({ dirty: saveDirty, blockedReason: saveBlockedReason, revision: saveRevision }),
       storage,
@@ -5026,6 +5290,13 @@
       buildSummaryView,
       openCustomization,
       openCamp,
+      openTraining,
+      tutorialProgress,
+      noteTutorial,
+      campaignComplete,
+      openCampaignFinale,
+      unlockedZones,
+      fastTravel,
       acceptContract,
       claimContract,
       applyContractEvent,
@@ -5074,6 +5345,10 @@
       enemyDisengageDistance: enemy => enemyDisengageDistance(enemy),
       marksmanDistanceIntent: (distance, phase = '') => marksmanDistanceIntent(distance, phase),
       guardianSequence: phase => guardianSequence(phase),
+      bossSequence,
+      bossAttackProfile,
+      bossDefinition,
+      isBoss,
       guardianPhaseForHp: (hp, maxHp) => guardianPhaseForHp(hp, maxHp),
       guardianAttackProfile: (attack, phase) => guardianAttackProfile(attack, phase),
       guardianAttackDamage: (enemy, baseDamage) => guardianAttackDamage(enemy, baseDamage),
@@ -5098,7 +5373,7 @@
       RUNES,
       COSMETICS,
       player,
-      setZone: id => { if (Object.hasOwn(zones, id)) { zoneId = id; audio.setZone(zoneId); resetZone(); updateUI(); return true; } return false; },
+      setZone: id => { if (Object.hasOwn(zones, id)) { zoneId = id; markZoneVisited(zoneId); audio.setZone(zoneId); resetZone(); updateUI(); return true; } return false; },
       setFps: f => {
         settings.fps = FPS.includes(Number(f)) ? Number(f) : 60;
         resetFrameLimiter();
@@ -5133,4 +5408,3 @@
   } else boot();
   if (!globalThis.__AETHER_TEST__) registerPWA();
 })();
-
