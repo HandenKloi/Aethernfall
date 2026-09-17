@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <symbol id="attack" viewBox="0 0 24 24"><path d="M5 19 19 5m-5-1 6 1-1 6M4 14l6 6m-8 1 4-4"/></symbol>
+  <symbol id="block" viewBox="0 0 24 24"><path d="M12 2 20 6v6c0 5-3.3 8.6-8 10-4.7-1.4-8-5-8-10V6l8-4Z"/><path d="M12 6v12"/></symbol>
+  <symbol id="perfect-block" viewBox="0 0 24 24"><path d="M12 2 20 6v6c0 5-3.3 8.6-8 10-4.7-1.4-8-5-8-10V6l8-4Z"/><path d="m8 12 3 3 5-7M3 3l2 2m16-2-2 2"/></symbol>
+  <symbol id="dodge" viewBox="0 0 24 24"><path d="M3 12h11m-4-4 4 4-4 4M16 6c3 1 5 3 5 6s-2 5-5 6"/><path d="M4 7h3M2 17h5"/></symbol>
+  <symbol id="interact" viewBox="0 0 24 24"><path d="M7 11V7a2 2 0 0 1 4 0v3-5a2 2 0 0 1 4 0v5-3a2 2 0 0 1 4 0v7c0 5-3 8-8 8-3 0-5-2-7-5l-2-3a2 2 0 0 1 3-3l2 2"/></symbol>
+  <symbol id="supply" viewBox="0 0 24 24"><path d="M9 2h6v4l3 4v9a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3v-9l3-4V2Z"/><path d="M8 13h8m-4-3v6m-3-14h6"/></symbol>
+  <symbol id="wind-slash" viewBox="0 0 24 24"><path d="M3 8h11c3 0 3-4 0-4-2 0-3 1-3 2M2 12h17c4 0 4 6 0 6-2 0-3-1-3-3M4 16h7"/></symbol>
+  <symbol id="triple-pulse" viewBox="0 0 24 24"><circle cx="6" cy="12" r="3"/><circle cx="12" cy="12" r="3"/><circle cx="18" cy="12" r="3"/><path d="M3 5c5-3 13-3 18 0M3 19c5 3 13 3 18 0"/></symbol>
+  <symbol id="second-wind" viewBox="0 0 24 24"><path d="M12 22c-5-3-8-6-8-11a4 4 0 0 1 7-3 4 4 0 0 1 7-3c3 0 4 3 4 6 0 5-4 8-10 11Z"/><path d="M8 13h3l1-3 2 6 1-3h3"/></symbol>
+</svg>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <symbol id="camp" viewBox="0 0 24 24"><path d="M3 20h18L12 3 3 20Z"/><path d="M12 3v17m-4 0 4-6 4 6"/></symbol>
+  <symbol id="npc" viewBox="0 0 24 24"><circle cx="12" cy="7" r="4"/><path d="M4 21c1-6 4-9 8-9s7 3 8 9"/><path d="M18 4h3v5"/></symbol>
+  <symbol id="portal" viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="7" ry="10"/><ellipse cx="12" cy="12" rx="3" ry="6"/><path d="M9 12h6"/></symbol>
+  <symbol id="boss" viewBox="0 0 24 24"><path d="m4 8 4 2 4-7 4 7 4-2-2 12H6L4 8Z"/><path d="M8 15h8m-6-3h.01m4 0h.01"/></symbol>
+  <symbol id="shrine" viewBox="0 0 24 24"><path d="M5 21h14M8 21V9h8v12M6 9h12L12 3 6 9Z"/><path d="M12 12v5"/></symbol>
+  <symbol id="mine" viewBox="0 0 24 24"><path d="M3 21h18L18 9a7 7 0 0 0-12 0L3 21Z"/><path d="M8 21v-7h8v7M5 7l4 3m10-3-4 3"/></symbol>
+  <symbol id="ruin" viewBox="0 0 24 24"><path d="M4 21V7h4v5h4V4h4v8h4v9H4Z"/><path d="M2 21h20M7 16h2m6 0h2"/></symbol>
+  <symbol id="outpost" viewBox="0 0 24 24"><path d="M4 21V8l4-3 4 3 4-3 4 3v13H4Z"/><path d="M8 5V2m8 3V2M9 21v-6h6v6"/></symbol>
+  <symbol id="undiscovered" viewBox="0 0 24 24"><path d="M7 8a5 5 0 0 1 10 1c0 4-5 4-5 8"/><circle cx="12" cy="21" r="1" fill="currentColor" stroke="none"/><path d="M4 4 2 2m18 2 2-2"/></symbol>
+</svg>

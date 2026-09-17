@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <symbol id="rest" viewBox="0 0 24 24"><path d="M3 19h18M5 19v-8h4c3 0 5 2 5 5v3M14 13h5a2 2 0 0 1 2 2v4"/><circle cx="8" cy="7" r="2"/></symbol>
+  <symbol id="contracts" viewBox="0 0 24 24"><path d="M6 3h12v18H6zM9 3V1m6 2V1M9 8h6m-6 4h6m-6 4h4"/><path d="m4 6-2 2 2 2"/></symbol>
+  <symbol id="craft" viewBox="0 0 24 24"><path d="m4 20 7-7M9 5l10 10-4 4L5 9 9 5Z"/><path d="m13 7 4-4 4 4-4 4"/></symbol>
+  <symbol id="merchant" viewBox="0 0 24 24"><path d="M4 9h16l-1 12H5L4 9Z"/><path d="m3 9 2-6h14l2 6M8 13h8M9 17h6"/></symbol>
+  <symbol id="equipment" viewBox="0 0 24 24"><path d="M6 3h4l2 3 2-3h4l3 5-4 3v10H7V11L3 8l3-5Z"/><path d="M9 14h6"/></symbol>
+  <symbol id="runes" viewBox="0 0 24 24"><path d="m12 2 8 5v10l-8 5-8-5V7l8-5Z"/><path d="m8 16 4-9 4 9m-7-3h6"/></symbol>
+  <symbol id="training" viewBox="0 0 24 24"><path d="m5 19 14-14m-9-2 11 11M3 10l4 4m-5 5 3 3m14-3 3 3"/><path d="M15 3h6v6"/></symbol>
+  <symbol id="lore" viewBox="0 0 24 24"><path d="M4 4h6a4 4 0 0 1 4 4v13a4 4 0 0 0-4-4H4V4Zm16 0h-4a4 4 0 0 0-2 1"/><path d="M8 8h3M8 11h3"/></symbol>
+  <symbol id="gold" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 8h-4a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4H9m3-10v12"/></symbol>
+  <symbol id="wood" viewBox="0 0 24 24"><path d="M5 19 17 3l3 3L8 22l-3-3Z"/><path d="M8 16h7M10 13l4 4M14 7l3 3"/></symbol>
+  <symbol id="ore" viewBox="0 0 24 24"><path d="m3 15 4-9 9-3 5 7-3 9-10 2-5-6Z"/><path d="m7 6 5 5 4-8m-4 8 6 8"/></symbol>
+  <symbol id="herb" viewBox="0 0 24 24"><path d="M12 21V9M12 15c-5 0-8-3-8-8 5 0 8 3 8 8Zm0-4c0-5 3-8 8-8 0 5-3 8-8 8Z"/></symbol>
+  <symbol id="token" viewBox="0 0 24 24"><path d="m12 2 7 4v8l-7 8-7-8V6l7-4Z"/><circle cx="12" cy="10" r="3"/><path d="M9 16h6"/></symbol>
+  <symbol id="shard" viewBox="0 0 24 24"><path d="m12 2 6 7-3 13-6-4-3-9 6-7Z"/><path d="m12 2-1 9 4 11m-9-13 5 2 7-2"/></symbol>
+</svg>
