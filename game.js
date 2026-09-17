@@ -3,7 +3,7 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '5.1.1';
+  const BUILD_VERSION = '5.1.2';
   const SAVE_SCHEMA = 5;
   const BASE_STATS = Object.freeze({ startLevel: 6, damage: 32, maxHp: 240, maxStamina: 100, speed: 205, damagePerLevel: 3, hpPerLevel: 18 });
   const MAX_UPGRADE_RANK = 5;
@@ -615,6 +615,8 @@
     frostboundSeer:'boss.frostbound_seer', riftSovereign:'boss.rift_sovereign'
   });
   const NPC_VISUAL_IDS = Object.freeze({lyra:'npc.lyra',toren:'npc.toren',mira:'npc.mira'});
+  const LEGACY_NPC_VISUALS = Object.freeze({lyra:'raider',toren:'guardian',mira:'scout'});
+  const LEGACY_ENEMY_VISUALS = Object.freeze({raider:'raider',marksman:'scout',boar:'boar',boss:'guardian'});
   function visualForEnemy(zone, archetype) {
     return ENEMY_VISUAL_IDS[zone]?.[archetype] || '';
   }
@@ -4706,6 +4708,16 @@
       return;
     }
     const s = screenPos(z.scout.x, z.scout.y);
+    const legacyAngle = Math.atan2(player.y - z.scout.y, player.x - z.scout.x);
+    const legacyNpc = LEGACY_NPC_VISUALS[z.npcId];
+    if (legacyNpc && art?.has(legacyNpc)) {
+      groundShadow(s.x, s.y + 14, 22);
+      drawLegacyActor(LEGACY_NPC_VISUALS[z.npcId], s.x, s.y + 17, 86, {
+      moving:false, action:dist(player, z.scout) < 130 ? 'gather' : 'idle', progress:(Math.sin(time * 1.5) + 1) / 2,
+      flip:Math.cos(legacyAngle) < 0
+      });
+      return;
+    }
     ctx.save();
     ctx.translate(s.x, s.y);
     ctx.scale(1, .82);
@@ -4739,6 +4751,12 @@
   function actorDirection(angle) {
     const vertical = Math.sin(Number(angle) || 0);
     return vertical < -.3 ? 'back' : vertical > .3 ? 'front' : 'side';
+  }
+  function drawLegacyActor(name, x, y, height, options = {}) {
+    if (!name || !art?.has(name)) return false;
+    return art.actor(ctx, name, x, y, height, time, options.moving ? 1 : 0,
+      options.action || 'idle', Number.isFinite(options.progress) ? options.progress : 1,
+      !!options.flip, Number(options.death) || 0);
   }
   function enemyActorClip(e, boss, motion, progress, moving) {
     if (e.hp <= 0) return 'death';
@@ -4886,6 +4904,27 @@
       return;
     }
     const s = screenPos(e.x, e.y);
+    const legacyName = LEGACY_ENEMY_VISUALS[boss ? 'boss' : e.type];
+    const legacyMotion = motions.get(e);
+    const legacyProgress = legacyMotion ? clamp((time - legacyMotion.start) / legacyMotion.duration, 0, 1) : 1;
+    const legacyDeath = e.hp <= 0 ? clamp(1 - (e._corpseUntil - time) / .75, 0, 1) : 0;
+    if (legacyName && art?.has(legacyName)) {
+      const legacyHeight = boss?.height || (e.type === 'boar' ? 58 : 80);
+      groundShadow(s.x, s.y + 14, e.r * 1.15);
+      drawLegacyActor(legacyName, s.x, s.y + 17, legacyHeight, {
+        moving:e.hp > 0 && dist(player, e) > e.r + player.r + 8,
+        action:legacyProgress < 1 ? legacyMotion?.action : 'idle', progress:legacyProgress,
+        flip:Math.cos(e.hp > 0 ? Math.atan2(player.y - e.y, player.x - e.x) : Number(e.dir) || 0) < 0,
+        death:legacyDeath
+      });
+      if (e.hp > 0 && !(boss && e.aiState === 'chase')) {
+        const width=e.r*2.1;
+        ctx.fillStyle='#111b19'; ctx.fillRect(s.x-width/2,s.y-legacyHeight+10,width,5);
+        ctx.fillStyle=boss?.accent || (e.type === 'marksman' ? '#d5aa68' : '#dc7772');
+        ctx.fillRect(s.x-width/2,s.y-legacyHeight+10,width*clamp(e.hp/e.maxHp,0,1),5);
+      }
+      return;
+    }
     ctx.save();
     ctx.translate(s.x, s.y);
     ctx.scale(1, .82);
@@ -4963,6 +5002,20 @@
       return;
     }
     const s = screenPos(player.x, player.y);
+    const legacyMoving = Math.hypot(joy.x, joy.y) > .08;
+    const legacyMotion = motions.get(player);
+    const legacyProgress = legacyMotion ? clamp((time - legacyMotion.start) / legacyMotion.duration, 0, 1) : 1;
+    const legacyAction = legacyProgress < 1 ? legacyMotion.action : player.blocking ? 'block' : 'idle';
+    const legacyPlayerName = actorDirection(player.dir) === 'back' ? 'heroBack' : 'hero';
+    if (art?.has(legacyPlayerName) || art?.has('hero')) {
+      groundShadow(s.x, s.y + 15, 24);
+      const legacyOptions = { moving:legacyMoving, action:legacyAction, progress:legacyProgress,
+        flip:legacyPlayerName !== 'heroBack' && Math.cos(player.dir) < 0,
+        death:legacyAction === 'death' ? legacyProgress : 0 };
+      if (!drawLegacyActor(legacyPlayerName, s.x, s.y + 18, 88, legacyOptions))
+        drawLegacyActor('hero', s.x, s.y + 18, 88, legacyOptions);
+      return;
+    }
     ctx.save();
     ctx.translate(s.x, s.y);
     ctx.scale(1, .82);
