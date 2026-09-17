@@ -1,6 +1,6 @@
 "use strict";
 
-/* Aethernfall 5.1.0 — immutable world visual registry. */
+/* Aethernfall 5.1.1 — immutable world visual registry. */
 (() => {
   'use strict';
   const PORTAL_STATES = Object.freeze(['locked','charging','open','transition','completed']);

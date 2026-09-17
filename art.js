@@ -1,6 +1,6 @@
 "use strict";
 
-/* Aethernfall 5.1.0 — directional actors and cached zone-material frames. */
+/* Aethernfall 5.1.1 — directional actors and cached zone-material frames. */
 (() => {
   'use strict';
 
@@ -247,8 +247,13 @@
     const key = `${entry.record.tier}:${name}:${index}`;
     if (zonePatternCache.has(key)) return zonePatternCache.get(key);
     const rect = frames[index], tile = document.createElement('canvas');
-    tile.width = rect[2]; tile.height = rect[3];
-    tile.getContext('2d', { alpha:false }).drawImage(entry.image, rect[0], rect[1], rect[2], rect[3], 0, 0, rect[2], rect[3]);
+    // A stable world-space macro tile keeps Low and Auto visually painterly.
+    // The authored frame is already edge-safe, so no mirror symmetry is added.
+    const size = 384;
+    tile.width = size; tile.height = size;
+    const c = tile.getContext('2d', { alpha:false });
+    c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+    c.drawImage(entry.image, rect[0], rect[1], rect[2], rect[3], 0, 0, size, size);
     const pattern = ctx.createPattern(tile, 'repeat');
     zonePatternCache.set(key, pattern);
     return pattern;
@@ -301,12 +306,6 @@
     ctx.restore();
     return true;
   }
-  const accentMaskCache = new Map();
-  const EQUIPMENT_VISUALS = Object.freeze({
-    starterBlade:'equipment.weapon.starter_blade', dawnBlade:'equipment.weapon.dawn_blade',
-    starterArmor:'equipment.armor.starter', wardenArmor:'equipment.armor.warden', guardianArmor:'equipment.armor.guardian',
-    buckler:'equipment.offhand.buckler'
-  });
   function actorFrame(entry, direction = 'front') {
     const index = Math.max(0, entry.record.directions?.indexOf(direction) ?? 0);
     return entry.record.frames?.[index] || entry.record.rect;
@@ -319,18 +318,6 @@
     ctx.drawImage(entry.image, frame[0], frame[1], frame[2], frame[3], -width / 2, -height, width, height);
     ctx.restore();
     return true;
-  }
-  function tintedAccentMask(entry, direction, color) {
-    if (!entry || typeof document === 'undefined') return null;
-    const frame = actorFrame(entry, direction), key = `${entry.record.tier}:${direction}:${color}`;
-    if (accentMaskCache.has(key)) return accentMaskCache.get(key);
-    const canvas = document.createElement('canvas');
-    canvas.width = frame[2]; canvas.height = frame[3];
-    const c = canvas.getContext('2d', { alpha:true });
-    c.drawImage(entry.image, frame[0], frame[1], frame[2], frame[3], 0, 0, frame[2], frame[3]);
-    c.globalCompositeOperation = 'source-in'; c.fillStyle = color; c.fillRect(0, 0, frame[2], frame[3]);
-    accentMaskCache.set(key, canvas);
-    return canvas;
   }
   function clipTransform(clip, progress, t, moving) {
     const pulse = Math.sin(Math.PI * Math.min(1, progress));
@@ -381,18 +368,9 @@
     ctx.rotate(transform.rotation * (flip ? -1 : 1)); ctx.scale(transform.sx, transform.sy);
     bossAttachments(ctx, entry.record, height, clip, progress, options.phase2);
     drawActorFrame(ctx, entry, direction, height, false);
-    if (name === 'player.ranger') {
-      const equipment = options.equipment || {};
-      for (const item of [equipment.armor, equipment.weapon, equipment.offhand]) {
-        const layer = managedSource(EQUIPMENT_VISUALS[item]);
-        if (layer) drawActorFrame(ctx, layer, direction, height, false);
-      }
-      const mask = managedSource('player.ranger.accent_mask'), tinted = tintedAccentMask(mask, direction, options.accent || '#71d8c8');
-      if (tinted) {
-        const frame = actorFrame(mask, direction), width = height * frame[2] / frame[3];
-        ctx.drawImage(tinted, -width/2, -height, width, height);
-      }
-    }
+    // The painterly player master already contains coherent armor, cloth and
+    // weapon detail. The rejected 5.1.0 polygon equipment masks are intentionally not
+    // composited over it; equipment still affects gameplay and UI normally.
     if (entry.record.rig === 'marksman') marksmanAttachment(ctx, height, clip, progress);
     ctx.restore(); return true;
   }

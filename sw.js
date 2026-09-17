@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '5.1.0';
+const VERSION = '5.1.1';
 // Scope isolates caches of different GitHub Pages repositories on the same origin.
 const PREFIX = 'aethernfall:' + self.registration.scope + ':';
 const ASSET_TIER_PREFIX = 'aethernfall-assets:' + self.registration.scope;
