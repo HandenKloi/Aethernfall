@@ -307,7 +307,7 @@
         controlSize: options.controlSizes.includes(config.controlSize) ? config.controlSize : 'normal',
         questCollapsed: config.questCollapsed !== false,
         brightness: options.brightness.includes(Number(config.brightness)) ? Number(config.brightness) : 100,
-        uiScale: config.uiScale === 'large' ? 'large' : 'normal',
+        uiScale: options.uiScales.includes(config.uiScale) ? config.uiScale : 'normal',
         minimapSize: config.minimapSize === 'large' ? 'large' : 'normal',
         combatNumbers: config.combatNumbers !== false,
         haptics: config.haptics !== false,

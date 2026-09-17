@@ -8,9 +8,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#101817">
-<title>Aethernfall v5.0.0</title>
-<link rel="manifest" href="manifest.json?v=5.0.0">
-<link rel="stylesheet" href="style.css?v=5.0.0">
+<title>Aethernfall v5.1.0</title>
+<link rel="manifest" href="manifest.json?v=5.1.0">
+<link rel="stylesheet" href="style.css?v=5.1.0">
 <link rel="apple-touch-icon" href="assets/icon-192.png">
 <link rel="icon" href="assets/icon-192.png">
 <meta name="apple-mobile-web-app-title" content="Aethernfall">
@@ -30,15 +30,15 @@
 <b>Ari</b>
 <span id="levelText">Ур. 6</span>
 </div>
-<div class="bar hp">
+<div class="bar hp" role="progressbar" aria-label="Здоровье" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100">
 <span id="hpFill">
 </span>
 </div>
-<div class="bar stamina">
+<div class="bar stamina" role="progressbar" aria-label="Выносливость" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100">
 <span id="staminaFill">
 </span>
 </div>
-<div class="bar xp">
+<div class="bar xp" role="progressbar" aria-label="Опыт" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
 <span id="xpFill">
 </span>
 </div>
@@ -50,15 +50,15 @@
 <span id="objectiveText">Поговорите с разведчиком</span>
 </section>
 <div class="topActions">
-<button class="topBtn roundBtn" id="inventoryBtn" aria-label="Сумка" title="Сумка"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5V3h8v2M6 6q6-4 12 0l2 14H4zM5 11h14M8 14h8v4H8zM2 10v8M22 10v8"/></svg></button>
-<button class="topBtn roundBtn" id="questsBtn" aria-label="Задания" title="Задания"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h13q3 0 3 3h-6M6 4q-3 0-3 3v2h4M6 4v13q0 3 3 3h10q-3 0-3-3V7M9 8h4M9 11h4M9 14h4M6 17h10"/></svg></button>
-<button class="topBtn roundBtn" id="shopBtn" aria-label="Магазин" title="Магазин"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v11h16V10M3 10l2-7h14l2 7M3 10q3 4 6 0 3 4 6 0 3 4 6 0M9 21v-7h6v7"/></svg></button>
-<button class="topBtn roundBtn" id="menuBtn" aria-label="Меню" title="Меню"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+<button class="topBtn roundBtn" id="inventoryBtn" data-ui-icon-button aria-label="Сумка" title="Сумка"><span data-ui-icon="navigation:inventory"><span class="uiIconFallback">Сумка</span></span></button>
+<button class="topBtn roundBtn" id="questsBtn" data-ui-icon-button aria-label="Задания" title="Задания"><span data-ui-icon="navigation:quests"><span class="uiIconFallback">Задания</span></span></button>
+<button class="topBtn roundBtn" id="shopBtn" data-ui-icon-button aria-label="Магазин" title="Магазин"><span data-ui-icon="navigation:shop"><span class="uiIconFallback">Магазин</span></span></button>
+<button class="topBtn roundBtn" id="menuBtn" data-ui-icon-button aria-label="Меню" title="Меню"><span data-ui-icon="navigation:menu"><span class="uiIconFallback">Меню</span></span></button>
 </div>
 </header>
 <section id="bossHud" class="bossHud panel hidden" aria-live="polite">
   <div class="bossLine"><b id="bossName">Guardian</b><span>Phase <b id="bossPhase">I</b></span></div>
-  <div class="bossBar"><span id="bossHpFill"></span></div>
+  <div class="bossBar" role="progressbar" aria-label="Здоровье босса" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><span id="bossHpFill"></span></div>
   <div id="bossHpText" class="bossHpText">620 / 620</div>
 </section>
 <section id="questTracker" class="panel collapsed">
@@ -71,16 +71,16 @@
 <span id="zoneBadge">ЛЕС</span>
 </section>
 <div id="resourceHud" class="panel">
-<span>🌿 <b id="herbCount">0</b>
+<span><span data-ui-icon="camp:herb"><span class="uiIconFallback">Трава</span></span><b id="herbCount">0</b>
 </span>
-<span>🪵 <b id="woodCount">0</b>
+<span><span data-ui-icon="camp:wood"><span class="uiIconFallback">Дерево</span></span><b id="woodCount">0</b>
 </span>
-<span>⛏ <b id="oreCount">0</b>
+<span><span data-ui-icon="camp:ore"><span class="uiIconFallback">Руда</span></span><b id="oreCount">0</b>
 </span>
-<span>✦ <b id="goldCount">125</b>
+<span><span data-ui-icon="camp:gold"><span class="uiIconFallback">Золото</span></span><b id="goldCount">125</b>
 </span>
 </div>
-<div id="netPill" class="netPill">● OFFLINE</div>
+<div id="netPill" class="netPill"><span data-ui-icon="status:offline"><span class="uiIconFallback">Offline</span></span><span>OFFLINE</span></div>
 <button id="savePill" class="savePill hidden" type="button" aria-live="polite"></button>
 <div id="perfPill" class="perfPill hidden">
 <span id="perfPillFps">--</span> FPS · <span id="perfPillMs">--</span> ms</div>
@@ -95,39 +95,39 @@
 </div>
 </div>
 <div class="actions">
-<button id="supplyBtn" class="action supply" data-act="supply" aria-label="Использовать выбранный расходник"><span id="supplyLabel">ЗЕЛЬЕ · 0</span><b>⚗</b></button>
-<button id="actionUse" class="action use" data-act="use">
+<button id="supplyBtn" class="action supply" data-act="supply" data-ui-icon-button aria-label="Использовать выбранный расходник"><span id="supplyLabel">ЗЕЛЬЕ · 0</span><span class="actionIcon" data-ui-icon="actions:supply"><span class="uiIconFallback">Зелье</span></span></button>
+<button id="actionUse" class="action use" data-act="use" data-ui-icon-button aria-label="Взаимодействовать">
 <small id="actionLabel">ДЕЙСТВИЕ</small>
-<b>✦</b>
+<span class="actionIcon" data-ui-icon="actions:interact"><span class="uiIconFallback">Действие</span></span>
 </button>
-<button id="skill1Btn" class="action skill" data-act="skill1" aria-label="Разрез ветра">
+<button id="skill1Btn" class="action skill" data-act="skill1" data-ui-icon-button aria-label="Разрез ветра">
 <small>РАЗРЕЗ</small><span class="actionMeta" id="skill1Meta">20 EN</span>
-<b>Ⅰ</b>
+<span class="actionIcon" data-ui-icon="actions:wind-slash"><span class="uiIconFallback">Разрез</span></span>
 </button>
-<button id="skill2Btn" class="action skill" data-act="skill2" aria-label="Тройной импульс">
+<button id="skill2Btn" class="action skill" data-act="skill2" data-ui-icon-button aria-label="Тройной импульс">
 <small>ИМПУЛЬС</small><span class="actionMeta" id="skill2Meta">20 EN</span>
-<b>Ⅱ</b>
+<span class="actionIcon" data-ui-icon="actions:triple-pulse"><span class="uiIconFallback">Импульс</span></span>
 </button>
-<button id="skill3Btn" class="action skill" data-act="skill3" aria-label="Второе дыхание">
+<button id="skill3Btn" class="action skill" data-act="skill3" data-ui-icon-button aria-label="Второе дыхание">
 <small>ДЫХАНИЕ</small><span class="actionMeta" id="skill3Meta">20 EN</span>
-<b>Ⅲ</b>
+<span class="actionIcon" data-ui-icon="actions:second-wind"><span class="uiIconFallback">Дыхание</span></span>
 </button>
-<button id="blockBtn" class="action block" data-act="block">
+<button id="blockBtn" class="action block" data-act="block" data-ui-icon-button aria-label="Блок и парирование">
 <small>БЛОК</small>
-<b>◈</b>
+<span class="actionIcon" data-ui-icon="actions:block"><span class="uiIconFallback">Блок</span></span>
 </button>
-<button id="dodgeBtn" class="action dodge" data-act="dodge" aria-label="Уклонение">
+<button id="dodgeBtn" class="action dodge" data-act="dodge" data-ui-icon-button aria-label="Уклонение">
 <small>УКЛОН</small><span class="actionMeta" id="dodgeMeta">24 EN</span>
-<b>↝</b>
+<span class="actionIcon" data-ui-icon="actions:dodge"><span class="uiIconFallback">Уклон</span></span>
 </button>
-<button id="attackBtn" class="action attack" data-act="attack">
+<button id="attackBtn" class="action attack" data-act="attack" data-ui-icon-button aria-label="Атака">
 <small>АТАКА</small>
-<b>⚔</b>
+<span class="actionIcon" data-ui-icon="actions:attack"><span class="uiIconFallback">Атака</span></span>
 </button>
 </div>
 <div id="toast" role="status" aria-live="polite">
 </div>
-<button id="updateBtn" class="hidden">Обновить игру</button>
+<button id="updateBtn" class="hidden iconBtn" data-ui-icon-button aria-label="Обновить игру"><span data-ui-icon="status:update"><span class="uiIconFallback">Обновить</span></span><span>Обновить игру</span></button>
 
 <div id="modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
 <div class="modalCard panel">
@@ -136,7 +136,7 @@
 <span class="eyebrow">AETHERNFALL</span>
 <b id="modalTitle">Меню</b>
 </div>
-<button id="modalClose" aria-label="Закрыть">×</button>
+<button id="modalClose" data-ui-icon-button aria-label="Закрыть"><span data-ui-icon="navigation:close"><span class="uiIconFallback">Закрыть</span></span></button>
 </div>
 <div id="modalBody" class="modalBody">
 </div>
@@ -152,17 +152,21 @@
 </div>
 </div>
 </div>
-<script src="physics.js?v=5.0.0" defer></script>
-<script src="art.js?v=5.0.0" defer></script>
-<script src="audio.js?v=5.0.0" defer></script>
-<script src="persistence.js?v=5.0.0" defer></script>
-<script src="quests.js?v=5.0.0" defer></script>
-<script src="combat.js?v=5.0.0" defer></script>
-<script src="builds.js?v=5.0.0" defer></script>
-<script src="world.js?v=5.0.0" defer></script>
-<script src="arenas.js?v=5.0.0" defer></script>
-<script src="story.js?v=5.0.0" defer></script>
-<script src="game.js?v=5.0.0" defer>
+<script src="physics.js?v=5.1.0" defer></script>
+<script src="assets.js?v=5.1.0" defer></script>
+<script src="art.js?v=5.1.0" defer></script>
+<script src="audio.js?v=5.1.0" defer></script>
+<script src="persistence.js?v=5.1.0" defer></script>
+<script src="quests.js?v=5.1.0" defer></script>
+<script src="combat.js?v=5.1.0" defer></script>
+<script src="builds.js?v=5.1.0" defer></script>
+<script src="world.js?v=5.1.0" defer></script>
+<script src="zone-visuals.js?v=5.1.0" defer></script>
+<script src="arenas.js?v=5.1.0" defer></script>
+<script src="story.js?v=5.1.0" defer></script>
+<script src="ui-icons.js?v=5.1.0" defer></script>
+<script src="vfx.js?v=5.1.0" defer></script>
+<script src="game.js?v=5.1.0" defer>
 </script>
 <div id="perfMonitor" class="perfMonitor hidden" aria-live="polite">
   <div>

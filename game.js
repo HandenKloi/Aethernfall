@@ -3,7 +3,7 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '5.0.0';
+  const BUILD_VERSION = '5.1.0';
   const SAVE_SCHEMA = 5;
   const BASE_STATS = Object.freeze({ startLevel: 6, damage: 32, maxHp: 240, maxStamina: 100, speed: 205, damagePerLevel: 3, hpPerLevel: 18 });
   const MAX_UPGRADE_RANK = 5;
@@ -38,7 +38,12 @@
     secondWindCooldown: 8
   });
   const combatEngine = window.AetherCombat.createEngine(COMBAT_RULES);
+  const assetsApi = window.AetherAssets;
   const art = window.AetherArt;
+  const zoneVisuals = window.AetherZoneVisuals;
+  const uiIcons = window.AetherUIIcons;
+  const vfxEngine = window.AetherVfx;
+  let assetManager = null, assetReloadSerial = 0;
   const audio = window.AetherAudio || { unlock: async () => false, configure() {}, setZone() {}, setMode() {}, sfx() {}, speak() { return false; }, stopVoice() {}, suspend() {}, resume() {}, snapshot: () => ({ available: false, voiceAvailable:false }) };
   const storyApi = window.AetherStory;
   const storyEngine = storyApi?.createEngine({ npcs:storyApi.NPCS, nodes:storyApi.NODES, endings:storyApi.ENDINGS });
@@ -46,40 +51,40 @@
     emptyHand: {
       slot: 'offhand',
       name: 'Без щита',
-      icon: 'sword',
+      icon: 'emptyHand',
       build: { staminaRegenMultiplier: 1.10, dodgeStaminaCostMultiplier: .90, dodgeCooldownMultiplier: .92 }
     },
     buckler: {
       slot: 'offhand',
       name: 'Щит дозорного',
-      icon: 'shield',
+      icon: 'buckler',
       build: { blockIncomingMultiplier: .18, speedMultiplier: .98 }
     },
     starterBlade: {
       slot: 'weapon',
       name: 'Меч следопыта',
       damage: 0,
-      icon: 'sword'
+      icon: 'starterBlade'
     },
     dawnBlade: {
       slot: 'weapon',
       name: 'Клинок рассвета',
       damage: 15,
-      icon: 'sword',
+      icon: 'dawnBlade',
       build: { skillDamageMultiplier: 1.10, skillStaminaCostMultiplier: 1.20, staminaRegenMultiplier: .90 }
     },
     starterArmor: {
       slot: 'armor',
       name: 'Панцирь следопыта',
       health: 0,
-      icon: 'armor',
+      icon: 'starterArmor',
       build: { speedMultiplier: 1.06 }
     },
     wardenArmor: {
       slot: 'armor',
       name: 'Доспех хранителя',
       health: 40,
-      icon: 'armor',
+      icon: 'wardenArmor',
       build: { healingMultiplier: 1.15, secondWindCooldownMultiplier: .90, speedMultiplier: .98 }
     },
     guardianArmor: {
@@ -87,7 +92,7 @@
       name: 'Пластинчатая броня стража',
       health: 25,
       build: { blockDrainMultiplier: .70, speedMultiplier: .96 },
-      icon: 'armor'
+      icon: 'guardianArmor'
     }
   };
   const SUPPLIES = {
@@ -122,14 +127,12 @@
     });
   }
   const itemArt = id => art ? art.icon({
-    healing: 'potion',
-    buckler: 'shield',
-    tonic: 'potion',
-    fieldKit: 'potion',
-    dawnBlade: 'sword',
-    wardenArmor: 'armor',
-    guardianToken: 'armor',
-    emberShard: 'ore'
+    healing: 'icon.item.potion', potion:'icon.item.potion', tonic:'icon.item.tonic', fieldKit:'icon.item.field_kit',
+    gold:'icon.item.gold', coin:'icon.item.gold', herb:'icon.item.herb', wood:'icon.item.wood', ore:'icon.item.ore',
+    sword:'icon.item.starter_blade', starterBlade:'icon.item.starter_blade', dawnBlade:'icon.item.dawn_blade',
+    armor:'icon.item.starter_armor', starterArmor:'icon.item.starter_armor', wardenArmor:'icon.item.warden_armor', guardianArmor:'icon.item.guardian_armor',
+    shield:'icon.item.buckler', buckler:'icon.item.buckler', emptyHand:'icon.item.empty_hand', guardianToken:'icon.item.guardian_token', emberShard:'icon.item.ember_shard',
+    vigor:'icon.item.rune_vigor', edge:'icon.item.rune_edge', guard:'icon.item.rune_guard', flow:'icon.item.rune_flow'
   }[id] || id) : '';
   const $ = id => document.getElementById(id);
   const canvas = $('game'),
@@ -190,6 +193,7 @@
       [1, 'rgba(156,220,255,0)']
     ])
   };
+  const MAP_MARKER_STYLE = { color:'#f5e5a4', fill:'rgba(8,16,15,.82)' };
   const ui = {
     hp: $('hpFill'),
     bossHud: $('bossHud'),
@@ -272,6 +276,7 @@
   const QUALITY = {
     low: {
       particles: 12,
+      vfxCapacity: 36,
       textureScale: .44,
       shadow: .06,
       fog: .07,
@@ -284,6 +289,7 @@
     },
     medium: {
       particles: 20,
+      vfxCapacity: 56,
       textureScale: .60,
       shadow: .16,
       fog: .12,
@@ -296,6 +302,7 @@
     },
     high: {
       particles: 30,
+      vfxCapacity: 80,
       textureScale: .76,
       shadow: .26,
       fog: .17,
@@ -308,6 +315,7 @@
     },
     'very-high': {
       particles: 42,
+      vfxCapacity: 108,
       textureScale: .88,
       shadow: .36,
       fog: .21,
@@ -320,6 +328,7 @@
     },
     ultra: {
       particles: 52,
+      vfxCapacity: 144,
       textureScale: 1,
       shadow: .46,
       fog: .23,
@@ -332,8 +341,28 @@
       softShadows: true
     }
   };
+  const QUALITY_ASSET_TIERS = Object.freeze({ low:'low', medium:'medium', high:'high', 'very-high':'very-high', ultra:'ultra' });
+  const AUTO_TIER_ORDER = Object.freeze(['low','medium','high','very-high','ultra']);
   const FPS = [30, 40, 45, 60];
-  const detected = device.ios ? 'medium' : device.ram >= 8 && device.cores >= 8 ? 'high' : device.ram >= 6 && device.cores >= 6 ? 'high' : device.ram >= 4 && device.cores >= 4 ? 'medium' : 'low';
+  const detected = device.ram >= 8 && device.cores >= 8 ? 'high' : device.ram >= 4 && device.cores >= 4 ? 'medium' : 'low';
+  let autoTier = detected === 'low' ? 'low' : 'medium', autoStableWindows = 0, autoPoorWindows = 0;
+  function activeQualityKey() { return settings.quality === 'auto' ? autoTier : settings.quality; }
+  function promoteAutoTier() {
+    const index = AUTO_TIER_ORDER.indexOf(autoTier);
+    if (index < 0 || index >= AUTO_TIER_ORDER.length - 1) return false;
+    autoTier = AUTO_TIER_ORDER[index + 1];
+    autoStableWindows = autoPoorWindows = 0;
+    applyGraphics();
+    return true;
+  }
+  function demoteAutoTier() {
+    const index = AUTO_TIER_ORDER.indexOf(autoTier);
+    if (index <= 0) return false;
+    autoTier = AUTO_TIER_ORDER[index - 1];
+    autoStableWindows = autoPoorWindows = 0;
+    applyGraphics();
+    return true;
+  }
   const testStorage = new Map(Object.entries(globalThis.__AETHER_TEST_INITIAL_STORAGE__ || {}).map(([key, value]) => [key, String(value)]));
   const storage = {
     getItem(key) {
@@ -383,7 +412,7 @@
     controlSize: ['compact', 'normal', 'large'].includes(storage.getItem('aef_control_size')) ? storage.getItem('aef_control_size') : 'normal',
     questCollapsed: storage.getItem('aef_quest_collapsed') !== '0',
     brightness: [85, 100, 115].includes(Number(storage.getItem('aef_brightness'))) ? Number(storage.getItem('aef_brightness')) : 100,
-    uiScale: ['normal', 'large'].includes(storage.getItem('aef_ui_scale')) ? storage.getItem('aef_ui_scale') : 'normal',
+    uiScale: ['small', 'normal', 'large'].includes(storage.getItem('aef_ui_scale')) ? storage.getItem('aef_ui_scale') : 'normal',
     minimapSize: storage.getItem('aef_minimap_size') === 'large' ? 'large' : 'normal',
     combatNumbers: storage.getItem('aef_combat_numbers') !== '0',
     haptics: storage.getItem('aef_haptics') !== '0',
@@ -397,7 +426,7 @@
   };
   if (settings.quality !== 'auto' && !Object.hasOwn(QUALITY, settings.quality)) settings.quality = 'auto';
   if (!FPS.includes(settings.fps)) settings.fps = 60;
-  let profile = QUALITY[settings.quality === 'auto' ? detected : settings.quality];
+  let profile = QUALITY[activeQualityKey()];
   let W = innerWidth,
     H = innerHeight,
     DPR = 1,
@@ -574,9 +603,24 @@
       boss:{ type:'riftSovereign', x:2310, y:1260 }
     }
   };
+  const ENEMY_VISUAL_IDS = Object.freeze({
+    mistwood:Object.freeze({raider:'enemy.mist.thorn_raider',marksman:'enemy.mist.mire_archer',boar:'enemy.mist.bramble_boar'}),
+    stonevale:Object.freeze({raider:'enemy.stone.quarry_reaver',marksman:'enemy.stone.silver_marksman',boar:'enemy.stone.crag_tusk'}),
+    ashfield:Object.freeze({raider:'enemy.ash.cinder_raider',marksman:'enemy.ash.ember_marksman',boar:'enemy.ash.soot_boar'}),
+    frostmere:Object.freeze({raider:'enemy.frost.rime_raider',marksman:'enemy.frost.ice_marksman',boar:'enemy.frost.frost_tusk'}),
+    starreach:Object.freeze({raider:'enemy.star.voidbound',marksman:'enemy.star.constellation_archer',boar:'enemy.star.rift_beast'})
+  });
+  const BOSS_VISUAL_IDS = Object.freeze({
+    briarMatriarch:'boss.briar_matriarch', guardian:'boss.guardian', cinderWarden:'boss.cinder_warden',
+    frostboundSeer:'boss.frostbound_seer', riftSovereign:'boss.rift_sovereign'
+  });
+  const NPC_VISUAL_IDS = Object.freeze({lyra:'npc.lyra',toren:'npc.toren',mira:'npc.mira'});
+  function visualForEnemy(zone, archetype) {
+    return ENEMY_VISUAL_IDS[zone]?.[archetype] || '';
+  }
   const BOSS_DEFINITIONS = Object.freeze({
     briarMatriarch:Object.freeze({
-      name:'Матриарх чащи', artType:'boar', accent:'#79b86d', height:92,
+      name:'Матриарх чащи', accent:'#79b86d', height:108,
       stats:Object.freeze({r:34,hp:440,speed:68,damage:18}),
       sequences:Object.freeze({1:Object.freeze(['slam','wave','slam']),2:Object.freeze(['wave','bolt','slam','wave'])}),
       profiles:Object.freeze({
@@ -587,7 +631,7 @@
       reward:Object.freeze({xp:90,gold:65,supply:'potion'})
     }),
     guardian:Object.freeze({
-      name:'Guardian', artType:'guardian', accent:'#c99be8', height:122,
+      name:'Guardian', accent:'#c99be8', height:122,
       stats:Object.freeze({r:40,hp:620,speed:48,damage:22}),
       sequences:Object.freeze({1:Object.freeze(['slam','bolt','wave']),2:Object.freeze(['bolt','slam','wave','slam'])}),
       profiles:Object.freeze({
@@ -598,7 +642,7 @@
       reward:Object.freeze({xp:120,gold:90,item:'guardianToken'})
     }),
     cinderWarden:Object.freeze({
-      name:'Пепельный хранитель', artType:'raider', accent:'#ef8d55', height:112,
+      name:'Пепельный хранитель', accent:'#ef8d55', height:116,
       stats:Object.freeze({r:38,hp:560,speed:58,damage:21}),
       sequences:Object.freeze({1:Object.freeze(['bolt','slam','wave']),2:Object.freeze(['wave','bolt','slam','bolt'])}),
       profiles:Object.freeze({
@@ -609,7 +653,7 @@
       reward:Object.freeze({xp:110,gold:85,supply:'fieldKit'})
     }),
     frostboundSeer:Object.freeze({
-      name:'Морозный провидец', artType:'guardian', accent:'#8fdcff', height:118,
+      name:'Морозный провидец', accent:'#8fdcff', height:120,
       stats:Object.freeze({r:39,hp:680,speed:55,damage:23}),
       sequences:Object.freeze({1:Object.freeze(['bolt','wave','slam']),2:Object.freeze(['wave','bolt','wave','slam'])}),
       profiles:Object.freeze({
@@ -620,7 +664,7 @@
       reward:Object.freeze({xp:135,gold:105,supply:'tonic'})
     }),
     riftSovereign:Object.freeze({
-      name:'Владыка разлома', artType:'guardian', accent:'#bc85ff', height:128,
+      name:'Владыка разлома', accent:'#bc85ff', height:128,
       stats:Object.freeze({r:42,hp:820,speed:62,damage:25}),
       sequences:Object.freeze({1:Object.freeze(['slam','bolt','wave']),2:Object.freeze(['bolt','wave','slam','bolt','wave'])}),
       profiles:Object.freeze({
@@ -911,6 +955,22 @@
     textureImages = {},
     patterns = {},
     interactionLock = 0;
+  const vfx = vfxEngine?.create({ capacity:QUALITY.ultra.vfxCapacity }) || null;
+  const vfxCamera = { x:0, y:0, scaleY:.82 };
+  function spawnVfx(id, x, y, size = 48, life = .32, dir = 0, secondary = false, vx = 0, vy = 0) {
+    if (!vfx || secondary && profile.detail === 0) return false;
+    return vfx.spawn(id, { x, y, size, life, dir, secondary, vx, vy });
+  }
+  function projectileFamily(p) {
+    if (p.vfxFamily) return p.vfxFamily;
+    if (p.owner === 'player') return 'triple_pulse';
+    const arrowRegion = { mistwood:'mist', stonevale:'stone', ashfield:'ash', frostmere:'frost', starreach:'star' }[zoneId] || 'mist';
+    return p.style === 'guardianBolt' ? 'guardian_core' : p.style === 'bossBolt' ? 'rift_spear' : `arrow_${arrowRegion}`;
+  }
+  function projectileVfxId(p, phase) {
+    const family = projectileFamily(p);
+    return family === 'triple_pulse' ? `vfx.combat.triple_pulse_${phase === 'head' ? 'core' : phase === 'impact' ? 'impact' : 'trail'}` : `vfx.projectile.${family}.${phase}`;
+  }
   const VISITED_ZONES_KEY = 'aef_visited_zones_v1';
   function readVisitedZones() {
     try {
@@ -1082,6 +1142,12 @@
       '"': '&quot;',
       "'": '&#39;'
     })[c]);
+  }
+  function uiIcon(sheet, id, label = '') {
+    if (uiIcons?.use) {
+      try { return uiIcons.use(sheet, id, label); } catch {}
+    }
+    return label ? `<span class="uiIconFallback">${escapeHTML(label)}</span>` : '';
   }
   function capture(el, id) {
     try {
@@ -1294,7 +1360,7 @@
     settingsOptions: {
       controlSizes: ['compact', 'normal', 'large'],
       brightness: [85, 100, 115],
-      uiScales: ['normal', 'large'],
+      uiScales: ['small', 'normal', 'large'],
       minimapSizes: ['normal', 'large']
     },
     defaults: {
@@ -1756,7 +1822,7 @@
     }).join('');
     const supplyCards = Object.entries(SUPPLIES).map(([id, item]) => {
       const useReason = inCombat ? 'Недоступно во время боя' : supplyUseReason(id);
-      return `<article class="card">${itemArt('potion')}<h3>${item.name} · ${player.supplies[id]} шт.</h3><p>${item.note}<br>Расход: 1 шт. за применение.</p><div class="cardActions"><button class="btn" id="supply-${id}" ${player.loadout.quick === id || inCombat ? 'disabled' : ''}>${player.loadout.quick === id ? 'В быстром слоте' : inCombat ? 'Недоступно во время боя' : 'В быстрый слот'}</button><button class="btn secondary" id="use-supply-${id}" ${useReason ? 'disabled' : ''}>${useReason || 'Использовать сейчас'}</button></div></article>`;
+      return `<article class="card">${itemArt(id)}<h3>${item.name} · ${player.supplies[id]} шт.</h3><p>${item.note}<br>Расход: 1 шт. за применение.</p><div class="cardActions"><button class="btn" id="supply-${id}" ${player.loadout.quick === id || inCombat ? 'disabled' : ''}>${player.loadout.quick === id ? 'В быстром слоте' : inCombat ? 'Недоступно во время боя' : 'В быстрый слот'}</button><button class="btn secondary" id="use-supply-${id}" ${useReason ? 'disabled' : ''}>${useReason || 'Использовать сейчас'}</button></div></article>`;
     }).join('');
     openModal('Экипировка персонажа', `${buildSummary.html}<p class="note">Смена снаряжения не изменяет постоянные усиления. Расходники можно применить прямо отсюда или назначить в быстрый слот.</p><div class="shopList">${gearCards}</div><div class="sectionTitle">БЫСТРЫЙ РАСХОДНИК</div><div class="shopList">${supplyCards}</div><button class="btn" id="supply-clear" ${inCombat ? 'disabled' : ''}>${inCombat ? 'Недоступно во время боя' : 'Освободить быстрый слот'}</button><button class="btn" id="customizationEntry" ${inCombat ? 'disabled' : ''}>Руны и внешний вид</button><button class="btn" id="equipmentBack">Вернуться в сумку</button>`);
     for (const id of Object.keys(GEAR)) bindTap($('equip-' + id), () => equipItem(id));
@@ -1862,6 +1928,7 @@
     audio.setZone(zoneId);
   }
   function applyInterfaceSettings() {
+    document.body.classList.toggle('ui-small', settings.uiScale === 'small');
     document.body.classList.toggle('ui-large', settings.uiScale === 'large');
     document.body.classList.toggle('minimap-large', settings.minimapSize === 'large');
     document.body.dataset.controlSize = settings.controlSize;
@@ -1929,7 +1996,14 @@
     perfAvgRenderMs = 0;
   }
   function applyGraphics() {
-    profile = QUALITY[settings.quality === 'auto' ? detected : settings.quality] || QUALITY.medium;
+    const qualityKey = activeQualityKey();
+    profile = QUALITY[qualityKey] || QUALITY.medium;
+    vfx?.setLimit(profile.vfxCapacity);
+    const nextAssetTier = QUALITY_ASSET_TIERS[qualityKey] || 'low';
+    if (assetManager && assetManager.getTier() !== nextAssetTier) {
+      assetManager.setTier(nextAssetTier);
+      void reloadAssetPacks();
+    }
     const viewportScale = window.visualViewport?.scale || 1;
     document.body.classList.toggle('browser-zoomed', viewportScale > 1.01);
     W = Math.round((window.visualViewport?.width || innerWidth) * viewportScale);
@@ -1965,6 +2039,42 @@
     if (!ambient.length) makeAmbient();
     if (particles.length > profile.particles) particles.length = profile.particles;
     atmosphereGradient = null;
+  }
+  async function loadAssetSystem() {
+    if (!assetsApi) return null;
+    try {
+      const manifestUrl = new URL(`assets/manifest.json?v=${BUILD_VERSION}`, document.baseURI).href;
+      const manifest = await assetsApi.loadManifest(manifestUrl);
+      const manager = assetsApi.createManager({ manifest, baseUrl:new URL('assets/', document.baseURI).href });
+      manager.setTier(QUALITY_ASSET_TIERS[activeQualityKey()] || 'low');
+      await manager.loadTier(zoneId);
+      assetManager?.destroy?.();
+      assetManager = manager;
+      art?.setAssetManager?.(manager);
+      return manager;
+    } catch (error) {
+      console.warn('Aethernfall asset fallback', error);
+      return null;
+    }
+  }
+  async function reloadAssetPacks() {
+    if (!assetManager) return null;
+    const operation = ++assetReloadSerial, targetZone = zoneId;
+    try {
+      const result = await assetManager.loadTier(targetZone);
+      if (operation === assetReloadSerial) art?.setAssetManager?.(assetManager);
+      return result;
+    } catch (error) {
+      console.warn('Aethernfall asset tier retained', error);
+      return null;
+    }
+  }
+  function loadZoneAssets() {
+    if (!assetManager) return;
+    const targetZone = zoneId, operation = ++assetReloadSerial;
+    void assetManager.loadTier(targetZone).then(() => {
+      if (operation === assetReloadSerial && targetZone === zoneId) art?.setAssetManager?.(assetManager);
+    }).catch(error => console.warn('Aethernfall zone assets retained', error));
   }
   function loadTextures() {
     const names = ['grass', 'dirt', 'stone', 'water', 'wood', 'foliage'];
@@ -2213,13 +2323,12 @@
   }
   function makeAmbient() {
     ambient = [];
-    for (let i = 0; i < 40; i++) ambient.push({
-      x: 60 + rng(i + 7) * (WORLD.w - 120),
-      y: 60 + rng(i + 91) * (WORLD.h - 120),
-      kind: rng(i + 201),
-      scale: .65 + rng(i + 44) * 1.55,
-      seed: i
-    });
+    for (let i = 0; i < 40; i++) {
+      const x = 60 + rng(i + 7) * (WORLD.w - 120), y = 60 + rng(i + 91) * (WORLD.h - 120);
+      const visual = zoneVisuals?.chooseAmbient(zoneId, i, x, y, ambient);
+      ambient.push({ x, y, kind:rng(i + 201), scale:.65 + rng(i + 44) * 1.15, seed:i,
+        visualId:visual?.id, frame:visual?.frame || 0, height:visual?.height || 72, footprint:visual?.footprint || 18 });
+    }
   }
   function buildObstacles() {
     if (!physics) return;
@@ -2232,16 +2341,14 @@
         x: zoneId === 'mistwood' ? 1180 : zoneId === 'stonevale' ? 1220 : 1520,
         y: zoneId === 'mistwood' ? 430 : zoneId === 'stonevale' ? 530 : 910,
         r: 65
-      }, ...LANDMARKS[zoneId].map(([x, y]) => ({
-        x,
-        y: y + 8,
-        r: 43
+      }, ...(zoneVisuals?.ZONES[zoneId]?.landmarks || LANDMARKS[zoneId].map(([x,y]) => ({x,y,footprint:43}))).map(item => ({
+        x:item.x, y:item.y + 8, r:item.footprint || 43
       }))];
     ambient = ambient.filter(a => [z.camp, z.scout, z.portal].every(p => dist(a, p) > 120) && items.every(o => dist(a, o) > o.r + 55 * a.scale));
     for (const a of ambient) items.push({
       x: a.x,
       y: a.y + 8,
-      r: (zoneId === 'mistwood' ? 18 : 23) * a.scale
+      r: (a.footprint || 18) * a.scale
     });
     physics.set(items);
     // Gatherables are interaction targets, not walls. Relocate them away from true
@@ -2273,25 +2380,15 @@
   function resetZone() {
     resetImpactFeedback();
     physics?.set([]);
-    structures = LANDMARKS[zoneId].map(([x, y, k]) => ({
-      kind: 'structure',
-      x,
-      y,
-      asset: k === 'SHRINE' || k === 'BOSS' ? 'shrine' : k === 'RUIN' || k === 'MINE' ? 'ruins' : 'house',
-      height: 140
+    structures = (zoneVisuals?.ZONES[zoneId]?.landmarks || []).map(item => ({
+      kind:'structure', x:item.x, y:item.y, asset:item.id, height:item.height, footprint:item.footprint
     }));
-    structures.push({
-      kind: 'structure',
-      x: zoneId === 'mistwood' ? 1180 : zoneId === 'stonevale' ? 1220 : 1520,
-      y: zoneId === 'mistwood' ? 420 : zoneId === 'stonevale' ? 520 : 900,
-      asset: zoneId === 'mistwood' ? 'house' : zoneId === 'stonevale' ? 'ruins' : 'shrine',
-      height: 148
-    });
     entities = [];
     particles = [];
     projectiles = [];
     lootDrops = [];
     floatingTexts = [];
+    vfx?.clear();
     player.attackQueuedUntil = 0;
     player.dashRemaining = 0;
     player.dodgeUntil = 0;
@@ -2375,13 +2472,16 @@
       if (effect.type === 'cleanup') cleanupArenaThreats(result.state.phase !== 'victory');
       else if (effect.type === 'closeGate') {
         cleanupArenaThreats(true);
+        spawnVfx('vfx.arena.boundary_active', zones[zoneId].boss.x, zones[zoneId].boss.y, 190, .7);
         audio.setMode?.('arena');
         toast('Арена запечатана');
       } else if (effect.type === 'spawnWave') {
         spawnArenaWave(effect);
+        spawnVfx('vfx.arena.wave_transition', zones[zoneId].boss.x, zones[zoneId].boss.y, 160, .65);
         toast(`Волна ${effect.waveIndex + 1}/${ARENA_DEFINITIONS[zoneId].waves.length}`);
       } else if (effect.type === 'waveCleared') {
         arenaTransitionAt = time + .8;
+        spawnVfx('vfx.arena.wave_transition', zones[zoneId].boss.x, zones[zoneId].boss.y, 150, .65);
         feedback('quest', 10);
       } else if (effect.type === 'spawnBoss') activateArenaBoss(effect.boss);
       else if (effect.type === 'grantReward') {
@@ -2389,8 +2489,13 @@
         gainXP(Math.max(0, Number(effect.reward.xp) || 0));
         const supply = effect.reward.supply;
         if (Object.hasOwn(SUPPLIES, supply)) player.supplies[supply] = Math.min(9999, (player.supplies[supply] || 0) + 1);
-      } else if (effect.type === 'unlockExit') audio.setMode?.('victory');
-      else if (effect.type === 'openGate') audio.setMode?.('defeat');
+      } else if (effect.type === 'unlockExit') {
+        audio.setMode?.('victory');
+        spawnVfx('vfx.arena.victory', zones[zoneId].boss.x, zones[zoneId].boss.y, 210, 1);
+      } else if (effect.type === 'openGate') {
+        audio.setMode?.('defeat');
+        spawnVfx('vfx.arena.defeat', zones[zoneId].boss.x, zones[zoneId].boss.y, 180, .8);
+      }
     }
     return true;
   }
@@ -2480,6 +2585,7 @@
       player.xpNeed = Math.round(player.xpNeed * 1.24);
       recomputeDerivedStats();
       player.hp = player.maxHp;
+      spawnVfx('vfx.reward.level_up', player.x, player.y, 120, .9);
       toast('Новый уровень — ' + player.level);
     }
   }
@@ -2559,6 +2665,7 @@
     if (dist(player, e) < 440 && homeDistance <= 420 && playerFromHome <= 480) e.aiState = 'chase';
     const lethal = e.hp - dmg <= 0;
     e.hp -= dmg;
+    spawnVfx(lethal ? 'vfx.death.humanoid' : 'vfx.hit.flesh', e.x, e.y, lethal ? 72 : 42, lethal ? .55 : .26, player.dir);
     e.hit = .16;
     animate(e, 'hit', .2);
     if (lethal) {
@@ -2588,6 +2695,7 @@
     }
     if (target) player.dir = Math.atan2(target.y - player.y, target.x - player.x);
     const a = player.dir;
+    spawnVfx(`vfx.combat.slash_${Math.max(1, Math.min(3, player.combo || 1))}`, player.x + Math.cos(a) * 42, player.y + Math.sin(a) * 42, 88, .25, a);
     motions.get(player).dir = a;
     let hits = 0;
     const riposte = player.riposteUntil > time;
@@ -2603,6 +2711,7 @@
       const resolved = combatEngine.resolveBasicDamage({ damage: player.damage * arenaSurge, combo: player.combo, critRoll: Math.random(), riposte, riposteMultiplier:doctrineMultiplier });
       if (!resolved.valid) continue;
       hitTarget(e, resolved.amount);
+      if (resolved.critical) spawnVfx('vfx.combat.crit', e.x, e.y, 64, .34, a);
       addFloatingText(resolved.riposte ? `ОТВЕТ · ${resolved.amount}` : resolved.critical ? 'КРИТ!' : String(resolved.amount), e.x, e.y - e.r - 18, resolved.riposte || resolved.critical ? '#ffe08a' : '#f4d3a3');
       hits++;
     }
@@ -2637,6 +2746,7 @@
       mag = Math.hypot(mx, my) || 1;
     player.dashX = mx / mag;
     player.dashY = my / mag;
+    spawnVfx('vfx.defense.dodge_afterimage', player.x, player.y, 72, .38, player.dir);
     burst(player.x, player.y, COSMETICS.trails[player.cosmetics.trail] || '#91c6cc', 16, 145);
     feedback('dodge', 10);
     toast('Уклонение');
@@ -2665,6 +2775,7 @@
     animate(player, action.type === 'secondWind' ? 'drink' : 'cast', .55);
     const a = player.dir;
     if (action.type === 'windSlash') {
+      spawnVfx('vfx.combat.wind_slash', player.x + Math.cos(a) * 72, player.y + Math.sin(a) * 72, 150, .42, a);
       let hits = 0;
       for (const e of entities) {
         if (e.hp <= 0 || e.kind !== 'enemy') continue;
@@ -2689,12 +2800,14 @@
           vy: Math.sin(aa) * action.speed,
           damage: Math.round(player.damage * action.damageMultiplier),
           life: action.lifetime,
-          color: COSMETICS.trails[player.cosmetics.trail] || '#bfe9ee'
+          color: COSMETICS.trails[player.cosmetics.trail] || '#bfe9ee',
+          vfxFamily:'triple_pulse', vfxClock:0
         });
       }
       feedback('attack', 8);
       toast('Тройной импульс');
     } else {
+      spawnVfx('vfx.combat.second_wind', player.x, player.y, 94, .7);
       burst(player.x, player.y, '#86c99b', 20, 100);
       feedback('drink', 10);
       toast('Восстановлено здоровье');
@@ -2810,6 +2923,7 @@
     if (!Object.hasOwn(zones, destination) || destination === zoneId || isInCombat() || transitioning || !unlockedZones().includes(destination)) return false;
     resetInput();
     zoneId = destination;
+    loadZoneAssets();
     markZoneVisited(zoneId);
     audio.setZone(zoneId);
     resetZone();
@@ -2826,9 +2940,9 @@
     if (isInCombat()) { toast('Лагерь недоступен во время боя'); return false; }
     const def = CONTRACTS[zoneId], c = refreshLiveContract(zoneId);
     const stateText = c.state === 0 ? 'Доступно новое поручение' : c.state === 1 ? `Прогресс: ${c.progress}/${def.required}` : c.state === 2 ? 'Задание выполнено · заберите награду' : 'Поручение этого цикла завершено';
-    const action = c.state === 0 ? `<button class="btn" id="contractAction">Принять поручение</button>` : c.state === 2 ? `<button class="btn" id="contractAction">Забрать награду · ${def.gold} золота</button>` : '';
-    const travel = unlockedZones().filter(id => id !== zoneId).map(id => `<button class="btn secondary" id="travel-${id}">${escapeHTML(zones[id].name)}</button>`).join('') || '<p class="note">Новые маршруты откроются после достижения порталов.</p>';
-    openModal('Лагерь · ' + zones[zoneId].name, `<article class="card"><h3>Доска поручений</h3><p><b>${def.title}</b><br>${def.note}</p><p class="note">${stateText}</p>${action}</article><div class="campServices"><button class="btn" id="campRest">Отдохнуть · восстановить HP и выносливость</button><button class="btn" id="campCraft">Ремесло и расходники</button><button class="btn" id="campShop">Торговец</button><button class="btn" id="campEquipment">Экипировка и руны</button><button class="btn" id="campTraining">Тренировка</button></div><div class="sectionTitle">БЫСТРЫЙ ПУТЬ</div>${travel}<button class="btn" id="campClose">Вернуться в игру</button>`);
+    const action = c.state === 0 ? `<button class="btn iconBtn" id="contractAction">${uiIcon('camp','contracts','Принять поручение')}</button>` : c.state === 2 ? `<button class="btn iconBtn" id="contractAction">${uiIcon('camp','gold',`Забрать награду · ${def.gold} золота`)}</button>` : '';
+    const travel = unlockedZones().filter(id => id !== zoneId).map(id => `<button class="btn secondary iconBtn" id="travel-${id}">${uiIcon('navigation','travel',zones[id].name)}</button>`).join('') || '<p class="note">Новые маршруты откроются после достижения порталов.</p>';
+    openModal('Лагерь · ' + zones[zoneId].name, `<article class="card"><h3>${uiIcon('camp','contracts','Доска поручений')}</h3><p><b>${def.title}</b><br>${def.note}</p><p class="note">${stateText}</p>${action}</article><div class="campServices"><button class="btn iconBtn" id="campRest">${uiIcon('camp','rest','Отдохнуть · восстановить HP и выносливость')}</button><button class="btn iconBtn" id="campCraft">${uiIcon('camp','craft','Ремесло и расходники')}</button><button class="btn iconBtn" id="campShop">${uiIcon('camp','merchant','Торговец')}</button><button class="btn iconBtn" id="campEquipment">${uiIcon('camp','equipment','Экипировка и руны')}</button><button class="btn iconBtn" id="campTraining">${uiIcon('camp','training','Тренировка')}</button></div><div class="sectionTitle">БЫСТРЫЙ ПУТЬ</div>${travel}<button class="btn iconBtn" id="campClose">${uiIcon('navigation','back','Вернуться в игру')}</button>`);
     if (c.state === 0) bindTap($('contractAction'), acceptContract); else if (c.state === 2) bindTap($('contractAction'), claimContract);
     bindTap($('campRest'), restAtCamp); bindTap($('campCraft'), openInventory); bindTap($('campShop'), openShop); bindTap($('campEquipment'), openEquipment); bindTap($('campTraining'), openTraining); bindTap($('campClose'), closeModal);
     for (const id of unlockedZones()) if (id !== zoneId) bindTap($('travel-' + id), () => fastTravel(id));
@@ -2842,6 +2956,7 @@
       const [x, y, kind, name] = list[i], id = `${zoneId}:${i}`;
       if (player.discoveries.includes(id) || Math.hypot(player.x - x, player.y - y) > 135) continue;
       player.discoveries.push(id);
+      spawnVfx('vfx.reward.discovery', x, y, 112, .8);
       player.gold += 10;
       gainXP(10);
       applyQuestProgressEvent({ type: 'discover', target: id, category: kind, amount: 1 });
@@ -2920,6 +3035,7 @@
       const l = hit.entity;
       if (!l) return;
       if (l.id === 'coin') player.gold += l.count;else player.inv[l.id] = (player.inv[l.id] || 0) + l.count;
+      spawnVfx(l.id === 'coin' ? 'vfx.reward.gold' : 'vfx.reward.gear', l.x, l.y, 58, .45);
       const text = l.id === 'coin' ? `Золото +${l.count}` : `Получено: ${l.label} ×${l.count}`;
       toast(text);
       feedback('pickup', 6);
@@ -2941,6 +3057,7 @@
     const key = r.type;
     if (!['wood', 'ore', 'herb'].includes(key)) return;
     player.inv[key] = (player.inv[key] || 0) + 1;
+    spawnVfx('vfx.reward.resource', r.x, r.y, 56, .42);
     applyQuestProgressEvent({ type: 'gather', target: key, amount: 1 });
     toast('Получено: ' + {
       wood: 'древесина',
@@ -2979,6 +3096,7 @@
         player.story = storyEngine.normalize({ ...player.story, ending:ending.id });
       }
       zoneId = zones[zoneId].next;
+      loadZoneAssets();
       markZoneVisited(zoneId);
       audio.setZone(zoneId);
       resetZone();
@@ -3013,6 +3131,7 @@
     previousModalFocus = document.activeElement && !ui.modal.contains(document.activeElement) ? document.activeElement : previousModalFocus;
     setText(ui.modalTitle, title);
     ui.modalBody.innerHTML = body;
+    uiIcons?.mount?.(ui.modalBody)?.catch?.(() => {});
     ui.modal.classList.remove('hidden');
     $('modalClose')?.focus();
   }
@@ -3122,7 +3241,7 @@
       return missing.length ? 'Нужно: ' + missing.join(', ') : '';
     };
     const discovered = player.discoveries.filter(id => id.startsWith(zoneId + ':')).length;
-    openModal('Сумка и экипировка', `${buildSummary.html}<button class="btn" id="equipmentEntry">Экипировка, расходники и руны</button><div class="grid"><div class="card">${itemArt('sword')}<h3>Оружие</h3><p>${escapeHTML(player.equipment.weapon)}<br>Урон: <b>${player.damage}</b></p></div><div class="card">${itemArt('armor')}<h3>Броня</h3><p>${escapeHTML(player.equipment.armor)}<br>Макс. здоровье: <b>${player.maxHp}</b></p></div><div class="card"><h3>Ресурсы</h3><p>Древесина: ${player.inv.wood}<br>Руда: ${player.inv.ore}<br>Трава: ${player.inv.herb}</p></div><div class="card"><h3>Прогресс</h3><p>Золото: <b>${player.gold}</b><br>Знаки: ${player.inv.guardianToken || 0}<br>Осколки: ${player.inv.emberShard || 0}<br>Циклы: ${player.progression.completedCycles}<br>Открыто мест: ${discovered}/${LANDMARKS[zoneId].length}</p></div></div><div class="card"><h3>Источники характеристик</h3><p>Урон: ${stats.damage.base} база + ${stats.damage.level} уровни + ${stats.damage.permanent} постоянные + ${stats.damage.gear} оружие + ${stats.damage.rune} руна = <b>${stats.damage.total}</b><br>HP: ${stats.hp.base} база + ${stats.hp.level} уровни + ${stats.hp.permanent} постоянные + ${stats.hp.gear} броня + ${stats.hp.rune} руна = <b>${stats.hp.total}</b></p></div><div class="sectionTitle">РАСХОДНИКИ</div><div class="shopList">${Object.entries(SUPPLIES).map(([id,item]) => `<article class="card">${itemArt('potion')}<h3>${item.name} · ${player.supplies[id]} шт.</h3><p>${item.note}</p><button class="btn" id="inv-use-${id}" ${supplyUseReason(id) || inCombat ? 'disabled' : ''}>${inCombat ? 'Недоступно во время боя' : supplyUseReason(id) || 'Использовать сейчас'}</button></article>`).join('')}</div><div class="sectionTitle">КРАФТ РАСХОДНИКОВ</div><button class="btn" id="brew-potion" ${recipeReason('potion') ? 'disabled' : ''}>${recipeReason('potion') || 'Зелье лечения · 3 травы + 1 древесина'}</button><button class="btn" id="brew-tonic" ${recipeReason('tonic') ? 'disabled' : ''}>${recipeReason('tonic') || 'Тоник выносливости · 1 трава + 1 руда'}</button><button class="btn" id="brew-fieldKit" ${recipeReason('fieldKit') ? 'disabled' : ''}>${recipeReason('fieldKit') || 'Походный эликсир · 2 травы + 1 древесина + 1 руда'}</button><div class="sectionTitle">ПОСТОЯННЫЕ УСИЛЕНИЯ</div><button class="btn" id="craftBtn" ${bladeReason ? 'disabled' : ''}>${bladeReason || `Закалить меч · ранг ${player.progression.forgeRank + 1}/${MAX_UPGRADE_RANK} · 3 древесины + 2 руды`}</button><button class="btn" id="potionBtn" ${vitalityReason ? 'disabled' : ''}>${vitalityReason || `Эликсир жизни · ранг ${player.progression.vitalityRank + 1}/${MAX_UPGRADE_RANK} · +12 HP · 3 травы + 1 древесина`}</button>`);
+    openModal('Сумка и экипировка', `${buildSummary.html}<button class="btn" id="equipmentEntry">Экипировка, расходники и руны</button><div class="grid"><div class="card">${itemArt(player.loadout.weapon)}<h3>Оружие</h3><p>${escapeHTML(player.equipment.weapon)}<br>Урон: <b>${player.damage}</b></p></div><div class="card">${itemArt(player.loadout.armor)}<h3>Броня</h3><p>${escapeHTML(player.equipment.armor)}<br>Макс. здоровье: <b>${player.maxHp}</b></p></div><div class="card"><h3>Ресурсы</h3><p>Древесина: ${player.inv.wood}<br>Руда: ${player.inv.ore}<br>Трава: ${player.inv.herb}</p></div><div class="card"><h3>Прогресс</h3><p>Золото: <b>${player.gold}</b><br>Знаки: ${player.inv.guardianToken || 0}<br>Осколки: ${player.inv.emberShard || 0}<br>Циклы: ${player.progression.completedCycles}<br>Открыто мест: ${discovered}/${LANDMARKS[zoneId].length}</p></div></div><div class="card"><h3>Источники характеристик</h3><p>Урон: ${stats.damage.base} база + ${stats.damage.level} уровни + ${stats.damage.permanent} постоянные + ${stats.damage.gear} оружие + ${stats.damage.rune} руна = <b>${stats.damage.total}</b><br>HP: ${stats.hp.base} база + ${stats.hp.level} уровни + ${stats.hp.permanent} постоянные + ${stats.hp.gear} броня + ${stats.hp.rune} руна = <b>${stats.hp.total}</b></p></div><div class="sectionTitle">РАСХОДНИКИ</div><div class="shopList">${Object.entries(SUPPLIES).map(([id,item]) => `<article class="card">${itemArt(id)}<h3>${item.name} · ${player.supplies[id]} шт.</h3><p>${item.note}</p><button class="btn" id="inv-use-${id}" ${supplyUseReason(id) || inCombat ? 'disabled' : ''}>${inCombat ? 'Недоступно во время боя' : supplyUseReason(id) || 'Использовать сейчас'}</button></article>`).join('')}</div><div class="sectionTitle">КРАФТ РАСХОДНИКОВ</div><button class="btn" id="brew-potion" ${recipeReason('potion') ? 'disabled' : ''}>${recipeReason('potion') || 'Зелье лечения · 3 травы + 1 древесина'}</button><button class="btn" id="brew-tonic" ${recipeReason('tonic') ? 'disabled' : ''}>${recipeReason('tonic') || 'Тоник выносливости · 1 трава + 1 руда'}</button><button class="btn" id="brew-fieldKit" ${recipeReason('fieldKit') ? 'disabled' : ''}>${recipeReason('fieldKit') || 'Походный эликсир · 2 травы + 1 древесина + 1 руда'}</button><div class="sectionTitle">ПОСТОЯННЫЕ УСИЛЕНИЯ</div><button class="btn" id="craftBtn" ${bladeReason ? 'disabled' : ''}>${bladeReason || `Закалить меч · ранг ${player.progression.forgeRank + 1}/${MAX_UPGRADE_RANK} · 3 древесины + 2 руды`}</button><button class="btn" id="potionBtn" ${vitalityReason ? 'disabled' : ''}>${vitalityReason || `Эликсир жизни · ранг ${player.progression.vitalityRank + 1}/${MAX_UPGRADE_RANK} · +12 HP · 3 травы + 1 древесина`}</button>`);
     bindTap($('craftBtn'), () => craft('blade'));
     bindTap($('potionBtn'), () => craft('potion'));
     bindTap($('equipmentEntry'), openEquipment);
@@ -3408,7 +3527,7 @@
   function volumeRow(id, label, value) {
     return `<label class="rangeRow" for="${id}"><span>${label}</span><input id="${id}" type="range" min="0" max="100" step="5" value="${Math.round(value * 100)}"><b id="${id}Value">${Math.round(value * 100)}%</b></label>`;
   }
-  const SETTINGS_TABS = Object.freeze([['game','Игра'],['graphics','Графика'],['audio','Аудио'],['controls','Управление'],['interface','Интерфейс'],['system','Система']]);
+  const SETTINGS_TABS = Object.freeze([['game','Игра','game'],['graphics','Графика','graphics'],['audio','Аудио','audio'],['controls','Управление','controls'],['interface','Интерфейс','accessibility'],['system','Система','system']]);
   let settingsCategory = 'game';
   function resetSettings() {
     Object.assign(settings, { quality:'auto', fps:60, controls:'right', controlSize:'normal', brightness:100, uiScale:'normal', minimapSize:'normal', combatNumbers:true, haptics:true, musicEnabled:true, masterVolume:.8, musicVolume:.55, ambientVolume:.65, sfxVolume:.8, voiceEnabled:true, voiceVolume:.7 });
@@ -3417,14 +3536,14 @@
   }
   function openMenu(category = settingsCategory) {
     settingsCategory = SETTINGS_TABS.some(([id]) => id === category) ? category : settingsCategory;
-    const tabs = `<nav class="settingsTabs" aria-label="Категории настроек">${SETTINGS_TABS.map(([id,label]) => `<button data-settings-tab="${id}" class="${settingsCategory === id ? 'active' : ''}" aria-pressed="${settingsCategory === id}">${label}</button>`).join('')}</nav>`;
+    const tabs = `<nav class="settingsTabs" aria-label="Категории настроек">${SETTINGS_TABS.map(([id,label,icon]) => `<button data-settings-tab="${id}" class="${settingsCategory === id ? 'active' : ''}" aria-pressed="${settingsCategory === id}">${uiIcon('navigation',icon,label)}</button>`).join('')}</nav>`;
     let content = '';
     if (settingsCategory === 'game') content = `<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><article class="card"><h3>Путь пяти земель</h3><p>${campaignComplete() ? 'Кампания завершена · ' + escapeHTML(storyEngine?.deriveEnding(player.story).title || '') : escapeHTML(zones[zoneId].name + ' · ' + currentObjective())}</p></article><button class="btn" id="menuTraining">Тренировка и управление</button>`;
-    else if (settingsCategory === 'graphics') content = `<div class="sectionTitle">КАЧЕСТВО</div><div class="seg" id="qualitySeg">${[['auto','Auto'],['low','Performance'],['medium','Balanced'],['high','Quality'],['ultra','Ultra']].map(([q,label]) => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}">${label}</button>`).join('')}</div><p class="note">Auto выбирает профиль по памяти, ядрам и мобильной платформе. Активный базовый профиль: ${detected}.</p><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div>`;
+    else if (settingsCategory === 'graphics') content = `<div class="sectionTitle">КАЧЕСТВО</div><div class="seg" id="qualitySeg">${[['auto','Auto'],['low','Performance'],['medium','Balanced'],['high','Quality'],['very-high','Very High'],['ultra','Ultra']].map(([q,label]) => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}">${label}</button>`).join('')}</div><p class="note">Auto начинает с безопасного профиля и повышает качество только после стабильных замеров. Активный профиль: ${activeQualityKey()}.</p><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div>`;
     else if (settingsCategory === 'audio') content = `<button class="btn" id="musicToggle">Музыка: ${settings.musicEnabled ? 'включена' : 'выключена'}</button><button class="btn" id="voiceToggle">Голоса: ${settings.voiceEnabled ? 'включены' : 'выключены'}</button><button class="btn secondary" id="audioTestBtn">Проверить звук</button><p class="note" id="audioStatus">${audioStatusText()}</p>${volumeRow('masterVolume','Общая громкость',settings.masterVolume)}${volumeRow('musicVolume','Музыка',settings.musicVolume)}${volumeRow('ambientVolume','Окружение',settings.ambientVolume)}${volumeRow('sfxVolume','Эффекты',settings.sfxVolume)}${volumeRow('voiceVolume','Голоса',settings.voiceVolume)}`;
     else if (settingsCategory === 'controls') content = `<div class="seg"><button id="control-right" class="${settings.controls === 'right' ? 'active' : ''}">Правша</button><button id="control-left" class="${settings.controls === 'left' ? 'active' : ''}">Левша</button></div><p class="note">WASD · Space атака · F блок/парирование · Shift уклонение · E действие · Q расходник.</p><div class="seg"><button id="controlSize-compact" class="${settings.controlSize === 'compact' ? 'active' : ''}">Компактно</button><button id="controlSize-normal" class="${settings.controlSize === 'normal' ? 'active' : ''}">Обычно</button><button id="controlSize-large" class="${settings.controlSize === 'large' ? 'active' : ''}">Крупно</button></div><button class="btn" id="hapticsToggle" ${hapticsAvailable ? '' : 'disabled'}>${hapticsAvailable ? `Виброотклик: ${settings.haptics ? 'включён' : 'выключен'}` : 'Виброотклик: недоступен'}</button>`;
-    else if (settingsCategory === 'interface') content = `<div class="seg"><button id="bright-85" class="${settings.brightness === 85 ? 'active' : ''}">Темнее</button><button id="bright-100" class="${settings.brightness === 100 ? 'active' : ''}">Обычно</button><button id="bright-115" class="${settings.brightness === 115 ? 'active' : ''}">Ярче</button></div><div class="seg"><button id="ui-normal" class="${settings.uiScale === 'normal' ? 'active' : ''}">Текст 100%</button><button id="ui-large" class="${settings.uiScale === 'large' ? 'active' : ''}">Текст 115%</button></div><div class="seg"><button id="map-normal" class="${settings.minimapSize === 'normal' ? 'active' : ''}">Карта обычная</button><button id="map-large" class="${settings.minimapSize === 'large' ? 'active' : ''}">Карта крупная</button></div><button class="btn" id="numbersToggle">Цифры урона: ${settings.combatNumbers ? 'включены' : 'выключены'}</button>`;
-    else content = `${devicePanel()}<button class="btn" id="perfBtn">${perfMonitorEnabled ? 'Выключить frame-time monitor' : 'Включить frame-time monitor'}</button>${saveStatusText() ? `<p class="saveWarningText">${escapeHTML(saveStatusText())}</p>` : ''}<button class="btn" id="saveBtn">Сохранить прогресс</button><button class="btn secondary" id="resetSettingsBtn">Сбросить настройки</button>`;
+    else if (settingsCategory === 'interface') content = `<div class="seg"><button id="bright-85" class="${settings.brightness === 85 ? 'active' : ''}">Темнее</button><button id="bright-100" class="${settings.brightness === 100 ? 'active' : ''}">Обычно</button><button id="bright-115" class="${settings.brightness === 115 ? 'active' : ''}">Ярче</button></div><div class="seg uiScaleSeg"><button id="ui-small" class="${settings.uiScale === 'small' ? 'active' : ''}">Текст 90%</button><button id="ui-normal" class="${settings.uiScale === 'normal' ? 'active' : ''}">Текст 100%</button><button id="ui-large" class="${settings.uiScale === 'large' ? 'active' : ''}">Текст 115%</button></div><div class="seg"><button id="map-normal" class="${settings.minimapSize === 'normal' ? 'active' : ''}">Карта обычная</button><button id="map-large" class="${settings.minimapSize === 'large' ? 'active' : ''}">Карта крупная</button></div><button class="btn" id="numbersToggle">Цифры урона: ${settings.combatNumbers ? 'включены' : 'выключены'}</button>`;
+    else content = `${devicePanel()}<button class="btn iconBtn" id="perfBtn">${uiIcon('navigation','graphics',perfMonitorEnabled ? 'Выключить frame-time monitor' : 'Включить frame-time monitor')}</button>${saveStatusText() ? `<p class="saveWarningText">${escapeHTML(saveStatusText())}</p>` : ''}<button class="btn iconBtn" id="saveBtn">${uiIcon('status','autosave','Сохранить прогресс')}</button><button class="btn secondary iconBtn" id="resetSettingsBtn">${uiIcon('navigation','reset','Сбросить настройки')}</button>`;
     openModal('Меню · v' + BUILD_VERSION, tabs + `<section class="settingsPanel" data-category="${settingsCategory}">${content}</section>`);
     document.querySelectorAll('[data-settings-tab]').forEach(button => bindTap(button, () => openMenu(button.dataset.settingsTab)));
     document.querySelectorAll('#qualitySeg button').forEach(button => bindTap(button, () => { settings.quality = button.dataset.q; persistSetting('quality', settings.quality); applyGraphics(); save(); openMenu(); }));
@@ -3432,7 +3551,7 @@
     bindTap($('menuTraining'), openTraining); bindTap($('control-right'), () => setControls('right')); bindTap($('control-left'), () => setControls('left'));
     for (const size of ['compact','normal','large']) bindTap($('controlSize-' + size), () => setUiSetting('controlSize', size));
     for (const value of [85,100,115]) bindTap($('bright-' + value), () => setUiSetting('brightness', value));
-    bindTap($('ui-normal'), () => setUiSetting('uiScale', 'normal')); bindTap($('ui-large'), () => setUiSetting('uiScale', 'large')); bindTap($('map-normal'), () => setUiSetting('minimapSize', 'normal')); bindTap($('map-large'), () => setUiSetting('minimapSize', 'large'));
+    for (const size of ['small','normal','large']) bindTap($('ui-' + size), () => setUiSetting('uiScale', size)); bindTap($('map-normal'), () => setUiSetting('minimapSize', 'normal')); bindTap($('map-large'), () => setUiSetting('minimapSize', 'large'));
     bindTap($('numbersToggle'), () => setUiSetting('combatNumbers', !settings.combatNumbers)); if (hapticsAvailable) bindTap($('hapticsToggle'), () => setUiSetting('haptics', !settings.haptics));
     bindTap($('musicToggle'), () => { audio.unlock(); setUiSetting('musicEnabled', !settings.musicEnabled); }); bindTap($('voiceToggle'), () => setUiSetting('voiceEnabled', !settings.voiceEnabled));
     bindTap($('audioTestBtn'), async () => { const ok = await audio.unlock(); syncAudioSettings(); if (ok) { audio.sfx('test'); setText($('audioStatus'), 'Аудио: активно'); } else setText($('audioStatus'), audioStatusText()); });
@@ -3878,7 +3997,8 @@
       life: 2,
       r: 5,
       collisionPad: 7,
-      color: '#e5b86a'
+      color: '#e5b86a',
+      vfxFamily:`arrow_${zoneId}`, vfxClock:0
     });
     return true;
   }
@@ -3887,6 +4007,7 @@
     const impact = combatEngine.resolveIncomingDamage({ damage, blocking: player.blocking, dodging: time < player.dodgeUntil, blockAge:time - player.blockStartedAt, perfectWindow, tuning: buildProfile.combat });
     if (!impact.valid) return impact;
     if (impact.perfect) {
+      spawnVfx('vfx.defense.perfect_block', player.x, player.y, 84, .45, player.dir);
       player.riposteUntil = time + 2.2;
       player.stamina = Math.min(player.maxStamina, player.stamina + 8);
       const source = entities.find(e => e.kind === 'enemy' && e.hp > 0 && Math.hypot(e.x - sourceX, e.y - sourceY) < 8);
@@ -3908,6 +4029,7 @@
     }
     const dmg = impact.damage;
     player.hp = Math.max(0, player.hp - dmg);
+    spawnVfx(impact.blocked ? 'vfx.defense.block' : 'vfx.hit.flesh', player.x, player.y, impact.blocked ? 62 : 54, .32, player.dir);
     animate(player, impact.blocked ? 'block' : 'hit', .24);
     addFloatingText('−' + dmg, player.x, player.y - 52, '#ff9690');
     burst(player.x, player.y, impact.blocked ? '#e8d08a' : '#e06d68', 7, 80);
@@ -3958,7 +4080,9 @@
       life: 2.4,
       r: 9,
       collisionPad: 11,
-      color: bossDefinition(e)?.accent || '#c99be8'
+      color: bossDefinition(e)?.accent || '#c99be8',
+      vfxFamily:e.type === 'guardian' ? 'guardian_core' : e.type === 'briarMatriarch' ? 'thorn_seed' : e.type === 'cinderWarden' ? 'ember_lance' : e.type === 'frostboundSeer' ? 'ice_shard' : 'rift_spear',
+      vfxClock:0
     });
     return true;
   }
@@ -4144,7 +4268,13 @@
   function updateProjectiles(dt) {
     for (let i = projectiles.length - 1; i >= 0; i--) {
       const p = projectiles[i];
+      p.vfxClock = (Number(p.vfxClock) || 0) - dt;
+      if (p.vfxClock <= 0) {
+        spawnVfx(projectileVfxId(p, 'trail'), p.x, p.y, p.r ? p.r * 3.5 : 24, .22, Math.atan2(p.vy, p.vx), true, -p.vx * .05, -p.vy * .05);
+        p.vfxClock = profile.detail >= 3 ? .035 : profile.detail >= 1 ? .065 : .11;
+      }
       if (physics && !physics.clearLine(p.x, p.y, p.x + p.vx * dt, p.y + p.vy * dt, 3)) {
+        spawnVfx(projectileVfxId(p, 'impact'), p.x, p.y, 48, .3, Math.atan2(p.vy, p.vx));
         projectiles.splice(i, 1);
         continue;
       }
@@ -4167,10 +4297,14 @@
           }
         }
       }
-      if (hit || p.life <= 0) projectiles.splice(i, 1);
+      if (hit || p.life <= 0) {
+        spawnVfx(projectileVfxId(p, 'impact'), p.x, p.y, p.owner === 'enemy' ? 58 : 44, .32, Math.atan2(p.vy, p.vx));
+        projectiles.splice(i, 1);
+      }
     }
   }
   function updateEffects(dt) {
+    vfx?.update(dt);
     for (let i = particles.length - 1; i >= 0; i--) {
       const p = particles[i];
       p.x += p.vx * dt;
@@ -4203,7 +4337,9 @@
   }
   function updateUI() {
     updateTutorialUI();
-    setWidth(ui.hp, player.hp / player.maxHp * 100 + '%');
+    const hpPercent = clamp(player.hp / player.maxHp * 100, 0, 100);
+    setWidth(ui.hp, hpPercent + '%');
+    ui.hp?.parentElement?.setAttribute('aria-valuenow', String(Math.round(hpPercent)));
     const guardian = entities.find(e => e.kind === 'enemy' && isBoss(e) && e.hp > 0 && e.aiState === 'chase');
     const bossActive = !!guardian;
     ui.bossHud?.classList.toggle('hidden', !bossActive);
@@ -4211,11 +4347,17 @@
       setText(ui.bossName, bossDefinition(guardian)?.name || 'Guardian');
       setText(ui.bossPhase, guardian.bossPhase === 2 ? 'II' : 'I');
       setText(ui.bossHpText, `${Math.ceil(guardian.hp)} / ${Math.ceil(guardian.maxHp)}`);
-      setWidth(ui.bossHpFill, clamp(guardian.hp / guardian.maxHp * 100, 0, 100) + '%');
+      const bossPercent = clamp(guardian.hp / guardian.maxHp * 100, 0, 100);
+      setWidth(ui.bossHpFill, bossPercent + '%');
+      ui.bossHpFill?.parentElement?.setAttribute('aria-valuenow', String(Math.round(bossPercent)));
       ui.bossHud?.classList.toggle('phase2', guardian.bossPhase === 2);
     }
-    setWidth(ui.stamina, player.stamina / player.maxStamina * 100 + '%');
-    setWidth(ui.xp, player.xp / player.xpNeed * 100 + '%');
+    const staminaPercent = clamp(player.stamina / player.maxStamina * 100, 0, 100),
+      xpPercent = clamp(player.xp / player.xpNeed * 100, 0, 100);
+    setWidth(ui.stamina, staminaPercent + '%');
+    setWidth(ui.xp, xpPercent + '%');
+    ui.stamina?.parentElement?.setAttribute('aria-valuenow', String(Math.round(staminaPercent)));
+    ui.xp?.parentElement?.setAttribute('aria-valuenow', String(Math.round(xpPercent)));
     setText(ui.level, 'Ур. ' + player.level);
     const z = zones[zoneId];
     setText(ui.zone, z.name);
@@ -4254,6 +4396,16 @@
     const dodgeLeft = Math.max(0, player.dodgeCd - time);
     if (ui.dodgeMeta) setText(ui.dodgeMeta, dodgeLeft > 0 ? `${dodgeLeft.toFixed(1)}с` : `${buildProfile.combat.dodgeStaminaCost} EN`);
     updateActionState(ui.dodgeBtn, getActionPresentation('dodge', actionState, time, ui.dodgeBtn?.classList.contains('pressed')));
+    const perfectWindow = player.story?.choices?.shardDoctrine === 'seal' ? .22 : .16;
+    const riposteReady = player.riposteUntil > time,
+      perfectBlockReady = riposteReady || (player.blocking && time - player.blockStartedAt <= perfectWindow);
+    ui.blockBtn?.classList.toggle('riposte-ready', perfectBlockReady);
+    uiIcons?.set?.(ui.blockBtn, 'actions', perfectBlockReady ? 'perfect-block' : 'block');
+    if (ui.blockBtn) {
+      const blockLabel = riposteReady ? 'Ответный удар готов' : perfectBlockReady ? 'Окно идеального блока' : 'Блок и парирование';
+      ui.blockBtn.setAttribute('aria-label', blockLabel);
+      ui.blockBtn.title = blockLabel;
+    }
     refreshSaveHealth();
     const hit = nearbyInteraction();
     ui.actionUse.classList.toggle('available', !!hit);
@@ -4322,8 +4474,32 @@
     ctx.fillRect(0, 0, W, H);
     ctx.save();
     ctx.translate(W / 2 - player.x + cameraImpactX, H / 2 - player.y * .82 + cameraImpactY);
-    const basePattern = zoneId === 'mistwood' ? patterns.grass : zoneId === 'stonevale' ? patterns.stone : patterns.dirt;
-    texturedRect(basePattern, z.ground, -160, -160, WORLD.w + 320, WORLD.h * .82 + 320, .42 + profile.textureScale * .3);
+    const visual = zoneVisuals?.ZONES[zoneId], material = visual?.terrain;
+    const zoneBase = material && art?.zonePattern(ctx, material.base, profile.detail % 3);
+    const basePattern = zoneBase || (zoneId === 'mistwood' ? patterns.grass : zoneId === 'stonevale' ? patterns.stone : patterns.dirt);
+    texturedRect(basePattern, z.ground, -160, -160, WORLD.w + 320, WORLD.h * .82 + 320, zoneBase ? .92 : .42 + profile.textureScale * .3);
+    if (zoneBase) {
+      const pathPattern = art.zonePattern(ctx, material.path, 1), secondaryPattern = art.zonePattern(ctx, material.secondary, 2);
+      if (pathPattern && visual.path.length > 1) {
+        ctx.save(); ctx.globalAlpha = .72; ctx.strokeStyle = pathPattern; ctx.lineWidth = 92; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.beginPath();
+        visual.path.forEach(([x,y], index) => index ? ctx.lineTo(x,y*.82) : ctx.moveTo(x,y*.82)); ctx.stroke(); ctx.restore();
+      }
+      if (secondaryPattern) {
+        ctx.save(); ctx.globalAlpha = .42; ctx.fillStyle = secondaryPattern;
+        for (const landmark of visual.landmarks) { ctx.beginPath(); ctx.ellipse(landmark.x,landmark.y*.82,112,48,0,0,Math.PI*2); ctx.fill(); }
+        ctx.restore();
+      }
+      const arenaPattern = art.zonePattern(ctx, material.arena, 0);
+      if (arenaPattern) { const arena = LANDMARKS[zoneId]?.find(item => item[2] === 'BOSS'); if (arena) { ctx.save(); ctx.globalAlpha=.5; ctx.fillStyle=arenaPattern; ctx.beginPath(); ctx.ellipse(arena[0],arena[1]*.82,185,82,0,0,Math.PI*2); ctx.fill(); ctx.restore(); } }
+      const hazard = visual.hazard;
+      if (hazard && visible(hazard.x,hazard.y,hazard.rx+80)) {
+        const hazardPattern = art.zonePattern(ctx, material.hazard, 2);
+        ctx.save(); ctx.beginPath(); ctx.ellipse(hazard.x,hazard.y*.82,hazard.rx,hazard.ry,0,0,Math.PI*2); ctx.clip();
+        if (hazardPattern) { ctx.globalAlpha=.68; ctx.fillStyle=hazardPattern; ctx.fillRect(hazard.x-hazard.rx,hazard.y*.82-hazard.ry,hazard.rx*2,hazard.ry*2); }
+        if (profile.detail > 0) { const frames=profile.detail>=3?6:4; art.drawFrame(ctx, material.hazard, hazard.x, hazard.y*.82+hazard.ry, {frame:11+(Math.floor(time*5)%frames),width:hazard.rx*2,height:hazard.ry*2}); }
+        ctx.restore();
+      }
+    }
     ctx.globalAlpha = .2 + profile.detail * .06;
     const fallbackSpots = Math.min(groundSpots.length, 24 + profile.detail * 10);
     for (let i = 0; !art?.terrainReady && i < fallbackSpots; i++) {
@@ -4354,6 +4530,13 @@
     }
   }
   function drawAmbientItem(a) {
+    if (a.visualId && art?.has(a.visualId)) {
+      const p = screenPos(a.x,a.y), height = a.height * a.scale;
+      ctx.save();
+      if (Math.abs(a.x-player.x) < 70 && a.y > player.y && a.y-player.y < height) ctx.globalAlpha=.38;
+      groundShadow(p.x,p.y+12,(a.footprint || 16)*a.scale);
+      art.drawFrame(ctx,a.visualId,p.x,p.y+16,{height,frame:a.frame}); ctx.restore(); return;
+    }
     if (art?.has('pine')) {
       const p = screenPos(a.x, a.y),
         tree = zoneId === 'mistwood';
@@ -4453,6 +4636,11 @@
     ctx.restore();
   }
   function drawCamp(z) {
+    const campVisual = zoneVisuals?.ZONES[zoneId]?.camp;
+    if (campVisual && art?.has(campVisual.id)) {
+      const p=screenPos(z.camp.x,z.camp.y-100); groundShadow(p.x,p.y+14,campVisual.footprint);
+      art.drawFrame(ctx,campVisual.id,p.x,p.y+20,{height:campVisual.height}); drawCampBoard(z); return;
+    }
     if (art?.has('house')) {
       const p = screenPos(z.camp.x, z.camp.y - 100);
       groundShadow(p.x, p.y + 14, 55);
@@ -4506,10 +4694,15 @@
     drawCampBoard(z);
   }
   function drawScout(z) {
-    if (art?.has('scout')) {
+    const visualId = NPC_VISUAL_IDS[z.npcId] || '';
+    if (art?.has(visualId)) {
       const p = screenPos(z.scout.x, z.scout.y);
       groundShadow(p.x, p.y + 14, 22);
-      art.actor(ctx, 'scout', p.x, p.y + 17, 82, time, 0, dist(player, z.scout) < 130 ? 'gather' : 'idle', (Math.sin(time * 1.5) + 1) / 2);
+      const angle = Math.atan2(player.y - z.scout.y, player.x - z.scout.x);
+      art.actor(ctx, visualId, p.x, p.y + 17, {
+        height:86, clip:dist(player, z.scout) < 130 ? 'gather' : 'idle', progress:(Math.sin(time * 1.5) + 1) / 2,
+        direction:actorDirection(angle), flip:Math.cos(angle) < 0, time
+      });
       return;
     }
     const s = screenPos(z.scout.x, z.scout.y);
@@ -4543,10 +4736,39 @@
     ctx.fill();
     ctx.restore();
   }
+  function actorDirection(angle) {
+    const vertical = Math.sin(Number(angle) || 0);
+    return vertical < -.3 ? 'back' : vertical > .3 ? 'front' : 'side';
+  }
+  function enemyActorClip(e, boss, motion, progress, moving) {
+    if (e.hp <= 0) return 'death';
+    if (boss && e.bossPhaseFlashUntil > time) return 'phase_shift';
+    if (boss && e.attackPhase === 'windup') return `${e.bossAttack || 'slam'}_windup`;
+    if (boss && e.attackPhase === 'recovery') return `${e.bossAttack || 'slam'}_release`;
+    if (e.type === 'marksman' && e.attackPhase === 'windup') return 'aim';
+    if (e.type === 'marksman' && e.attackPhase === 'recovery') return 'shoot';
+    const action = progress < 1 ? motion?.action : '';
+    if (action === 'attack') return e.type === 'boar' ? 'bite' : 'attack_1';
+    if (action === 'hit') return e.type === 'boar' || boss ? 'stagger' : 'hit';
+    if (action === 'dodge') return e.type === 'boar' ? 'charge' : 'dodge';
+    if (moving) return boss ? 'move' : e.type === 'boar' ? 'trot' : 'walk';
+    return 'idle';
+  }
   function drawPortal(z) {
     const s = screenPos(z.portal.x, z.portal.y);
     const open = canUsePortal();
     groundShadow(s.x, s.y + 17, 43);
+    const portalVisual=zoneVisuals?.ZONES[zoneId]?.portal;
+    if (portalVisual && art?.has(portalVisual.id)) {
+      const arenaState=currentArenaState?.();
+      const state=transitioning ? 'transition' : arenaState?.phase === 'completed' ? 'completed' : open ? 'open' : inspectCurrentQuest()?.active?.type === 'portal' ? 'charging' : 'locked';
+      art.drawFrame(ctx,portalVisual.id,s.x,s.y+22,{height:portalVisual.height,frame:zoneVisuals.portalFrame(state)});
+      if (open) {
+        const portalFamily={mistwood:'mist',stonevale:'stone',ashfield:'ash',frostmere:'frost',starreach:'star'}[zoneId]||'mist';
+        art.drawVfxFrame?.(ctx,`vfx.portal.${portalFamily}`,s.x,s.y-18,82,Math.floor(time*8),0,.55);
+      }
+      return;
+    }
     if (art?.has('portal')) {
       ctx.save();
       ctx.globalAlpha = open ? 1 : .58;
@@ -4575,6 +4797,10 @@
     }
   }
   function drawResource(e) {
+    const visualId=zoneVisuals?.ZONES[zoneId]?.resources?.[e.type];
+    if (visualId && art?.has(visualId)) {
+      const p=screenPos(e.x,e.y); groundShadow(p.x,p.y+12,17); art.drawFrame(ctx,visualId,p.x,p.y+16,{height:e.type==='herb'?38:44}); return;
+    }
     if (art?.has(e.type)) {
       const p = screenPos(e.x, e.y);
       groundShadow(p.x, p.y + 12, 17);
@@ -4622,8 +4848,8 @@
   }
   function drawEntity(e) {
     const boss = bossDefinition(e);
-    const artType = boss?.artType || (e.type === 'marksman' ? 'raider' : e.type);
-    if (art?.has(artType)) {
+    const visualId = boss ? BOSS_VISUAL_IDS[e.type] : visualForEnemy(zoneId, e.type);
+    if (art?.has(visualId)) {
       const p = screenPos(e.x, e.y),
         height = boss?.height || (e.type === 'boar' ? 54 : 80);
       groundShadow(p.x, p.y + 14, e.r * 1.15);
@@ -4633,22 +4859,13 @@
       const motion = motions.get(e),
         progress = motion ? clamp((time - motion.start) / motion.duration, 0, 1) : 1;
       const death = e.hp <= 0 ? clamp(1 - (e._corpseUntil - time) / .75, 0, 1) : 0;
-      art.actor(ctx, artType, p.x, p.y + 17 + bob, height, time + e.seed * 6, e.hp > 0 && dist(player, e) > e.r + player.r + 8 ? 1 : 0, progress < 1 ? motion.action : 'idle', progress, player.x < e.x, death);
+      const moving = e.hp > 0 && dist(player, e) > e.r + player.r + 8;
+      const angle = e.hp > 0 ? Math.atan2(player.y - e.y, player.x - e.x) : Number(e.dir) || 0;
+      art.actor(ctx, visualId, p.x, p.y + 17 + bob, {
+        height, time:time + e.seed * 6, moving, clip:enemyActorClip(e, boss, motion, progress, moving), progress:death || progress,
+        direction:actorDirection(angle), flip:Math.cos(angle) < 0, phase2:boss && e.bossPhase === 2
+      });
       ctx.restore();
-      if (e.type === 'marksman' && e.hp > 0) {
-        ctx.save();
-        ctx.strokeStyle = '#e5b86a';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(p.x + 17, p.y - 18, 9, -1.15, 1.15);
-        ctx.stroke();
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(p.x - 13, p.y - 35);
-        ctx.lineTo(p.x - 7, p.y - 8);
-        ctx.stroke();
-        ctx.restore();
-      }
       if (boss && e.hp > 0 && e.bossPhase === 2) {
         ctx.save();
         ctx.globalAlpha = reduceMotion ? .62 : .52 + Math.sin(time * 4) * .08;
@@ -4717,7 +4934,7 @@
     ctx.restore();
   }
   function drawPlayer() {
-    if (art?.has('hero')) {
+    if (art?.has('player.ranger')) {
       const p = screenPos(player.x, player.y),
         moving = Math.hypot(joy.x, joy.y) > .08;
       const motion = motions.get(player),
@@ -4727,7 +4944,7 @@
         const fallen = screenPos(motion.x, motion.y);
         ctx.save();
         ctx.globalAlpha = 1 - progress;
-        art.actor(ctx, 'hero', fallen.x, fallen.y + 18, 88, time, 0, 'idle', 1, false, progress);
+        art.actor(ctx, 'player.ranger', fallen.x, fallen.y + 18, {height:88,time,clip:'death',progress,direction:'front',equipment:player.loadout,accent:COSMETICS.accents[player.cosmetics.accent]});
         ctx.restore();
       }
       const accent = COSMETICS.accents[player.cosmetics.accent] || COSMETICS.accents.teal;
@@ -4736,20 +4953,13 @@
       ctx.save();
       if (time < player.dodgeUntil) ctx.globalAlpha = .68;
       if (action === 'death') ctx.globalAlpha = progress;
-      art.actor(ctx, Math.sin(player.dir) < -.3 ? 'heroBack' : 'hero', p.x, p.y + 18 + (moving ? Math.sin(time * 12) * 1.6 : 0), 88, time, moving ? 1 : 0, action, progress, Math.cos(player.dir) < 0);
-      const lean = art.bodyLean(action, progress),
-        facing = Math.cos(player.dir) < 0 ? -1 : 1;
+      const clip = action === 'attack' ? `attack_${Math.max(1, Math.min(3, player.combo || 1))}` : action === 'idle' && moving ? 'walk' : action;
+      art.actor(ctx, 'player.ranger', p.x, p.y + 18, {
+        height:88,time,moving,clip,progress,direction:actorDirection(player.dir),flip:Math.cos(player.dir)<0,
+        equipment:player.loadout,accent
+      });
       ctx.restore();
-      const swing = action === 'attack' || action === 'cast' ? Math.sin(progress * Math.PI) * 1.8 * (player.combo % 2 ? -1 : 1) : 0;
-      const hand = art.hand(action, progress, time, moving ? 1 : 0, false),
-        left = art.hand(action, progress, time, moving ? 1 : 0, true);
-      const bob = moving ? Math.sin(time * 12) * 1.6 : 0;
-      const handX = p.x + facing * (hand.x * Math.cos(lean) - hand.y * Math.sin(lean)),
-        handY = p.y + 18 + bob + hand.x * Math.sin(lean) + hand.y * Math.cos(lean);
-      const leftX = p.x + facing * (left.x * Math.cos(lean) - left.y * Math.sin(lean)),
-        leftY = p.y + 18 + bob + left.x * Math.sin(lean) + left.y * Math.cos(lean);
-      if (action === 'drink') art.draw(ctx, 'potion', handX, handY, 23);else art.weapon(ctx, handX, handY, player.loadout.weapon === 'dawnBlade' ? 48 : 40, (action === 'attack' || action === 'cast' ? motion.dir ?? player.dir : facing > 0 ? .85 : Math.PI - .85) + (player.blocking && player.loadout.offhand !== 'buckler' ? -Math.PI / 2 : swing));
-      if (player.loadout.offhand === 'buckler') art.shield(ctx, leftX, leftY, player.blocking ? 34 : 29, player.blocking ? player.dir : 0);
+      if (action === 'drink') art.draw(ctx, 'potion', p.x + (Math.cos(player.dir) < 0 ? -19 : 19), p.y - 39, 21);
       return;
     }
     const s = screenPos(player.x, player.y);
@@ -4796,10 +5006,12 @@
   function drawProjectiles() {
     for (const p of projectiles) {
       const s = screenPos(p.x, p.y);
+      const angle = Math.atan2(p.vy, p.vx);
+      if (art?.drawVfxFrame?.(ctx, projectileVfxId(p, 'head'), s.x, s.y, p.r ? p.r * 4 : 24, Math.floor(time * 18), angle, 1)) continue;
       ctx.save();
       ctx.translate(s.x, s.y);
       if (p.owner === 'enemy') {
-        ctx.rotate(Math.atan2(p.vy, p.vx));
+        ctx.rotate(angle);
         ctx.strokeStyle = p.color || '#e5b86a';
         ctx.lineWidth = p.style === 'guardianBolt' ? 5 : 3;
         ctx.beginPath();
@@ -4828,6 +5040,7 @@
     ctx.globalAlpha = 1;
   }
   function drawLandmarks(z) {
+    if (zoneVisuals?.ZONES[zoneId]) return;
     ctx.save();
     ctx.translate(W / 2 - player.x + cameraImpactX, H / 2 - player.y * .82 + cameraImpactY);
     // Zone landmark cluster
@@ -4929,13 +5142,10 @@
   function drawLoot() {
     for (const l of lootDrops) {
       if (!visible(l.x, l.y, 35)) continue;
-      const asset = {
-        guardianToken: 'armor',
-        emberShard: 'ore'
-      }[l.id] || l.id;
+      const asset = { coin:'icon.item.gold', guardianToken:'icon.item.guardian_token', emberShard:'icon.item.ember_shard', herb:'icon.item.herb', wood:'icon.item.wood', ore:'icon.item.ore' }[l.id] || `icon.item.${l.id}`;
       if (art?.has(asset)) {
         const p = screenPos(l.x, l.y);
-        art.draw(ctx, asset, p.x, p.y + 3 + Math.sin(time * 4 + l.x) * 2, 25);
+        art.drawFrame(ctx, asset, p.x, p.y + 3 + Math.sin(time * 4 + l.x) * 2, {height:25});
         continue;
       }
       const s = screenPos(l.x, l.y);
@@ -4956,6 +5166,7 @@
     }
   }
   function drawWorldLandmarkOverlay() {
+    if (zoneVisuals?.ZONES[zoneId]) return;
     if (art?.has('house')) return;
     const z = zones[zoneId];
     const list = LANDMARKS[zoneId];
@@ -5034,7 +5245,7 @@
       const npcName = storyApi?.NPCS[z.npcId]?.name || 'Дозорный';
       const label = active ? '✦  ' + npcName : npcName;
       const w = ctx.measureText(label).width + 18;
-      const labelY = s.y - (art?.has('scout') ? 106 : 58);
+      const labelY = s.y - (art?.has(NPC_VISUAL_IDS[z.npcId] || '') ? 106 : 58);
       ctx.fillRect(s.x - w / 2, labelY, w, 20);
       ctx.fillStyle = active ? '#f0d58e' : '#d3ddd8';
       ctx.fillText(label, s.x, labelY + 15);
@@ -5336,12 +5547,12 @@
     }
     for (const e of entities) if ((e.hp > 0 || e._corpseUntil > time) && visible(e.x, e.y, 100)) drawQueue.push(e);
     for (const a of ambient) if (visible(a.x, a.y, 250)) drawQueue.push(a);
-    if (art?.has('house')) for (const item of structures) if (visible(item.x, item.y, 200)) drawQueue.push(item);
+    for (const item of structures) if (art?.has(item.asset) && visible(item.x, item.y, 200)) drawQueue.push(item);
     drawQueue.sort(sortDepth);
     for (const e of drawQueue) {
       if (e.kind === 'structure') {
         const p = screenPos(e.x, e.y);
-        art.draw(ctx, e.asset, p.x, p.y + 20, e.height);
+        art.drawFrame(ctx, e.asset, p.x, p.y + 20, {height:e.height});
       } else if (e.kind === 'enemy') drawEntity(e);else if (e.kind === 'resource') drawResource(e);else if (e.kind === 'player') drawPlayer();else if (typeof e.scale === 'number') drawAmbientItem(e);else if (e.kind === 'camp') drawCamp(z);else if (e.kind === 'scout') drawScout(z);else drawPortal(z);
     }
     drawLighting(z);
@@ -5349,6 +5560,13 @@
     drawCombatFeedback();
     drawLoot();
     drawProjectiles();
+    vfxCamera.x = player.x;
+    vfxCamera.y = player.y;
+    vfxCamera.width = W;
+    vfxCamera.height = H;
+    vfxCamera.offsetX = cameraImpactX;
+    vfxCamera.offsetY = cameraImpactY;
+    vfx?.draw(ctx, art, vfxCamera);
     drawParticles();
     drawBloom(z);
     drawFloatingTexts();
@@ -5382,6 +5600,19 @@
     if (!candidates.length) return null;
     return candidates.reduce((best, item) => !best || dist(player, item) < dist(player, best) ? item : best, null);
   }
+  function mapIconForLandmark(kind, known = true) {
+    if (!known) return 'undiscovered';
+    return ({ FOREST:'ruin', VILLAGE:'camp', MINE:'mine', SHRINE:'shrine', OUTPOST:'outpost', BOSS:'boss', RUIN:'ruin' })[kind] || 'undiscovered';
+  }
+  function drawLogicalMapMarker(id, x, y, size, color, fill = 'rgba(8,16,15,.82)') {
+    MAP_MARKER_STYLE.color = color;
+    MAP_MARKER_STYLE.fill = fill;
+    if (uiIcons?.drawMarker?.(mctx, id, x, y, size, MAP_MARKER_STYLE)) return;
+    mctx.fillStyle = color;
+    mctx.beginPath();
+    mctx.arc(x, y, Math.max(2, size * .22), 0, Math.PI * 2);
+    mctx.fill();
+  }
   function drawMap() {
     const z = zones[zoneId];
     mctx.clearRect(0, 0, 240, 240);
@@ -5400,17 +5631,13 @@
     }
     for (const e of entities) {
       if (e.hp <= 0 || e.kind === 'resource') continue;
-      mctx.fillStyle = isBoss(e) ? bossDefinition(e).accent : '#ca6a6e';
-      mctx.fillRect(e.x / WORLD.w * 240, e.y / WORLD.h * 240, 2.5, 2.5);
+      const ex = e.x / WORLD.w * 240, ey = e.y / WORLD.h * 240;
+      if (isBoss(e)) drawLogicalMapMarker('boss', ex, ey, 10, bossDefinition(e).accent);
+      else { mctx.fillStyle = '#ca6a6e'; mctx.fillRect(ex, ey, 2.5, 2.5); }
     }
-    mctx.fillStyle = '#e6c874';
-    mctx.beginPath();
-    mctx.arc(z.scout.x / WORLD.w * 240, z.scout.y / WORLD.h * 240, 3, 0, Math.PI * 2);
-    mctx.fill();
-    mctx.fillStyle = '#79c0d0';
-    mctx.beginPath();
-    mctx.arc(z.portal.x / WORLD.w * 240, z.portal.y / WORLD.h * 240, 3.5, 0, Math.PI * 2);
-    mctx.fill();
+    drawLogicalMapMarker('npc', z.scout.x / WORLD.w * 240, z.scout.y / WORLD.h * 240, 9, '#e6c874');
+    drawLogicalMapMarker('portal', z.portal.x / WORLD.w * 240, z.portal.y / WORLD.h * 240, 10, '#79c0d0');
+    if (z.camp) drawLogicalMapMarker('camp', z.camp.x / WORLD.w * 240, z.camp.y / WORLD.h * 240, 9, '#e6a95f');
     const target = objectiveTarget();
     if (target) {
       const tx = target.x / WORLD.w * 240, ty = target.y / WORLD.h * 240;
@@ -5428,8 +5655,7 @@
     mctx.fill();
     for (let i = 0; i < (LANDMARKS[zoneId] || []).length; i++) {
       const lm = LANDMARKS[zoneId][i], known = player.discoveries.includes(`${zoneId}:${i}`);
-      mctx.fillStyle = known ? 'rgba(255,225,150,.82)' : 'rgba(255,225,150,.18)';
-      mctx.beginPath(); mctx.arc(lm[0] / WORLD.w * 240, lm[1] / WORLD.h * 240, known ? 2.5 : 1.4, 0, Math.PI * 2); mctx.fill();
+      drawLogicalMapMarker(mapIconForLandmark(lm[2], known), lm[0] / WORLD.w * 240, lm[1] / WORLD.h * 240, known ? 8 : 6, known ? 'rgba(255,225,150,.82)' : 'rgba(255,225,150,.30)');
     }
   }
   function updatePerformanceMonitor(nowTime, renderMs, frameTimeMs) {
@@ -5447,6 +5673,21 @@
       perfRenderTotal = 0;
       perfFrameGapTotal = 0;
       perfWindowStart = nowTime;
+      if (settings.quality === 'auto' && perfActualFps > 0) {
+        const budget = 1000 / settings.fps;
+        if (perfActualFps >= settings.fps * .94 && perfAvgRenderMs <= budget * .55) {
+          autoStableWindows++;
+          autoPoorWindows = 0;
+          if (autoStableWindows >= 12) promoteAutoTier();
+        } else if (perfActualFps < settings.fps * .78 || perfAvgRenderMs > budget * .9) {
+          autoPoorWindows++;
+          autoStableWindows = 0;
+          if (autoPoorWindows >= 3) demoteAutoTier();
+        } else {
+          autoStableWindows = Math.max(0, autoStableWindows - 1);
+          autoPoorWindows = 0;
+        }
+      }
     }
     if (ui.perf && perfMonitorEnabled) {
       ui.perf.classList.remove('hidden');
@@ -5454,7 +5695,7 @@
       setText(ui.perfTarget, ` target ${settings.fps}`);
       setText(ui.perfFrame, perfAvgFrameMs > 0 ? `${perfAvgFrameMs.toFixed(1)} ms frame` : 'Measuring…');
       setText(ui.perfRender, perfAvgRenderMs > 0 ? ` · ${perfAvgRenderMs.toFixed(1)} ms render` : ' · Measuring…');
-      setText(ui.perfScale, `DPR ${DPR.toFixed(2)} · ${settings.quality}`);
+      setText(ui.perfScale, `DPR ${DPR.toFixed(2)} · ${activeQualityKey()}`);
       setText(ui.perfDevice, ` · ${device.ios ? 'iOS' : device.android ? 'Android' : 'Mobile'} · v${BUILD_VERSION}`);
     } else if (ui.perf) {
       ui.perf.classList.add('hidden');
@@ -5475,7 +5716,7 @@
     ui.perfTarget.textContent = ` target ${settings.fps}`;
     ui.perfFrame.textContent = `${perfAvgFrameMs.toFixed(1)} ms frame`;
     ui.perfRender.textContent = ` · ${perfAvgRenderMs.toFixed(1)} ms render`;
-    ui.perfScale.textContent = `DPR ${DPR.toFixed(2)} · ${settings.quality}`;
+    ui.perfScale.textContent = `DPR ${DPR.toFixed(2)} · ${activeQualityKey()}`;
     ui.perfDevice.textContent = ` · ${device.ios ? 'iOS' : device.android ? 'Android' : 'Mobile'} · v${BUILD_VERSION}`;
     if (ui.perfPill) {
       ui.perfPill.classList.toggle('hidden', !perfMonitorEnabled);
@@ -5561,6 +5802,7 @@
       firstPaint();
       ui.loadFill.style.width = '15%';
       setTimeout(hideLoading, 220);
+      await loadAssetSystem();
       await Promise.all([loadTextures(), art?.load(() => applyGraphics())]);
       applyGraphics();
       drawWorld();
@@ -5599,6 +5841,22 @@
         }
       }),
       persistence: { codecActive: true },
+      assets: {
+        managerActive:() => Boolean(assetManager),
+        snapshot:() => assetManager?.snapshot() || null,
+        activeTier:() => assetManager?.snapshot().activeTier || QUALITY_ASSET_TIERS[activeQualityKey()],
+        assetSheets:() => assetManager?.snapshot().assetSheets || 0,
+        decodedBytes:() => assetManager?.snapshot().decodedBytes || 0,
+        fallbackUsed:() => assetManager?.snapshot().fallbackUsed || false,
+        load:loadAssetSystem,
+        reload:reloadAssetPacks
+      },
+      vfx: {
+        active:Boolean(vfx),
+        snapshot:() => vfx?.snapshot() || null,
+        spawn:spawnVfx,
+        clear:() => vfx?.clear()
+      },
       arena: {
         engineActive:Boolean(arenaEngine),
         state:currentArenaState,
@@ -5723,6 +5981,9 @@
       bossAttackProfile,
       bossDefinition,
       isBoss,
+      visualForEnemy,
+      bossVisualFor:type => BOSS_VISUAL_IDS[type] || '',
+      npcVisualFor:id => NPC_VISUAL_IDS[id] || '',
       guardianPhaseForHp: (hp, maxHp) => guardianPhaseForHp(hp, maxHp),
       guardianAttackProfile: (attack, phase) => guardianAttackProfile(attack, phase),
       guardianAttackDamage: (enemy, baseDamage) => guardianAttackDamage(enemy, baseDamage),
@@ -5747,7 +6008,7 @@
       RUNES,
       COSMETICS,
       player,
-      setZone: id => { if (Object.hasOwn(zones, id)) { zoneId = id; markZoneVisited(zoneId); audio.setZone(zoneId); resetZone(); updateUI(); return true; } return false; },
+      setZone: id => { if (Object.hasOwn(zones, id)) { zoneId = id; markZoneVisited(zoneId); audio.setZone(zoneId); loadZoneAssets(); resetZone(); updateUI(); return true; } return false; },
       setFps: f => {
         settings.fps = FPS.includes(Number(f)) ? Number(f) : 60;
         resetFrameLimiter();
@@ -5760,6 +6021,10 @@
       },
       graphics: () => ({
         quality: settings.quality,
+        activeTier: assetManager?.snapshot().activeTier || QUALITY_ASSET_TIERS[activeQualityKey()],
+        assetSheets: assetManager?.snapshot().assetSheets || 0,
+        decodedBytes: assetManager?.snapshot().decodedBytes || 0,
+        fallbackUsed: assetManager?.snapshot().fallbackUsed || false,
         DPR,
         dprCap: profile.dprCap || 2,
         pixelBudget: profile.pixelBudget || 1500000,

@@ -977,7 +977,7 @@ button:focus-visible {
   text-align:left;
 }
 .saveWarningText { color:#ffc0b0; background:#421f1d; border:1px solid #b56d5e55; border-radius:10px; padding:10px; }
-.actionMeta { font-size:7px; line-height:1; color:#f0d58e; opacity:.92; }
+.actionMeta { font-size:7px; line-height:1; color:#f0d58e; opacity:.92; font-variant-numeric:tabular-nums; }
 .action { --action-progress:0; isolation:isolate; overflow:hidden; }
 .action > * { position:relative; z-index:1; }
 .action::after {
@@ -1010,7 +1010,7 @@ body.left-handed .actions { right:auto; left:calc(var(--left) + 12px); }
 }
 
 /* 3.8.3 graphics: five explicit quality tiers without compressing other segmented controls. */
-#qualitySeg { grid-template-columns:repeat(5,minmax(0,1fr)); }
+#qualitySeg { grid-template-columns:repeat(6,minmax(0,1fr)); }
 #qualitySeg button { min-width:0; padding-inline:4px; font-size:11px; }
 @media(max-width:390px) and (orientation:portrait) {
   #qualitySeg { gap:5px; }
@@ -1021,6 +1021,7 @@ body.left-handed .actions { right:auto; left:calc(var(--left) + 12px); }
 :root { --world-brightness:1; }
 #game { filter:brightness(var(--world-brightness)); }
 body.ui-large .modalBody, body.ui-large #questTracker, body.ui-large .zonePanel { font-size:1.15em; }
+body.ui-small .modalBody, body.ui-small #questTracker, body.ui-small .zonePanel { font-size:.9em; }
 body.minimap-large #minimapFrame { transform:scale(1.18); transform-origin:top right; }
 body[data-control-size="compact"] .joystick { transform:scale(.88); transform-origin:bottom left; }
 body[data-control-size="compact"] .actions { transform:scale(.88); transform-origin:bottom right; }
@@ -1104,6 +1105,82 @@ body.left-handed[data-control-size="compact"] .actions, body.left-handed[data-co
 }
 @media(prefers-reduced-motion:reduce) {
   .bossBar span { transition:none; }
+}
+
+/* Graphics overhaul 2/6: shared vector icon system and HUD hierarchy. */
+[data-ui-icon] {
+  display:inline-grid;
+  place-items:center;
+  min-width:1em;
+  min-height:1em;
+  vertical-align:middle;
+}
+.uiIcon {
+  display:block;
+  width:1.35em;
+  height:1.35em;
+  overflow:visible;
+  fill:none;
+  stroke:currentColor;
+  stroke-width:2;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+  pointer-events:none;
+}
+.uiIconLabel { min-width:0; }
+.uiIconFallback {
+  display:inline-block;
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:.7em;
+  line-height:1;
+}
+.topBtn { min-width:44px; min-height:44px; }
+.topBtn .uiIcon { width:24px; height:24px; }
+.topBtn .uiIconFallback { font-size:8px; }
+#resourceHud > span { display:inline-flex; align-items:center; gap:4px; }
+#resourceHud .uiIcon { width:14px; height:14px; color:#d9c77e; }
+#resourceHud .uiIconFallback { font-size:7px; max-width:28px; }
+.netPill { display:inline-flex; align-items:center; gap:4px; }
+.netPill .uiIcon { width:12px; height:12px; }
+.actionIcon { width:26px; height:26px; }
+.actionIcon .uiIcon { width:26px; height:26px; filter:drop-shadow(0 1px 1px #0008); }
+.action.skill .actionIcon,.action.skill .actionIcon .uiIcon { width:21px; height:21px; }
+.action.supply .actionIcon,.action.supply .actionIcon .uiIcon { width:20px; height:20px; }
+.action .uiIconFallback { font-size:7px; max-width:42px; }
+.action.riposte-ready {
+  border-color:#fff0a8;
+  box-shadow:0 0 0 3px rgba(255,228,124,.28),0 0 18px rgba(255,211,91,.34),inset 0 1px #fff4;
+  animation:riposteFrame .46s ease-in-out infinite alternate;
+}
+.action.riposte-ready .uiIcon { transform:scale(1.08); }
+@keyframes riposteFrame {
+  from { outline:1px solid rgba(255,234,151,.35); outline-offset:-4px; }
+  to { outline:3px solid rgba(255,234,151,.82); outline-offset:-7px; }
+}
+.iconBtn { display:flex; align-items:center; justify-content:flex-start; gap:9px; text-align:left; }
+.iconBtn .uiIcon { flex:0 0 auto; width:21px; height:21px; color:#efd894; }
+.iconBtn .uiIconLabel { flex:1; }
+.settingsTabs button { display:flex; align-items:center; justify-content:center; gap:5px; min-height:44px; }
+.settingsTabs .uiIcon { width:17px; height:17px; }
+.settingsTabs .uiIconLabel { overflow:hidden; text-overflow:ellipsis; }
+.uiScaleSeg { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.heroMeta {
+  display:grid;
+  grid-template-rows:auto 7px 7px 3px;
+  gap:4px;
+  align-content:center;
+}
+.heroLine { margin-bottom:0; }
+.heroMeta .bar { margin:0; }
+.bossLine { margin-bottom:4px; }
+.bossBar { height:7px; }
+.bossHpText { margin-top:4px; }
+@media(prefers-reduced-motion:reduce) {
+  .action.riposte-ready { animation:none!important; outline:3px double #fff0a8; outline-offset:-6px; }
+  .action.riposte-ready .uiIcon { transform:none; }
 }
 
 /* M4D canonical build presentation */
