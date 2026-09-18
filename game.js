@@ -3,7 +3,7 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '5.1.3';
+  const BUILD_VERSION = '5.1.4';
   const SAVE_SCHEMA = 5;
   const BASE_STATS = Object.freeze({ startLevel: 6, damage: 32, maxHp: 240, maxStamina: 100, speed: 205, damagePerLevel: 3, hpPerLevel: 18 });
   const MAX_UPGRADE_RANK = 5;
@@ -4139,12 +4139,6 @@
             e.aiState = 'idle';
             continue;
           }
-        } else if (zoneId === 'frostmere') {
-          const y = (y0 + time * (7 + i % 4)) % H;
-          ctx.globalAlpha = .13 + (i % 3) * .04; ctx.fillStyle = i % 2 ? '#d8f4ff' : '#8fcce7'; ctx.beginPath(); ctx.arc(x, y, 1 + i % 2, 0, Math.PI * 2); ctx.fill();
-        } else if (zoneId === 'starreach') {
-          const y = (y0 + Math.sin(phase + i) * 32 + H) % H;
-          ctx.globalAlpha = .18 + .16 * (Math.sin(phase * 1.7) * .5 + .5); ctx.fillStyle = i % 2 ? '#d7b9ff' : '#8ed9ff'; ctx.beginPath(); ctx.arc(x, y, 1.2 + i % 3, 0, Math.PI * 2); ctx.fill();
         } else {
           e.attackPhase = '';
           if (homeDistance > 8) {
