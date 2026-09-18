@@ -26,6 +26,23 @@
     'vfx.projectile.rift_spear.head','vfx.projectile.rift_spear.trail','vfx.projectile.rift_spear.impact'
   ]);
   const INDEX = new Map(EFFECT_IDS.map((id,index) => [id,index]));
+  // Effects that read as light/energy rather than solid matter get additive blending
+  // so they glow against dark terrain instead of looking like a flat alpha sticker.
+  const GLOW_IDS = Object.freeze([
+    'vfx.combat.crit','vfx.combat.triple_pulse_core','vfx.combat.triple_pulse_trail','vfx.combat.second_wind','vfx.combat.heal_tick',
+    'vfx.defense.perfect_block','vfx.defense.riposte_ready',
+    'vfx.arena.boundary_active','vfx.arena.wave_transition','vfx.arena.boss_entry','vfx.arena.victory',
+    'vfx.portal.mist','vfx.portal.ash','vfx.portal.frost','vfx.portal.star',
+    'vfx.world.star_mote',
+    'vfx.reward.discovery','vfx.reward.quest_complete','vfx.reward.level_up',
+    'vfx.projectile.ember_lance.head','vfx.projectile.ember_lance.trail',
+    'vfx.projectile.ice_shard.head','vfx.projectile.ice_shard.trail',
+    'vfx.projectile.rift_spear.head','vfx.projectile.rift_spear.trail',
+    'vfx.projectile.guardian_core.head','vfx.projectile.guardian_core.trail',
+    'vfx.death.rift'
+  ]);
+  const glow = new Uint8Array(EFFECT_IDS.length);
+  GLOW_IDS.forEach(id => { const i = INDEX.get(id); if (i !== undefined) glow[i] = 1; });
 
   function create({capacity=64}={}) {
     capacity=Math.max(1,Math.min(256,Math.floor(Number(capacity)||64)));
@@ -62,7 +79,7 @@
         const sx=x[i]-camera.x+width*.5+(camera.offsetX||0), sy=(y[i]-camera.y)*scaleY+height*.5+(camera.offsetY||0);
         if(sx<-size[i]||sx>width+size[i]||sy<-size[i]||sy>height+size[i])continue;
         const progress=1-life[i]/maxLife[i], frame=Math.max(0,Math.min(5,Math.floor(progress*6)));
-        assets.drawVfxFrame(ctx,EFFECT_IDS[type[i]],sx,sy,size[i],frame,dir[i],Math.max(0,life[i]/maxLife[i]));
+        assets.drawVfxFrame(ctx,EFFECT_IDS[type[i]],sx,sy,size[i],frame,dir[i],Math.max(0,life[i]/maxLife[i]),glow[type[i]]?'lighter':null);
       }
     }
     function setLimit(value) {

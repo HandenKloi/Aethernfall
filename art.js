@@ -225,7 +225,7 @@
   }
   // Positional hot-path API used by the bounded VFX pool. It deliberately
   // avoids per-frame option objects and keeps atlas animation allocation-free.
-  function drawVfxFrame(ctx, name, x, y, height, frameIndex = 0, rotation = 0, alpha = 1) {
+  function drawVfxFrame(ctx, name, x, y, height, frameIndex = 0, rotation = 0, alpha = 1, blend = null) {
     const entry = managedSource(name);
     if (!entry) return false;
     const frames = entry.record.frames || [entry.record.rect];
@@ -234,6 +234,7 @@
     ctx.save();
     ctx.translate(x, y);
     if (rotation) ctx.rotate(rotation);
+    if (blend) ctx.globalCompositeOperation = blend;
     ctx.globalAlpha *= alpha;
     ctx.drawImage(entry.image, frame[0], frame[1], frame[2], frame[3], -width / 2, -height / 2, width, height);
     ctx.restore();

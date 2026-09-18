@@ -264,13 +264,13 @@
   };
   const reduceMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true;
   const IMPACT_FEEDBACK = Object.freeze({
-    evade: Object.freeze({ priority: 1, camera: 0, duration: 0, flash: 0, haptic: 4, sfx: 'dodge' }),
-    block: Object.freeze({ priority: 2, camera: 1.5, duration: .07, flash: 0, haptic: 7, sfx: 'block' }),
-    enemyHit: Object.freeze({ priority: 3, camera: 2, duration: .08, flash: 0, haptic: 5, sfx: 'hit' }),
-    playerHit: Object.freeze({ priority: 4, camera: 3.5, duration: .11, flash: .38, haptic: 12, sfx: 'hit' }),
-    enemyKill: Object.freeze({ priority: 5, camera: 3, duration: .10, flash: 0, haptic: 10, sfx: 'kill' }),
-    guardianKill: Object.freeze({ priority: 6, camera: 5, duration: .14, flash: 0, haptic: 24, sfx: 'kill' })
-    ,parry: Object.freeze({ priority: 7, camera: 4, duration: .10, flash: .08, haptic: 18, sfx: 'parry' })
+    evade: Object.freeze({ priority: 1, camera: 0, duration: 0, flash: 0, haptic: 4, sfx: 'dodge', hitStop: 0 }),
+    block: Object.freeze({ priority: 2, camera: 1.5, duration: .07, flash: 0, haptic: 7, sfx: 'block', hitStop: .02 }),
+    enemyHit: Object.freeze({ priority: 3, camera: 2, duration: .08, flash: 0, haptic: 5, sfx: 'hit', hitStop: .02 }),
+    playerHit: Object.freeze({ priority: 4, camera: 3.5, duration: .11, flash: .38, haptic: 12, sfx: 'hit', hitStop: .04 }),
+    enemyKill: Object.freeze({ priority: 5, camera: 3, duration: .10, flash: 0, haptic: 10, sfx: 'kill', hitStop: .06 }),
+    guardianKill: Object.freeze({ priority: 6, camera: 5, duration: .14, flash: 0, haptic: 24, sfx: 'kill', hitStop: .12 })
+    ,parry: Object.freeze({ priority: 7, camera: 4, duration: .10, flash: .08, haptic: 18, sfx: 'parry', hitStop: .07 })
   });
   const DAMAGE_FLASH_DECAY = .38 / .16;
   const QUALITY = {
@@ -1039,7 +1039,7 @@
   const keyboardDirections = new Set();
   let keyboardBlock = false;
   let impactPendingKind = '', impactPendingPriority = 0, impactPendingDirX = 0, impactPendingDirY = 0;
-  let cameraImpactX = 0, cameraImpactY = 0, cameraImpactBaseX = 0, cameraImpactBaseY = 0, cameraImpactLife = 0, cameraImpactDuration = 0, damageFlash = 0;
+  let cameraImpactX = 0, cameraImpactY = 0, cameraImpactBaseX = 0, cameraImpactBaseY = 0, cameraImpactLife = 0, cameraImpactDuration = 0, damageFlash = 0, hitStopRemaining = 0;
   let impactLastKind = '', impactLastSfx = '', impactLastHaptic = 0;
   const actionPointerResets = new Set();
   const joy = {
@@ -1873,6 +1873,7 @@
     cameraImpactDuration = magnitude > 0 ? Math.max(0, Number(spec.duration) || 0) : 0;
     cameraImpactLife = cameraImpactDuration;
     damageFlash = Math.max(damageFlash, Math.min(.38, Math.max(0, Number(spec.flash) || 0)));
+    if (!reduceMotion) hitStopRemaining = Math.max(hitStopRemaining, Math.min(.15, Math.max(0, Number(spec.hitStop) || 0)));
     impactLastKind = kind;
     impactLastSfx = spec.sfx || '';
     impactLastHaptic = Math.max(0, Number(spec.haptic) || 0);
@@ -1907,6 +1908,7 @@
     cameraImpactLife = 0;
     cameraImpactDuration = 0;
     damageFlash = 0;
+    hitStopRemaining = 0;
     impactLastKind = '';
     impactLastSfx = '';
     impactLastHaptic = 0;
@@ -2549,21 +2551,25 @@
       physics?.relocate(player);
     }
   }
-  function burst(x, y, color, count = 10, speed = 110) {
+  function burst(x, y, color, count = 10, speed = 110, kind = 'spark') {
     const room = Math.max(0, profile.particles - particles.length);
     count = Math.min(count, room);
     for (let i = 0; i < count; i++) {
       const a = Math.random() * Math.PI * 2,
         v = (.25 + Math.random()) * speed;
       particles.push({
-        x,
-        y,
+        x, y,
         vx: Math.cos(a) * v,
         vy: Math.sin(a) * v,
         life: .32 + Math.random() * .48,
         max: .8,
         size: 1.5 + Math.random() * 3.8,
-        color
+        color,
+        kind,                              // 'spark' | 'glow' | 'ember'
+        rot: Math.random() * Math.PI * 2,
+        spin: (Math.random() - .5) * 6,
+        drag: kind === 'glow' ? .90 : .96,  // glow particles slow down faster
+        gravity: kind === 'ember' ? 140 : 0
       });
     }
   }
@@ -2656,7 +2662,7 @@
     applyQuestProgressEvent({ type: 'kill', target: e.type, category: enemyQuestCategory(e), amount: 1 });
     if (e.arenaOwned && boss) finishArenaBoss();
     else if (e.arenaOwned && arenaEngine) applyArenaResult(arenaEngine.enemyDefeated(zoneId, currentArenaState(), player.progression.completedCycles));
-    burst(e.x, e.y, boss?.accent || '#e27677', 24, 155);
+    burst(e.x, e.y, boss?.accent || '#e27677', 24, 155, 'ember');
     save();
   }
   function hitTarget(e, dmg) {
@@ -2749,7 +2755,7 @@
     player.dashX = mx / mag;
     player.dashY = my / mag;
     spawnVfx('vfx.defense.dodge_afterimage', player.x, player.y, 72, .38, player.dir);
-    burst(player.x, player.y, COSMETICS.trails[player.cosmetics.trail] || '#91c6cc', 16, 145);
+    burst(player.x, player.y, COSMETICS.trails[player.cosmetics.trail] || '#91c6cc', 16, 145, 'glow');
     feedback('dodge', 10);
     toast('Уклонение');
     return true;
@@ -2788,7 +2794,7 @@
           hits++;
         }
       }
-      burst(player.x, player.y, COSMETICS.trails[player.cosmetics.trail] || '#8fc4e3', 26, 160);
+      burst(player.x, player.y, COSMETICS.trails[player.cosmetics.trail] || '#8fc4e3', 26, 160, 'glow');
       feedback('attack', 8);
       toast(hits ? `Разрез ветра: ${hits} попад.` : 'Разрез ветра — мимо');
     } else if (action.type === 'triplePulse') {
@@ -2810,7 +2816,7 @@
       toast('Тройной импульс');
     } else {
       spawnVfx('vfx.combat.second_wind', player.x, player.y, 94, .7);
-      burst(player.x, player.y, '#86c99b', 20, 100);
+      burst(player.x, player.y, '#86c99b', 20, 100, 'glow');
       feedback('drink', 10);
       toast('Восстановлено здоровье');
     }
@@ -4020,7 +4026,7 @@
       }
       animate(player, 'block', .22);
       addFloatingText('ИДЕАЛЬНЫЙ БЛОК', player.x, player.y - 52, '#ffe08a');
-      burst(player.x, player.y, '#ffe08a', 14, 125);
+      burst(player.x, player.y, '#ffe08a', 14, 125, 'glow');
       queueImpactFeedback('parry', sourceX, sourceY, player.x, player.y);
       return impact;
     }
@@ -4311,9 +4317,11 @@
       const p = particles[i];
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      const drag = Math.pow(.94, dt * 60);
+      if (p.gravity) p.vy += p.gravity * dt;
+      const drag = Math.pow(p.drag ?? .94, dt * 60);
       p.vx *= drag;
       p.vy *= drag;
+      if (p.spin) p.rot = (p.rot || 0) + p.spin * dt;
       p.life -= dt;
       if (p.life <= 0) particles.splice(i, 1);
     }
@@ -5084,11 +5092,36 @@
   function drawParticles() {
     for (const p of particles) {
       const s = screenPos(p.x, p.y);
-      ctx.globalAlpha = Math.max(0, p.life / p.max);
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, p.size, 0, Math.PI * 2);
-      ctx.fill();
+      const t = Math.max(0, p.life / p.max);
+      ctx.save();
+      ctx.globalAlpha = t;
+      if (p.kind === 'glow' || p.kind === 'ember') {
+        ctx.globalCompositeOperation = 'lighter';
+        const r = p.size * (2.2 + (1 - t) * 1.4);
+        const grad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
+        grad.addColorStop(0, p.color);
+        grad.addColorStop(1, 'transparent');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        // Sparks stretch into a short streak along their velocity for a sense of motion.
+        const speed = Math.hypot(p.vx, p.vy);
+        ctx.translate(s.x, s.y);
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        if (speed > 60) {
+          ctx.rotate(Math.atan2(p.vy, p.vx) + Math.PI / 2);
+          const len = Math.min(14, speed * .03);
+          ctx.ellipse(0, 0, p.size, p.size + len, 0, 0, Math.PI * 2);
+        } else {
+          ctx.rotate(p.rot || 0);
+          ctx.arc(0, 0, p.size, 0, Math.PI * 2);
+        }
+        ctx.fill();
+      }
+      ctx.restore();
     }
     ctx.globalAlpha = 1;
   }
@@ -5784,7 +5817,15 @@
     const elapsed = Math.max(0, nowTime - lastFrame);
     lastFrame = nowTime;
     if (!isPaused()) {
-      accumulator += Math.min(elapsed / 1000, .25);
+      if (hitStopRemaining > 0) {
+        // Brief near-freeze on big hits: simulation crawls at 8% speed instead of a hard stop,
+        // so particles/vfx still read as motion while the impact lands.
+        const slice = Math.min(hitStopRemaining, elapsed / 1000);
+        hitStopRemaining -= slice;
+        accumulator += (elapsed / 1000) * .08;
+      } else {
+        accumulator += Math.min(elapsed / 1000, .25);
+      }
       while (accumulator + 1e-9 >= FIXED_STEP) {
         update(FIXED_STEP);
         accumulator -= FIXED_STEP;
