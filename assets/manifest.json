@@ -19,7 +19,7 @@
     "sword": "legacy.sword",
     "wood": "legacy.wood"
   },
-  "buildVersion": "5.1.2",
+  "buildVersion": "5.1.4",
   "fallbackTier": "low",
   "maxDecodedGroups": 2,
   "packs": [
