@@ -107,20 +107,31 @@
       if (!packs.length) throw new Error(`No asset group: ${tier}:${groupId}`);
       const settled = await Promise.allSettled(packs.map(pack => Promise.resolve().then(() => makeImage(pack))));
       const images = new Map();
-      let failure = null;
+      const skipped = [];
       for (let index = 0; index < settled.length; index++) {
         const result = settled[index];
         const pack = packs[index];
-        if (result.status === 'rejected') { failure ||= result.reason; continue; }
+        if (result.status === 'rejected') { skipped.push({ pack, reason: result.reason }); continue; }
         const image = result.value;
-        if (!image || image.naturalWidth !== pack.width || image.naturalHeight !== pack.height) { failure ||= new Error(`Decoded dimensions: ${pack.src}`); continue; }
+        if (!image || image.naturalWidth !== pack.width || image.naturalHeight !== pack.height) {
+          skipped.push({ pack, reason: new Error(`Decoded dimensions: ${pack.src}`) });
+          continue;
+        }
         images.set(pack.id, image);
       }
-      if (failure || images.size !== packs.length) {
+      if (!images.size) {
+        // Every single pack in the group failed — genuinely nothing to show, so surface it
+        // as before and let the caller fall back to another tier.
         closeImages(images);
-        throw failure || new Error(`Incomplete asset group: ${tier}:${groupId}`);
+        throw skipped[0]?.reason || new Error(`Incomplete asset group: ${tier}:${groupId}`);
       }
-      return { id:groupId, tier, packs, images, entries:buildEntries(tier, packs, images) };
+      if (skipped.length) {
+        // Partial failure: keep whatever decoded correctly instead of discarding the whole
+        // group over one bad pack, so unrelated houses/props/effects still render.
+        for (const { pack, reason } of skipped) console.warn(`Aethernfall asset pack skipped: ${tier}:${pack.id}`, reason);
+      }
+      const okPacks = packs.filter(pack => images.has(pack.id));
+      return { id:groupId, tier, packs:okPacks, images, entries:buildEntries(tier, okPacks, images), incomplete: skipped.length > 0 };
     }
 
     async function loadGroup(groupId, slot) {

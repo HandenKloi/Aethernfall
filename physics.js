@@ -90,15 +90,22 @@
       }
     }
     // Goal-directed grid search is requested only when the direct route is obstructed.
+    const routeStep = 48,
+      routeCols = Math.ceil(width / routeStep),
+      routeRows = Math.ceil(height / routeStep),
+      routeTotal = routeCols * routeRows;
+    // Reused across every route() call instead of reallocated each time — repeated pathfinding
+    // during combat was allocating fresh multi-thousand-element typed arrays several times a
+    // second, which is real GC pressure and a plausible cause of intermittent stutter/freezes.
+    const routeParents = new Int32Array(routeTotal),
+      routeQueue = new Int32Array(routeTotal),
+      routeCost = new Uint16Array(routeTotal);
     function route(a, target) {
-      const step = 48,
-        cols = Math.ceil(width / step),
-        rows = Math.ceil(height / step),
-        total = cols * rows;
-      const parents = new Int32Array(total);
+      const step = routeStep, cols = routeCols, rows = routeRows, total = routeTotal;
+      const parents = routeParents;
       parents.fill(-2);
-      const queue = new Int32Array(total),
-        cost = new Uint16Array(total),
+      const queue = routeQueue,
+        cost = routeCost,
         start = Math.floor(a.y / step) * cols + Math.floor(a.x / step);
       const goalX = Math.floor(target.x / step),
         goalY = Math.floor(target.y / step);

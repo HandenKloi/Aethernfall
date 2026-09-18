@@ -325,14 +325,25 @@
     const result = { rotation:0, x:0, y:moving ? Math.sin(t * 12) * 1.4 : Math.sin(t * 2) * .35, sx:1, sy:1 };
     if (clip.startsWith('attack_') || clip.endsWith('_release') || clip === 'riposte' || clip === 'shoot') {
       result.rotation = pulse * .13; result.x = pulse * 5;
+      // Impact snap: cubes the pulse so the squash/stretch bites hard right at the swing's peak
+      // instead of following the same soft bell curve as the rotation.
+      const snap = pulse * pulse * pulse;
+      result.sx = 1 + snap * .08; result.sy = 1 - snap * .07;
     } else if (clip.endsWith('_windup') || clip === 'cast' || clip === 'aim') {
-      result.rotation = -pulse * .08; result.sy = 1 - pulse * .045;
+      result.rotation = -pulse * .08;
+      result.sy = 1 - pulse * .045; result.sx = 1 + pulse * .03; // volume-preserving anticipation crouch
     } else if (clip === 'block' || clip === 'parry') {
-      result.rotation = -pulse * .06; result.sx = 1 + pulse * .035;
+      result.rotation = -pulse * .06; result.sx = 1 + pulse * .035; result.sy = 1 - pulse * .02;
     } else if (clip === 'dodge' || clip === 'charge') {
       result.rotation = -.3 * pulse; result.x = pulse * 10;
-    } else if (clip === 'hit' || clip === 'stagger') result.rotation = -.14 * pulse;
-    else if (clip === 'death') result.rotation = progress * 1.35;
+      result.sx = 1 + pulse * .12; result.sy = 1 - pulse * .06; // stretch along the dash for a sense of speed
+    } else if (clip === 'hit' || clip === 'stagger') {
+      result.rotation = -.14 * pulse;
+      result.sy = 1 - pulse * .09; result.sx = 1 + pulse * .06; // flinch squash on the hit frame
+    } else if (clip === 'death') {
+      result.rotation = progress * 1.35;
+      result.sy = 1 - Math.sin(Math.PI * Math.min(1, progress * 1.6)) * .1; // brief squash as the body drops
+    }
     else if (clip === 'phase_shift') { result.sx = 1 + pulse * .11; result.sy = 1 + pulse * .08; }
     return result;
   }
