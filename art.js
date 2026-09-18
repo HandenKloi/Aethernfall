@@ -1,6 +1,6 @@
 "use strict";
 
-/* Aethernfall 5.1.2 — directional actors and cached zone-material frames. */
+/* Aethernfall 5.1.3 — directional actors and cached zone-material frames. */
 (() => {
   'use strict';
 

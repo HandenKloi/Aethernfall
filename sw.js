@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '5.1.2';
+const VERSION = '5.1.3';
 // Scope isolates caches of different GitHub Pages repositories on the same origin.
 const PREFIX = 'aethernfall:' + self.registration.scope + ':';
 const ASSET_TIER_PREFIX = 'aethernfall-assets:' + self.registration.scope;
@@ -15,7 +15,7 @@ const LOW_PACKS = [
   './assets/packs/low/starreach-actors.webp', './assets/packs/low/starreach-terrain.webp', './assets/packs/low/starreach-props.webp',
   './assets/packs/low/stonevale-actors.webp', './assets/packs/low/stonevale-terrain.webp', './assets/packs/low/stonevale-props.webp'
 ];
-const CORE = ['./assets/art/portal.svg', './physics.js?v=' + VERSION, './assets.js?v=' + VERSION, './art.js?v=' + VERSION, './vfx.js?v=' + VERSION, './ui-icons.js?v=' + VERSION, './assets/ui/actions.svg', './assets/ui/navigation.svg', './assets/ui/camp.svg', './assets/ui/map.svg', './assets/ui/status.svg', './assets/art/characters.webp', './assets/art/objects.webp', './assets/art/terrain.webp', './assets/manifest.json?v=' + VERSION, './', './index.html', './style.css?v=' + VERSION, './audio.js?v=' + VERSION, './persistence.js?v=' + VERSION, './quests.js?v=' + VERSION, './combat.js?v=' + VERSION, './builds.js?v=' + VERSION, './world.js?v=' + VERSION, './zone-visuals.js?v=' + VERSION, './arenas.js?v=' + VERSION, './story.js?v=' + VERSION, './game.js?v=' + VERSION, './manifest.json?v=' + VERSION, './assets/icon-192.png', './assets/icon-512.png', ...LOW_PACKS, ...['grass', 'dirt', 'stone', 'water', 'wood', 'foliage', 'rune'].map(n => './assets/textures/' + n + '.png')];
+const CORE = ['./assets/art/portal.svg', './debug-overlay.js?v=' + VERSION, './physics.js?v=' + VERSION, './assets.js?v=' + VERSION, './art.js?v=' + VERSION, './vfx.js?v=' + VERSION, './ui-icons.js?v=' + VERSION, './assets/ui/actions.svg', './assets/ui/navigation.svg', './assets/ui/camp.svg', './assets/ui/map.svg', './assets/ui/status.svg', './assets/art/characters.webp', './assets/art/objects.webp', './assets/art/terrain.webp', './assets/manifest.json?v=' + VERSION, './', './index.html', './style.css?v=' + VERSION, './audio.js?v=' + VERSION, './persistence.js?v=' + VERSION, './quests.js?v=' + VERSION, './combat.js?v=' + VERSION, './builds.js?v=' + VERSION, './world.js?v=' + VERSION, './zone-visuals.js?v=' + VERSION, './arenas.js?v=' + VERSION, './story.js?v=' + VERSION, './game.js?v=' + VERSION, './manifest.json?v=' + VERSION, './assets/icon-192.png', './assets/icon-512.png', ...LOW_PACKS, ...['grass', 'dirt', 'stone', 'water', 'wood', 'foliage', 'rune'].map(n => './assets/textures/' + n + '.png')];
 function assetTierCacheName(tier) { return ASSET_TIER_PREFIX + VERSION + ':' + tier; }
 async function cacheAssetTier(tier) {
   if (!VALID_TIERS.has(tier) || tier === fallbackTier) return false;
