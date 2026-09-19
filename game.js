@@ -3,7 +3,7 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '5.1.5';
+  const BUILD_VERSION = '5.1.6';
   const SAVE_SCHEMA = 5;
   const BASE_STATS = Object.freeze({ startLevel: 6, damage: 32, maxHp: 240, maxStamina: 100, speed: 205, damagePerLevel: 3, hpPerLevel: 18 });
   const MAX_UPGRADE_RANK = 5;
@@ -4006,7 +4006,7 @@
       r: 5,
       collisionPad: 7,
       color: '#e5b86a',
-      vfxFamily:`arrow_${zoneId}`, vfxClock:0
+      vfxClock:0
     });
     return true;
   }
