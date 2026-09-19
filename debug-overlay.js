@@ -102,7 +102,11 @@
     if (gap > FREEZE_THRESHOLD_MS && document.visibilityState === 'visible' && !hiddenSinceLastTick) {
       push({ type: 'freeze', message: `Кадр задержан на ${Math.round(gap)} мс` });
     }
-    hiddenSinceLastTick = false;
+    // iOS Safari doesn't always fully suspend rAF in the background — it can keep
+    // firing at a throttled rate. Track "hidden right now", not "hidden at some
+    // point", so a throttled tick while still hidden doesn't clear the flag before
+    // the real post-resume tick (with the huge accumulated gap) gets to see it.
+    hiddenSinceLastTick = document.hidden;
     requestAnimationFrame(tick);
   }
   requestAnimationFrame(tick);
