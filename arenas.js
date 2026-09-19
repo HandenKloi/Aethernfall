@@ -74,7 +74,7 @@
       definition(id);
       const state = normalizedState(raw), currentCycle = integer(cycle, 0, 0);
       if (state.completedCycle === currentCycle) return result({ ...state, phase:'completed', remaining:0 }, [{ type:'unlockExit' }]);
-      if (state.phase !== 'idle' && state.phase !== 'defeat') return result(state);
+      if (state.phase !== 'idle' && state.phase !== 'defeat' && state.phase !== 'completed') return result(state);
       return result({ ...state, phase:'entering', waveIndex:0, remaining:0, attempts:state.attempts + 1 }, [{ type:'closeGate' }]);
     }
 
