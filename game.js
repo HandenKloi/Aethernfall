@@ -3,7 +3,7 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '5.1.9';
+  const BUILD_VERSION = '5.1.10';
   const SAVE_SCHEMA = 5;
   const BASE_STATS = Object.freeze({ startLevel: 6, damage: 32, maxHp: 240, maxStamina: 100, speed: 205, damagePerLevel: 3, hpPerLevel: 18 });
   const MAX_UPGRADE_RANK = 5;
@@ -2353,24 +2353,9 @@
   }
   function buildObstacles() {
     if (!physics) return;
-    const z = zones[zoneId],
-      items = [{
-        x: z.camp.x,
-        y: z.camp.y - 100,
-        r: 48
-      }, {
-        x: zoneId === 'mistwood' ? 1180 : zoneId === 'stonevale' ? 1220 : 1520,
-        y: zoneId === 'mistwood' ? 430 : zoneId === 'stonevale' ? 530 : 910,
-        r: 65
-      }, ...(zoneVisuals?.ZONES[zoneId]?.landmarks || LANDMARKS[zoneId].map(([x,y]) => ({x,y,footprint:43}))).map(item => ({
-        x:item.x, y:item.y + 8, r:item.footprint || 43
-      }))];
-    ambient = ambient.filter(a => [z.camp, z.scout, z.portal].every(p => dist(a, p) > 120) && items.every(o => dist(a, o) > o.r + 55 * a.scale));
-    for (const a of ambient) items.push({
-      x: a.x,
-      y: a.y + 8,
-      r: (a.footprint || 18) * a.scale
-    });
+    const z = zones[zoneId], fixed = zoneVisuals?.staticObstacles?.(zoneId, z.camp, []) || [];
+    ambient = ambient.filter(a => [z.camp, z.scout, z.portal].every(p => dist(a, p) > 120) && fixed.every(o => dist(a, o) > o.r + 55 * a.scale));
+    const items = zoneVisuals?.staticObstacles?.(zoneId, z.camp, ambient) || fixed;
     physics.set(items);
     // Gatherables are interaction targets, not walls. Relocate them away from true
     // static footprints, but keep them out of movement, LOS and projectile collision.
@@ -5052,8 +5037,10 @@
       const legacyOptions = { moving:legacyMoving, action:legacyAction, progress:legacyProgress,
         flip:legacyPlayerName !== 'heroBack' && Math.cos(player.dir) < 0,
         death:legacyAction === 'death' ? legacyProgress : 0 };
-      if (!drawLegacyActor(legacyPlayerName, s.x, s.y + 18, 88, legacyOptions))
-        drawLegacyActor('hero', s.x, s.y + 18, 88, legacyOptions);
+      if (!drawLegacyActor(legacyPlayerName, s.x, s.y + 18, 88, legacyOptions)) drawLegacyActor('hero', s.x, s.y + 18, 88, legacyOptions);
+      art.drawPlayerEquipment?.(ctx, s.x, s.y + 18, 88, {
+        ...legacyOptions, time, loadout:player.loadout
+      });
       return;
     }
     ctx.save();
@@ -5685,12 +5672,13 @@
     }
     for (const e of entities) if ((e.hp > 0 || e._corpseUntil > time) && visible(e.x, e.y, 100)) drawQueue.push(e);
     for (const a of ambient) if (visible(a.x, a.y, 250)) drawQueue.push(a);
-    for (const item of structures) if (art?.has(item.asset) && visible(item.x, item.y, 200)) drawQueue.push(item);
+    for (const item of structures) if (visible(item.x, item.y, 200)) drawQueue.push(item);
     drawQueue.sort(sortDepth);
     for (const e of drawQueue) {
       if (e.kind === 'structure') {
         const p = screenPos(e.x, e.y);
-        art.drawFrame(ctx, e.asset, p.x, p.y + 20, {height:e.height});
+        groundShadow(p.x, p.y + 14, e.footprint || 40);
+        art.drawWorldObject(ctx, e.asset, p.x, p.y + 20, {height:e.height});
       } else if (e.kind === 'enemy') drawEntity(e);else if (e.kind === 'resource') drawResource(e);else if (e.kind === 'player') drawPlayer();else if (typeof e.scale === 'number') drawAmbientItem(e);else if (e.kind === 'camp') drawCamp(z);else if (e.kind === 'scout') drawScout(z);else drawPortal(z);
     }
     drawLighting(z);

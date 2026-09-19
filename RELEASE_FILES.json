@@ -1,20 +1,40 @@
 {
-  "version": "3.2.0",
+  "version": "5.1.10",
   "files": [
     {
-      "path": ".nojekyll",
-      "bytes": 0,
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      "path": "RELEASE_NOTES_5.1.10.md",
+      "bytes": 859,
+      "sha256": "7b38172e1f35c58e2631426f029b66fb68af6fe70738e652ef720b3742186ace"
     },
     {
-      "path": "CHANGELOG.md",
-      "bytes": 13521,
-      "sha256": "4918795fbf0f05c72e2f396c7559c952fa6c0dfc3ae996d3d3bdd12b68c8ce12"
+      "path": "arenas.js",
+      "bytes": 7018,
+      "sha256": "5e137094a7b022290ce0d5f5e81a45721361673fcb09dfeb25cc2116cf23a62b"
     },
     {
-      "path": "README.md",
-      "bytes": 7752,
-      "sha256": "ad4a4207f5995fa4582bb9db9fe43a2bc16d7b2d42ecc9e7fc7bf6920f7b02f5"
+      "path": "art.js",
+      "bytes": 24527,
+      "sha256": "f2e7d5fdaaa88555d407109f1afec2660e0aceb55974863d0b636c51d8d34d7f"
+    },
+    {
+      "path": "assets/art/characters.webp",
+      "bytes": 303952,
+      "sha256": "2a02bd6619c8a2c04244e1ab4115f6229fbdf8ecbfe79725b02dba6d9757c4fb"
+    },
+    {
+      "path": "assets/art/objects.webp",
+      "bytes": 369804,
+      "sha256": "4c4efa9c591bb513d9a3c4cad6109dc9d1c823d2cad85129c84de2f8b7d0b7b6"
+    },
+    {
+      "path": "assets/art/portal.svg",
+      "bytes": 1812,
+      "sha256": "a6a65e734bd7fe95f4eb9504314784cce557c40ebb583e29c087ffd20d598507"
+    },
+    {
+      "path": "assets/art/terrain.webp",
+      "bytes": 491526,
+      "sha256": "b762d988a282eddcfebad23ef77f382311680e768c9520eb44dc5a7d9dc5ce15"
     },
     {
       "path": "assets/icon-192.png",
@@ -25,6 +45,611 @@
       "path": "assets/icon-512.png",
       "bytes": 5787,
       "sha256": "26c6d4190d50929e41a5da6f9e0ac16fe2438b1743217c47c2b1791f0b09e8d2"
+    },
+    {
+      "path": "assets/manifest.json",
+      "bytes": 514137,
+      "sha256": "7fda237c79cf2ccca155654d68c7786917a9b16ef4a23d97d1712f13fbe3485e"
+    },
+    {
+      "path": "assets/packs/high/ashfield-actors.webp",
+      "bytes": 4894,
+      "sha256": "99b839dc11bb513f6deaf115be1a1f5f3e0b2281f8ddadd4cc9186c612bd7a46"
+    },
+    {
+      "path": "assets/packs/high/ashfield-props.webp",
+      "bytes": 8988,
+      "sha256": "623436deee3ca46be732fd24d2c700bb236390811e3e91945e70b5c7e47f87de"
+    },
+    {
+      "path": "assets/packs/high/ashfield-terrain.webp",
+      "bytes": 4318,
+      "sha256": "8c0f71194077c457f4fa1fe70e84eb44cc26e482ac4b0599e41d27646b69d5fe"
+    },
+    {
+      "path": "assets/packs/high/common-actors.webp",
+      "bytes": 4340,
+      "sha256": "8eab9bfa9e0fe62006242e3c4327918b12495b52b70f3a665212feb638f535db"
+    },
+    {
+      "path": "assets/packs/high/common-equipment.webp",
+      "bytes": 1726,
+      "sha256": "0465a7e10c68229ffdbb780a6099ee1da5b381698a98ab9e3e0914d554d00a40"
+    },
+    {
+      "path": "assets/packs/high/common-items.webp",
+      "bytes": 4448,
+      "sha256": "62cc2760a566f9fafe5fd53b51bcb8f5e1a0f94d21d3fa18e33667b258090e7e"
+    },
+    {
+      "path": "assets/packs/high/common-portraits.webp",
+      "bytes": 3068,
+      "sha256": "29ea391ea2a543fc3982cd974d2b350b1fec70c1f20b1e1e729d282e696c51c5"
+    },
+    {
+      "path": "assets/packs/high/common-props.webp",
+      "bytes": 1119472,
+      "sha256": "182e9d09689df62347e1c02b345d66a0220e46343aad8894571d66dab57d2fee"
+    },
+    {
+      "path": "assets/packs/high/common-vfx-combat.webp",
+      "bytes": 5698,
+      "sha256": "ba1009350b79933b86240b7705b915590ffdaa8c127484bcdf893d345c4d4aaf"
+    },
+    {
+      "path": "assets/packs/high/common-vfx-foundation.webp",
+      "bytes": 1624,
+      "sha256": "1596be4d389f2d9dfb0d14cf26b88302a9442c205aca9b2722ffcd7bfe54b465"
+    },
+    {
+      "path": "assets/packs/high/common-vfx-projectiles.webp",
+      "bytes": 10086,
+      "sha256": "f6fdb767a5790c13e24a8c8df81545f37bf2be9dc430fa85407c68626da76cbd"
+    },
+    {
+      "path": "assets/packs/high/common-vfx-world.webp",
+      "bytes": 6984,
+      "sha256": "dfa4a8f7fc4d4d906b57c5f078b2f0a351236b9e3f41f2315abaa030bbf4241a"
+    },
+    {
+      "path": "assets/packs/high/frostmere-actors.webp",
+      "bytes": 4746,
+      "sha256": "ed45f084888e2a9fee12e64cb6a7ab4a4bdaf92a2195d6b84424cf80748c4aee"
+    },
+    {
+      "path": "assets/packs/high/frostmere-props.webp",
+      "bytes": 8830,
+      "sha256": "5abbef856c8f591d8c007a0aedf8814dfd9a9bc27c45c0bfe02c72ca7395df15"
+    },
+    {
+      "path": "assets/packs/high/frostmere-terrain.webp",
+      "bytes": 4404,
+      "sha256": "e541732fc093f63e36172076d7c4f53314e9c45344d4dde5a047d2c08bf242a0"
+    },
+    {
+      "path": "assets/packs/high/mistwood-actors.webp",
+      "bytes": 4782,
+      "sha256": "bfba3297b8d6d25669b7bb170bba5580ebfd390af7107c00420632d08c7f9fd6"
+    },
+    {
+      "path": "assets/packs/high/mistwood-props.webp",
+      "bytes": 8772,
+      "sha256": "11dbc159e07d7a5d37a31c07b4e815b485828763fee75353ddd9d05cadb0e89d"
+    },
+    {
+      "path": "assets/packs/high/mistwood-terrain.webp",
+      "bytes": 4324,
+      "sha256": "957fab580ed5c0dc3e3a7027e5ebf67b7483327fdb6bb9d61b4b90306d728b21"
+    },
+    {
+      "path": "assets/packs/high/starreach-actors.webp",
+      "bytes": 5040,
+      "sha256": "031873bc3d1ab501760f4318ad07e7317268a0a3011e4dbd323260a4046b0658"
+    },
+    {
+      "path": "assets/packs/high/starreach-props.webp",
+      "bytes": 9110,
+      "sha256": "9fb491153f5dd8ffd655f0206504975553734923c78ada9bef6f32f1c427f81a"
+    },
+    {
+      "path": "assets/packs/high/starreach-terrain.webp",
+      "bytes": 4290,
+      "sha256": "6aa73c6459892e87c704a1ba68f9bb657a2978de1968a8e9affeb06ed346fb29"
+    },
+    {
+      "path": "assets/packs/high/stonevale-actors.webp",
+      "bytes": 4646,
+      "sha256": "2121c0662bc4929b55a120ab1da1a6a1c93e3540a36366403cd7367df7a4f04f"
+    },
+    {
+      "path": "assets/packs/high/stonevale-props.webp",
+      "bytes": 8906,
+      "sha256": "c14deb773fe580274d691c19e37a4c3c47cc9404793015c065d82c6fd314f63f"
+    },
+    {
+      "path": "assets/packs/high/stonevale-terrain.webp",
+      "bytes": 4256,
+      "sha256": "95eca26e2d2b7494b2731d41aad81d286e674cd7f1cbf87d056f1cd1e94642eb"
+    },
+    {
+      "path": "assets/packs/low/ashfield-actors.webp",
+      "bytes": 30588,
+      "sha256": "5cffdd1d022528c150be21f0905db11fd82ce109afd80d2a3bc98318f0cd5015"
+    },
+    {
+      "path": "assets/packs/low/ashfield-props.webp",
+      "bytes": 43202,
+      "sha256": "bd9d5a2168e0e7adde775d9a2a9f9933cb25cf6f70ab77ee040dcbf92c01340b"
+    },
+    {
+      "path": "assets/packs/low/ashfield-terrain.webp",
+      "bytes": 12842,
+      "sha256": "8ad25991066961bf75b3b99f3166862dfa13cd0c1250cc88b961c2333586cc50"
+    },
+    {
+      "path": "assets/packs/low/common-actors.webp",
+      "bytes": 27322,
+      "sha256": "f08b2ac4e8712e8c5b8a68759fa5968bbbb4a9a4eec25d3cfd643b36c49a44d9"
+    },
+    {
+      "path": "assets/packs/low/common-equipment.webp",
+      "bytes": 8224,
+      "sha256": "d2b55f00de76c1521185a36c46600368b16b445f2705e2f468b24c6ea4e1169e"
+    },
+    {
+      "path": "assets/packs/low/common-items.webp",
+      "bytes": 21112,
+      "sha256": "9a404b0f44480894dd0c207fe6f6daa20bd55ce1a4cd2b97b589a06280eec0e2"
+    },
+    {
+      "path": "assets/packs/low/common-portraits.webp",
+      "bytes": 17062,
+      "sha256": "7f555d383560f888a6de00af2a8950cf367fb89a8a8aa0666316d9d5ab1542ec"
+    },
+    {
+      "path": "assets/packs/low/common-props.webp",
+      "bytes": 340554,
+      "sha256": "49d6b08ae6b7a320a8fd3550cc7bb3823a379949bde727e2d9a5d2f21c4a3a87"
+    },
+    {
+      "path": "assets/packs/low/common-vfx-combat.webp",
+      "bytes": 4736,
+      "sha256": "35be93073bbfbfce4807e249cdbaf3e34fdce3b5149fcbed2ab854e637f98076"
+    },
+    {
+      "path": "assets/packs/low/common-vfx-foundation.webp",
+      "bytes": 2316,
+      "sha256": "f26b1718768d9399d5b99b30b547e3fef010018df2954c9d06b0ab44748e3fe5"
+    },
+    {
+      "path": "assets/packs/low/common-vfx-projectiles.webp",
+      "bytes": 14552,
+      "sha256": "ffc609685178a32c1d733708c75f6915dd2774c1f84546e77fdd55ba14448e42"
+    },
+    {
+      "path": "assets/packs/low/common-vfx-world.webp",
+      "bytes": 5110,
+      "sha256": "bc7f4c1ce593a1d4adb743c860bbe968709d4dbe2051305eb4aadd0ebc68f603"
+    },
+    {
+      "path": "assets/packs/low/frostmere-actors.webp",
+      "bytes": 30520,
+      "sha256": "0eae1ddbeb1525ef558f7d13ef5438a2267b62c7747e03e0d942f3e05ba549b1"
+    },
+    {
+      "path": "assets/packs/low/frostmere-props.webp",
+      "bytes": 41094,
+      "sha256": "9e0c43691a287a6e9496386e5c9cc17e69a5a524672327774937ee45634f64b9"
+    },
+    {
+      "path": "assets/packs/low/frostmere-terrain.webp",
+      "bytes": 13416,
+      "sha256": "32b26d06271548908318b86e84c355fec257ef3fe04fbb03e2d4cd2663583a4f"
+    },
+    {
+      "path": "assets/packs/low/mistwood-actors.webp",
+      "bytes": 31882,
+      "sha256": "2b48ea9576ed7c2913b1f4701032eea3e365acf3f1b68d5813c67b18094a4449"
+    },
+    {
+      "path": "assets/packs/low/mistwood-props.webp",
+      "bytes": 41604,
+      "sha256": "7736d27468b3721f81cef46e03df3e4dfb8fa55fe1517eac973d440a0d098445"
+    },
+    {
+      "path": "assets/packs/low/mistwood-terrain.webp",
+      "bytes": 13108,
+      "sha256": "36fb3fb526ad3f5ec5064850d18f54bb85977b73ae977728e495a3f60e4bc89a"
+    },
+    {
+      "path": "assets/packs/low/starreach-actors.webp",
+      "bytes": 33236,
+      "sha256": "f132bb8271ae8bf1e2e4d08b381fdd9adf0377dacb78a54da15ea6fc38b0c5ef"
+    },
+    {
+      "path": "assets/packs/low/starreach-props.webp",
+      "bytes": 43408,
+      "sha256": "62666b45a2617daf54c9c2b0582071d6a618558e32296cfcd6f4ae11f055f3f3"
+    },
+    {
+      "path": "assets/packs/low/starreach-terrain.webp",
+      "bytes": 13398,
+      "sha256": "10816e8676d6acfe94640a3008a9c87c5a3177d56579aa5635d67357454dc51f"
+    },
+    {
+      "path": "assets/packs/low/stonevale-actors.webp",
+      "bytes": 28826,
+      "sha256": "de6b7aecabbb0bba307673e8124ab552454c12ad4d0b86427352785872c97a92"
+    },
+    {
+      "path": "assets/packs/low/stonevale-props.webp",
+      "bytes": 36524,
+      "sha256": "df3f168dbba9f2a723552cecf215d03405c0c1fb1c9c23d2b1450ac8e79a175e"
+    },
+    {
+      "path": "assets/packs/low/stonevale-terrain.webp",
+      "bytes": 12480,
+      "sha256": "f8af6d757e1967853613d4f1b88e1785129eee56dffcb9400a72087df48aaf83"
+    },
+    {
+      "path": "assets/packs/medium/ashfield-actors.webp",
+      "bytes": 50214,
+      "sha256": "0cd30f1623cacbd37307c43b5f1571e151dacc39a72940572bce4d28e9122175"
+    },
+    {
+      "path": "assets/packs/medium/ashfield-props.webp",
+      "bytes": 67968,
+      "sha256": "961f8f9e90092298a80bc078c663eb27a9c2a22abe0b9e4eb856628f665ab153"
+    },
+    {
+      "path": "assets/packs/medium/ashfield-terrain.webp",
+      "bytes": 40930,
+      "sha256": "9854095a9b7049350f2d277a5f3abf07b0b123c7363d5cc0f4c900e7a361daa3"
+    },
+    {
+      "path": "assets/packs/medium/common-actors.webp",
+      "bytes": 45990,
+      "sha256": "b525d61bcb13bf719bf0c8de502978ec0cadd7d3f7c2719f57058ea5292f17d2"
+    },
+    {
+      "path": "assets/packs/medium/common-equipment.webp",
+      "bytes": 14930,
+      "sha256": "3e4d6816d74d646c39f614fe379b7292bdc5769ee709148589d071e535a36e2c"
+    },
+    {
+      "path": "assets/packs/medium/common-items.webp",
+      "bytes": 34254,
+      "sha256": "dd970c0ca754e8263662452575fce33cdb55c3e3303b259003532064fb556aff"
+    },
+    {
+      "path": "assets/packs/medium/common-portraits.webp",
+      "bytes": 24164,
+      "sha256": "622ffc40789928da9db12f10a81bee7a5f722ee2fd6fe2cf4f7a931e06f01f1e"
+    },
+    {
+      "path": "assets/packs/medium/common-props.webp",
+      "bytes": 704878,
+      "sha256": "b2d28ae37de0f9168b6265df22064737068274b292d2f3069c4eb4cdb74ae19b"
+    },
+    {
+      "path": "assets/packs/medium/common-vfx-combat.webp",
+      "bytes": 29140,
+      "sha256": "e1723d4c00e9ef8276999f2b4ff69857f2add12e5f71a408bf357f45a90cf2d6"
+    },
+    {
+      "path": "assets/packs/medium/common-vfx-foundation.webp",
+      "bytes": 8868,
+      "sha256": "be9415bc969bcea6824faf3230eecfb9a4ce6f68cec89801dea7bb7919294b25"
+    },
+    {
+      "path": "assets/packs/medium/common-vfx-projectiles.webp",
+      "bytes": 48168,
+      "sha256": "c80738dc3a82a5eddc126671f3a1bda06be975df45f0bbe1376880d1364b4233"
+    },
+    {
+      "path": "assets/packs/medium/common-vfx-world.webp",
+      "bytes": 34486,
+      "sha256": "00752e0972a7316ef1813498423ebdbbbe9f5b9451961c442ba0acaf6a12d683"
+    },
+    {
+      "path": "assets/packs/medium/frostmere-actors.webp",
+      "bytes": 51834,
+      "sha256": "00150a61ff8e151e8eb3c168e0047f980e9cbf2f0d3f85d278261c35739549e1"
+    },
+    {
+      "path": "assets/packs/medium/frostmere-props.webp",
+      "bytes": 65030,
+      "sha256": "b2d3bcc4e0cc1077e095ed3422f5930ef51e418dd60e0f8bd1cc794aebc3478a"
+    },
+    {
+      "path": "assets/packs/medium/frostmere-terrain.webp",
+      "bytes": 31962,
+      "sha256": "8897b4d3853a5ca55284f0273cecfda5b7b126a9b90414d32004261153eadbf5"
+    },
+    {
+      "path": "assets/packs/medium/mistwood-actors.webp",
+      "bytes": 50990,
+      "sha256": "7e62dc734e8d73df88f9fd7fd68171742cc1532df012a45da2270206e9e171d9"
+    },
+    {
+      "path": "assets/packs/medium/mistwood-props.webp",
+      "bytes": 65622,
+      "sha256": "33ee6172dabbdf42daeb1c9da07a3c613f8b1504dab9c4e104a724064cea13b2"
+    },
+    {
+      "path": "assets/packs/medium/mistwood-terrain.webp",
+      "bytes": 38838,
+      "sha256": "f91f3318175776ce20b3f8f9acb46ac6397c08d1a4823bb5d15396726fdfb938"
+    },
+    {
+      "path": "assets/packs/medium/starreach-actors.webp",
+      "bytes": 58794,
+      "sha256": "3fb1ab7e75d379e0e42b2dc1d092af205e0f12d4ae03217890f02855b048b766"
+    },
+    {
+      "path": "assets/packs/medium/starreach-props.webp",
+      "bytes": 68754,
+      "sha256": "ff1a18a60ea97c4d2dff7eb9036475bc33c7d2447083e38a208ce5883e3895bd"
+    },
+    {
+      "path": "assets/packs/medium/starreach-terrain.webp",
+      "bytes": 42132,
+      "sha256": "693e616f5fb7eef1ac811557ae4e6176e02302d23900bb2ac56f2a85096b2f20"
+    },
+    {
+      "path": "assets/packs/medium/stonevale-actors.webp",
+      "bytes": 44948,
+      "sha256": "1a83f77f3186877a83c6507bf9f056190329c5c1df57c3a92c1f9af2ebd2578d"
+    },
+    {
+      "path": "assets/packs/medium/stonevale-props.webp",
+      "bytes": 58990,
+      "sha256": "011f1355326ad7734514310d213dc779499d7d8b03afbbf0ab59b649ac9c2950"
+    },
+    {
+      "path": "assets/packs/medium/stonevale-terrain.webp",
+      "bytes": 39966,
+      "sha256": "8dde0951426fc7c5361c23ca0d389df6eb047025ae043b88fb8672d9501fba9a"
+    },
+    {
+      "path": "assets/packs/ultra/ashfield-actors.webp",
+      "bytes": 113848,
+      "sha256": "362bd2ec991bd3b42a01d0f724f9925f4cea8fc23f018e28539a476ec4db451f"
+    },
+    {
+      "path": "assets/packs/ultra/ashfield-props.webp",
+      "bytes": 213484,
+      "sha256": "4aaa56887751cf28f64820473a6576cbe5a09332430e071cd61149c0e3b33a33"
+    },
+    {
+      "path": "assets/packs/ultra/ashfield-terrain.webp",
+      "bytes": 103846,
+      "sha256": "f0c7b29337ac04fd85d014486a7d4c6234c602d393c324ce67dd3fb40b9307c8"
+    },
+    {
+      "path": "assets/packs/ultra/common-actors.webp",
+      "bytes": 101674,
+      "sha256": "7d4952820af1028d24b2bc815d940f1f4e167422dc5295874f6246e571afabb3"
+    },
+    {
+      "path": "assets/packs/ultra/common-equipment.webp",
+      "bytes": 34122,
+      "sha256": "3bfa22d4c1458d008dfdbb01e8477333312815968b5edb99e04a2a404bc4c486"
+    },
+    {
+      "path": "assets/packs/ultra/common-items.webp",
+      "bytes": 126602,
+      "sha256": "503464f5bf5ec166347a23519ea781aea1ec0f860b337b7b967d9aa0c76005ca"
+    },
+    {
+      "path": "assets/packs/ultra/common-portraits.webp",
+      "bytes": 66918,
+      "sha256": "1328cc82c3c4f10e125a81b7b4fe571483f2015bc1037fcb1a25b93e08283338"
+    },
+    {
+      "path": "assets/packs/ultra/common-props.webp",
+      "bytes": 2314058,
+      "sha256": "2a5ff86bcc1e749a723fa138e6065d7bd9563b35555385cab8b8314b4dec026e"
+    },
+    {
+      "path": "assets/packs/ultra/common-vfx-combat.webp",
+      "bytes": 192112,
+      "sha256": "a6db28f7d0cc6181090134b1382e575d44ae16a9c52ccbae50418dc40282082e"
+    },
+    {
+      "path": "assets/packs/ultra/common-vfx-foundation.webp",
+      "bytes": 61928,
+      "sha256": "f00e8e5704f282f5a36a7089454bc3976a30734e3b199c8e05df5b2b8df752fa"
+    },
+    {
+      "path": "assets/packs/ultra/common-vfx-projectiles.webp",
+      "bytes": 333584,
+      "sha256": "d482bebb1ad87e98a3f9b0c0821c9146d6ddecad86cb475efc110ddfddc67a51"
+    },
+    {
+      "path": "assets/packs/ultra/common-vfx-world.webp",
+      "bytes": 231192,
+      "sha256": "677101f8a4a346fd81e7b947bcb0ded9bbb213a22b23489acdc834a7a1fba309"
+    },
+    {
+      "path": "assets/packs/ultra/frostmere-actors.webp",
+      "bytes": 116788,
+      "sha256": "cf9e068088fa24606f0ddda742c16b8cb9b6ff7dd91391d68e8edb04497a7b8c"
+    },
+    {
+      "path": "assets/packs/ultra/frostmere-props.webp",
+      "bytes": 187714,
+      "sha256": "500a104207a0590c16075d07d217c431cd9afc43a6292d85cecbed18a578df85"
+    },
+    {
+      "path": "assets/packs/ultra/frostmere-terrain.webp",
+      "bytes": 113080,
+      "sha256": "8192618a8f3e5e93f59aa9b7b9426a0788a691c6759fda8a5abf081d99433715"
+    },
+    {
+      "path": "assets/packs/ultra/mistwood-actors.webp",
+      "bytes": 111498,
+      "sha256": "f4db9c796823ead831aeeddc0e219086042da9fa67a8e2686b252f9fe9c3f33c"
+    },
+    {
+      "path": "assets/packs/ultra/mistwood-props.webp",
+      "bytes": 171432,
+      "sha256": "0330a22622f7d90eab5f5f5f9935082e903a308906a73ed91425f87f6ca0eacc"
+    },
+    {
+      "path": "assets/packs/ultra/mistwood-terrain.webp",
+      "bytes": 100664,
+      "sha256": "5baf1ad6714cc9cf28421a049baaa6249a6eeadf9a83d3b6e40c8a174cd1e143"
+    },
+    {
+      "path": "assets/packs/ultra/starreach-actors.webp",
+      "bytes": 121878,
+      "sha256": "c999d752a54f620dfcb294a3fed4554e3d7ac0bd316b48022417b29ddd6034d4"
+    },
+    {
+      "path": "assets/packs/ultra/starreach-props.webp",
+      "bytes": 212682,
+      "sha256": "e233cdbac60902afd08d9490926eeadf659d4239e54bfc37ecd8d80bdb4a74cb"
+    },
+    {
+      "path": "assets/packs/ultra/starreach-terrain.webp",
+      "bytes": 108210,
+      "sha256": "44d79e2e21cb8d91a7a3f15c09410b1947bdfaf619da41a124f81ac2b9263fec"
+    },
+    {
+      "path": "assets/packs/ultra/stonevale-actors.webp",
+      "bytes": 107782,
+      "sha256": "81f75de01fdc9a695ea1c5451b3071d337aeb3b9eb3e79f315d18985507c0f54"
+    },
+    {
+      "path": "assets/packs/ultra/stonevale-props.webp",
+      "bytes": 191378,
+      "sha256": "be16e00659a7754fe1089310065fd24f2add1a771f506886f7e0ca8d1bc10376"
+    },
+    {
+      "path": "assets/packs/ultra/stonevale-terrain.webp",
+      "bytes": 98498,
+      "sha256": "b83277b5ccd53c83f7eeb53788e74516b11ce53db42a7734c23ce637b0e1c34f"
+    },
+    {
+      "path": "assets/packs/very-high/ashfield-actors.webp",
+      "bytes": 98400,
+      "sha256": "943356d4942467d7b92cf5e431ed3d1d7df350233e623212fef9c44adfbf1972"
+    },
+    {
+      "path": "assets/packs/very-high/ashfield-props.webp",
+      "bytes": 127470,
+      "sha256": "312156c0e2d8dcedc22fc049f748328a3a357dfdee2051afc2e7dd9369e1dabf"
+    },
+    {
+      "path": "assets/packs/very-high/ashfield-terrain.webp",
+      "bytes": 84844,
+      "sha256": "28d679c45875854bf97f114a95e11fbadb82d8e2b889de7205e1c64e7c5d8ac0"
+    },
+    {
+      "path": "assets/packs/very-high/common-actors.webp",
+      "bytes": 83026,
+      "sha256": "518929bcfb30eb454e9a07f274b971fc2cd5fd28c54fd4e12b199675b182599c"
+    },
+    {
+      "path": "assets/packs/very-high/common-equipment.webp",
+      "bytes": 27212,
+      "sha256": "510086202173970b41d6b29a225fee714afb8d9040eedc1f43492072fa6e5cce"
+    },
+    {
+      "path": "assets/packs/very-high/common-items.webp",
+      "bytes": 67268,
+      "sha256": "608d1d5ac9b8e0940491a0db49560d49224d5c0a9ea0260d0a6885aa0b559498"
+    },
+    {
+      "path": "assets/packs/very-high/common-portraits.webp",
+      "bytes": 48480,
+      "sha256": "08b4a92edb8b3fd48067622a0124b1f79564f3700a87bfcddeecabd6b904640a"
+    },
+    {
+      "path": "assets/packs/very-high/common-props.webp",
+      "bytes": 1733226,
+      "sha256": "7711a1f0a1177ac91f70357d53d58e2c6ea45de1f25e31ce881bb98f9a544fca"
+    },
+    {
+      "path": "assets/packs/very-high/common-vfx-combat.webp",
+      "bytes": 119834,
+      "sha256": "30833b16387ddd0baa32c2d73fad274774c746fde5601f444eeaebd10b676af0"
+    },
+    {
+      "path": "assets/packs/very-high/common-vfx-foundation.webp",
+      "bytes": 34416,
+      "sha256": "6dae6de6ecb3662133750e9ce9ed9a4d899a3fa958929bf45c7f8a41bd3ad1c7"
+    },
+    {
+      "path": "assets/packs/very-high/common-vfx-projectiles.webp",
+      "bytes": 215236,
+      "sha256": "a9b75a8f26a1c5b6630e4a6395049c307bb45e389fc740743c9be9273aa6bc1e"
+    },
+    {
+      "path": "assets/packs/very-high/common-vfx-world.webp",
+      "bytes": 133226,
+      "sha256": "8c32a10841e0ff653fa4720ac416fcc3375033e7fc877531de390b9dfb28d5ad"
+    },
+    {
+      "path": "assets/packs/very-high/frostmere-actors.webp",
+      "bytes": 95716,
+      "sha256": "1693764aa50263f41b8507bf800b4b77e4cd8f24bca143df88825fecb63fd19a"
+    },
+    {
+      "path": "assets/packs/very-high/frostmere-props.webp",
+      "bytes": 120210,
+      "sha256": "3d5a127166630533863bfa55fdac050a37637a4efa6caf6ede5dd68424a2cc49"
+    },
+    {
+      "path": "assets/packs/very-high/frostmere-terrain.webp",
+      "bytes": 92414,
+      "sha256": "457cac2a4f25e98e7197fb2a998d83a5ef762eb94aca3ab5ee2355099edb9022"
+    },
+    {
+      "path": "assets/packs/very-high/mistwood-actors.webp",
+      "bytes": 94198,
+      "sha256": "f5b07d6bc68750c2c9db0697295587eb74c2476af02893b859858513b2ccaa9f"
+    },
+    {
+      "path": "assets/packs/very-high/mistwood-props.webp",
+      "bytes": 144104,
+      "sha256": "f5af54a8e8f067376afa80cd3d09ce0ab4d6877b4d0a2879c352eddffb701c9e"
+    },
+    {
+      "path": "assets/packs/very-high/mistwood-terrain.webp",
+      "bytes": 82606,
+      "sha256": "d5ae8dd40647538fa3cad009b9815d01339c691932f956714a62112e890feafa"
+    },
+    {
+      "path": "assets/packs/very-high/starreach-actors.webp",
+      "bytes": 108384,
+      "sha256": "e94abf5a15c4aac7ae42620a9a5d7689539cf3962e0a710fca5880ef0c1a6d17"
+    },
+    {
+      "path": "assets/packs/very-high/starreach-props.webp",
+      "bytes": 127260,
+      "sha256": "000629327af8e0d00c60dae912af9b56b0ab2631822f82fdeebfc676797b4ab8"
+    },
+    {
+      "path": "assets/packs/very-high/starreach-terrain.webp",
+      "bytes": 89212,
+      "sha256": "0a4303d9ead78b8d89bc1e97ba84ed8a50da6d64b7c3ce9ee0b840d11fe2b103"
+    },
+    {
+      "path": "assets/packs/very-high/stonevale-actors.webp",
+      "bytes": 86390,
+      "sha256": "600a5b26fdc236ca7bdd45234db652af352ba3e5e9a11fb47ff546e2ab1ec52c"
+    },
+    {
+      "path": "assets/packs/very-high/stonevale-props.webp",
+      "bytes": 162748,
+      "sha256": "817e98f97538d341366f0380e95d20ef0fadded7616b04bd63d5ac9fb8732504"
+    },
+    {
+      "path": "assets/packs/very-high/stonevale-terrain.webp",
+      "bytes": 83692,
+      "sha256": "f6032ce3dfc8b51e70c1f5d1dbccabe82f10b5d5552746d8d7387683e6b4e7c2"
     },
     {
       "path": "assets/textures/dirt.png",
@@ -40,6 +665,16 @@
       "path": "assets/textures/grass.png",
       "bytes": 8152,
       "sha256": "cb8745bde6abd18386363cd9a0cd6f6d43dbc168edf7d9d5fb419e1af1d9d820"
+    },
+    {
+      "path": "assets/textures/leather.png",
+      "bytes": 3383,
+      "sha256": "edfa45b0691934fdd7564f9fa8a5e7576b52d325d22cf5e05c1986108e14d353"
+    },
+    {
+      "path": "assets/textures/parchment.png",
+      "bytes": 4526,
+      "sha256": "b42d4ae2d0e767377ceefe5de26d6d1eee37c40f2069fd9cf70fec88d1f782ae"
     },
     {
       "path": "assets/textures/rune.png",
@@ -62,139 +697,144 @@
       "sha256": "460fbf705fa6c6d2349394710e4167e251f02835c19d50aa5c0f3b6913552ea1"
     },
     {
-      "path": "docs/AUDIT.md",
-      "bytes": 10221,
-      "sha256": "7f04209a6a5da3a49c0c3c458ad19abfa42fdb597c24ebf347200584f167898e"
+      "path": "assets/ui/actions.svg",
+      "bytes": 1546,
+      "sha256": "76eb8f64bf66e4c0dce979a51a7a00c514ecbfeb27c9854a2a93d4a0af4613aa"
     },
     {
-      "path": "docs/IPHONE_CHECKLIST.md",
-      "bytes": 7838,
-      "sha256": "349ce4dcda46383deefef5f947ac5fff7595ad158d5db27675331d072458d7ec"
+      "path": "assets/ui/camp.svg",
+      "bytes": 2029,
+      "sha256": "2a31ff286104ae9a8edc0b971f3faecd733f836d5222c64792498e1ed84e24a3"
     },
     {
-      "path": "docs/TEST_REPORT.md",
-      "bytes": 9994,
-      "sha256": "894d99863ca1378a36f13e3ca65cd09ec54770af0a35a3ae85e3ebf3c24c8ad0"
+      "path": "assets/ui/map.svg",
+      "bytes": 1403,
+      "sha256": "e611c22de80d3ece36a4e1034c73a1bec13739f4de846e5a667da409c31ecc49"
     },
     {
-      "path": "docs/history/ITERATION_HISTORY.md",
-      "bytes": 823,
-      "sha256": "a6914fec2bb2c95adcdd261c0195f025475265765761111c370dbff6907f0206"
+      "path": "assets/ui/navigation.svg",
+      "bytes": 2283,
+      "sha256": "664069f4e0c229c15fddd1d16cf07d65faa86d0bb657763802ab4fc1c649480d"
     },
     {
-      "path": "docs/history/ITERATION_HISTORY_2_0_TO_2_7.md",
-      "bytes": 371,
-      "sha256": "387465fda74e70125c71f59c0ade444937f049dde8a8f3d82240189ddd153b08"
+      "path": "assets/ui/status.svg",
+      "bytes": 1531,
+      "sha256": "c83c105522e57f24b3a239515e16a5ca5237251394f8be922522e70540f2680f"
     },
     {
-      "path": "docs/history/ITERATION_HISTORY_V30.md",
-      "bytes": 583,
-      "sha256": "8a557df71b5c9a97a769b587d20cd2e6943cd3db5feb83a29cd482bfdbc17d4b"
+      "path": "assets.js",
+      "bytes": 14007,
+      "sha256": "b4a96774b5ca8137608bd007c4aa2ed223dc57e1e5cbde124329fb6aa8027028"
     },
     {
-      "path": "docs/history/ITERATION_HISTORY_V31_REALFIX.md",
-      "bytes": 515,
-      "sha256": "751e2d8a8a6db2ff060548a29d8723ae503dadde62cbf787c7f5ee0caaa740f2"
+      "path": "audio.js",
+      "bytes": 12300,
+      "sha256": "37b2982a7d4e0150d7cd160d87a6a061a3b2ed612481ba908bb9e979ca68faaf"
     },
     {
-      "path": "docs/history/README_SOURCE.md",
-      "bytes": 335,
-      "sha256": "d5998fa899ac50e8c97a6646d448761019570762b676170591e5a815f8cf659b"
+      "path": "builds.js",
+      "bytes": 8069,
+      "sha256": "5ddc0a4140f09d35374f844416a51015af87889897fb8ed303404e58f1da03f2"
     },
     {
-      "path": "docs/history/TEST_REPORT_RC10.md",
-      "bytes": 3127,
-      "sha256": "8d7133ac206f86ec9f78b652aca0830dc65b2a01052afb11dc3328d57d0ba3df"
+      "path": "combat.js",
+      "bytes": 10900,
+      "sha256": "dbd576126c2c77cf89f5f6e1267a9f3f0c3ddc10bb7bb3b14ea1c4d7664fd53f"
     },
     {
-      "path": "docs/history/TEST_REPORT_RC11.md",
-      "bytes": 1278,
-      "sha256": "f83bfe2f63e4f8fe58c55d4e5ae2537b49dba1a459bfaed79f69b50e2c529118"
-    },
-    {
-      "path": "docs/history/TEST_REPORT_RC20.md",
-      "bytes": 1695,
-      "sha256": "f5f807ee164d1425f178baf45a3852083994f983f618b14a8e1760c3d6b50734"
-    },
-    {
-      "path": "docs/history/TEST_REPORT_V27.md",
-      "bytes": 661,
-      "sha256": "b7e0621d051dc837f1e7bd2a271f822c527fc2867e7f7bbe3dee7fe27ea1b9dd"
-    },
-    {
-      "path": "docs/history/TEST_REPORT_V30.md",
-      "bytes": 863,
-      "sha256": "764c16e725340cd1c7873b191ac52140de2977feaccf5ac17de1d78ccf8aaf18"
-    },
-    {
-      "path": "docs/history/TEST_REPORT_V31_REALFIX.md",
-      "bytes": 690,
-      "sha256": "702392259c59751e4fea215db4af357c4adbee2ac02e8e7115810d011432ca29"
+      "path": "debug-overlay.js",
+      "bytes": 8103,
+      "sha256": "9cb371a63eef14edd33c57bc69eef44f389138239cc3f1de47621a3285dd57a9"
     },
     {
       "path": "game.js",
-      "bytes": 81414,
-      "sha256": "fe7e2ddb4bf81fe94fd543932bf3de177a5178360c320cfa95df92c3dcbdca3a"
+      "bytes": 281912,
+      "sha256": "45c01d8830309ae2444eb5099bd058c7765c0b40b634d15659b86ab2ac1cdb56"
     },
     {
       "path": "index.html",
-      "bytes": 4636,
-      "sha256": "ded5ed43d0a3a0ec2b74e6d7f1b36072ba988a628ac02aad5b69bcb3a79411b4"
+      "bytes": 9700,
+      "sha256": "29d59fc08a69cbb99d2380604c98a1fa46a0bed3ad2be2a507848b1c5b0c11a3"
+    },
+    {
+      "path": "index.pdf",
+      "bytes": 39192,
+      "sha256": "7d44750aecaa90fad959659e91618121d6d4ae93d21972962b38d59aeb7ac637"
     },
     {
       "path": "manifest.json",
-      "bytes": 614,
-      "sha256": "63a106655dc0e5702eb496d9898cb8a1a7de1875bcab1ff6e90fef99e0536719"
+      "bytes": 656,
+      "sha256": "0a253dfbce4d991971891e9c862091663013449f6e87f06890e0cd162329cb6e"
+    },
+    {
+      "path": "persistence.js",
+      "bytes": 23390,
+      "sha256": "8f7d80038564b61f9e879de2e7bdc802876b69f0c7211027432a1bcd2281b33c"
+    },
+    {
+      "path": "physics.js",
+      "bytes": 7894,
+      "sha256": "8ff358be6a3d61d132d05632b07f2470247d90aee33ed51578b784ac3391007c"
+    },
+    {
+      "path": "quests.js",
+      "bytes": 14553,
+      "sha256": "337ac4035eb3cc3001d94f5eeeaa330fabd7d864d07595a091c7cc13b500b0ce"
     },
     {
       "path": "selftest.html",
-      "bytes": 2488,
-      "sha256": "2c6822aed5008bded972368a6c2bc80e12db26cb6ce87b86dbc46e7c18f7011e"
+      "bytes": 2490,
+      "sha256": "938d7e137b9e62e184c4e8f8b2b54d4fc556b740654371e6ee5d53543d0527a8"
+    },
+    {
+      "path": "story.js",
+      "bytes": 11997,
+      "sha256": "990ab758e917f85e6d9f9d8158895c0d31dff0e31adb76e2e43846f15a2db61a"
     },
     {
       "path": "style.css",
-      "bytes": 16768,
-      "sha256": "29f2d8ee58fd761c8d3055c963bef58d6a7ef196cfdb6c53f4ce033a3cafaffb"
+      "bytes": 30517,
+      "sha256": "3ff121dde70cae5770071aa21f8cfe74ac2aeb9b2bc76868af5b998cf3a23f9d"
     },
     {
       "path": "sw.js",
-      "bytes": 1957,
-      "sha256": "331178e6c8f648cca5d0d47b256b3424387b5f8515540e2c9b91ecf12eea81d5"
+      "bytes": 5332,
+      "sha256": "7be2a42f06bb0310ee7619954a52f6d79fb771089bc235ba03561fa12c93ddc3"
     },
     {
-      "path": "tests/check.py",
-      "bytes": 3580,
-      "sha256": "6ae4df3d95068b5c1197b35287622c9fd6fc6af99f79fe355a7c2ceaf0bd2362"
-    },
-    {
-      "path": "tests/results.json",
-      "bytes": 4324,
-      "sha256": "eb41ead0c8cdb6ecf8d96d9998bc612a29c3315267eb57abe0f280595a916f3a"
-    },
-    {
-      "path": "tests/run.cjs",
-      "bytes": 7573,
-      "sha256": "9066e1efdcd61aaf250b2d3dbfc8e2c0bb9c3fd6cf7744c4b37f653435276665"
-    },
-    {
-      "path": "tests/static-results.json",
-      "bytes": 2015,
-      "sha256": "595583989a8d238265bfdb5e9c22d4b5896db1d5be368e4c0964b937a6e5785e"
+      "path": "sw.pdf",
+      "bytes": 32524,
+      "sha256": "3f3a6217338cabae8bd81c336f0cbe95f29b26350459937d262758f5af744ad6"
     },
     {
       "path": "tests/suite.js",
-      "bytes": 11726,
-      "sha256": "bdadf567e0bb5f50f3cea479f1a7a8ff20e94e3cb90450e6ff31ce7c601a7f04"
+      "bytes": 2264,
+      "sha256": "2de9261c17d4c502b92a112453edbfeac0894004480a88a5c10e40c5147db492"
     },
     {
-      "path": "tests/sw-results.json",
-      "bytes": 1339,
-      "sha256": "ad1d509ac3a3ccfd79cdc2931ca5a5c8cfc93261b4aa6d690e5688824d3cb6fd"
+      "path": "tests/visual-runtime.test.js",
+      "bytes": 5431,
+      "sha256": "8d98f92428010501a1010c33c1704726694dc580e714a5d14b7b1770c0b90674"
     },
     {
-      "path": "tests/sw.test.cjs",
-      "bytes": 4500,
-      "sha256": "18bd6979f649cd9cb3c3951ae8c8ab28048d78d5d2c3bba48e5b1a1e52a3680a"
+      "path": "ui-icons.js",
+      "bytes": 6736,
+      "sha256": "751bc446984ec464252d564176b9727d63609894ab77d62dcca87c04aa22f90c"
+    },
+    {
+      "path": "vfx.js",
+      "bytes": 6649,
+      "sha256": "15ee9b86b4f97d14e6c4102cf6212365a8df65bdbe52d130f79a26d4b49ea2df"
+    },
+    {
+      "path": "world.js",
+      "bytes": 6343,
+      "sha256": "39be5e9948d101fb020ed1f7c55eba4bfe10b44cf8b157709a05ece7c43fc60c"
+    },
+    {
+      "path": "zone-visuals.js",
+      "bytes": 8035,
+      "sha256": "a8ed32dc90ff80065ad5be89656ce0ce3f357cbf6830213c0aa11d56d2f99fdd"
     }
   ]
 }
