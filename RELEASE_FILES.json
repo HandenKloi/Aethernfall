@@ -1,10 +1,15 @@
 {
-  "version": "5.1.10.1",
+  "version": "5.1.10.2",
   "files": [
     {
       "path": "RELEASE_NOTES_5.1.10.1.md",
       "bytes": 952,
       "sha256": "f8748a0d29835444a4f0df5af6e1883a1d87609924029fc728bdc160272b1430"
+    },
+    {
+      "path": "RELEASE_NOTES_5.1.10.2.md",
+      "bytes": 676,
+      "sha256": "c5ddba4ff62e91fe7b26c142acc06093fbf928bfa5075bb073538f75ab8a3fdf"
     },
     {
       "path": "RELEASE_NOTES_5.1.10.md",
@@ -20,6 +25,11 @@
       "path": "art.js",
       "bytes": 24736,
       "sha256": "50a0b82ae8cb236e71cbb7e2d57bf0df1c5cbd7a5954a53f0bcb6af55f0c3e05"
+    },
+    {
+      "path": "assets.js",
+      "bytes": 14007,
+      "sha256": "b4a96774b5ca8137608bd007c4aa2ed223dc57e1e5cbde124329fb6aa8027028"
     },
     {
       "path": "assets/art/characters.webp",
@@ -727,11 +737,6 @@
       "sha256": "c83c105522e57f24b3a239515e16a5ca5237251394f8be922522e70540f2680f"
     },
     {
-      "path": "assets.js",
-      "bytes": 14007,
-      "sha256": "b4a96774b5ca8137608bd007c4aa2ed223dc57e1e5cbde124329fb6aa8027028"
-    },
-    {
       "path": "audio.js",
       "bytes": 12302,
       "sha256": "a76518607b85b055d3a7c1078f233faf91f987b6626356eef7e44208f8036559"
@@ -748,18 +753,18 @@
     },
     {
       "path": "debug-overlay.js",
-      "bytes": 8103,
-      "sha256": "9cb371a63eef14edd33c57bc69eef44f389138239cc3f1de47621a3285dd57a9"
+      "bytes": 8444,
+      "sha256": "61bc403cc77c2d1e6af083effb4a0e26e504d88a59a68e05890fc44d7c204c54"
     },
     {
       "path": "game.js",
-      "bytes": 281936,
-      "sha256": "1ad2768acf6228f4583d721f9f4424c7800973702785fcbf101f86cb90064256"
+      "bytes": 282100,
+      "sha256": "12867fdeae70e49cc716f1a221013465e113803e0b768e5eaca37e6b4cb0a656"
     },
     {
       "path": "index.html",
       "bytes": 9738,
-      "sha256": "b3f13e8e2c743f318be85a8dd5ed262cb2f407d017e3dfa5f9528697983718bb"
+      "sha256": "2475250981fb1b2b67ac51753c9ca4855e3708d359a704e134826a2e74f1d26a"
     },
     {
       "path": "index.pdf",
@@ -769,7 +774,7 @@
     {
       "path": "manifest.json",
       "bytes": 658,
-      "sha256": "13f5814dc6dfce3bb851bf8d9b2f5d13af92adefc0a6e645df109359972e40d2"
+      "sha256": "9514f1ca47dee37789105bb3ee333bd86ae88386d6dcc82da2824b00810d1bdd"
     },
     {
       "path": "persistence.js",
@@ -789,7 +794,7 @@
     {
       "path": "selftest.html",
       "bytes": 2494,
-      "sha256": "42cd8689cd36c9707ae504620fb6c0b0817dfb3dc00987e4a36a4f6b6532a011"
+      "sha256": "8ea9c5514dc6bb9370b959ae0f41f46d59f5a014ab241f2172c4d04fd3147162"
     },
     {
       "path": "story.js",
@@ -798,13 +803,13 @@
     },
     {
       "path": "style.css",
-      "bytes": 30631,
-      "sha256": "31e7f949eafd1cfeafd9e736310a37d738d385f5c8d5ba4f1accd8e0e72ef8b5"
+      "bytes": 31341,
+      "sha256": "248f28fd4413399ff640bd71ff33b995b228b2cd8a1bb81b32d258eb80dd1029"
     },
     {
       "path": "sw.js",
       "bytes": 5334,
-      "sha256": "f28122f72777e5d266b28e4424f5a4269a772a8df823d1534557ec31c7197ef6"
+      "sha256": "864e0ca91c540e216731bd9928dcd15f3eb4192accc312bf2d3f2628fcb6062f"
     },
     {
       "path": "sw.pdf",
