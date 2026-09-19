@@ -52,7 +52,7 @@ self.addEventListener('fetch', event => {
   } else if (relative.startsWith('assets/packs/')) {
     event.respondWith(caches.match(req).then(async cached => {
       if (cached) return cached;
-      const response = await fetch(req);
+      const response = await fetch(req, { cache:'reload' });
       const tier = relative.split('/')[2];
       if (response.ok && VALID_TIERS.has(tier)) (await caches.open(assetTierCacheName(tier))).put(req, response.clone());
       return response;

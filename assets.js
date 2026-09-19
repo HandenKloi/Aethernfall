@@ -264,7 +264,14 @@
 
   async function loadManifest(url = './assets/manifest.json', fetchImpl = globalThis.fetch) {
     if (typeof fetchImpl !== 'function') throw new Error('Fetch API unavailable');
-    const response = await fetchImpl(url, { cache:'no-cache' });
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), 8000) : null;
+    let response;
+    try {
+      response = await fetchImpl(url, { cache:'no-cache', signal: controller?.signal });
+    } finally {
+      clearTimeout(timer);
+    }
     if (!response?.ok) throw new Error(`Asset manifest request failed: ${response?.status ?? 'network'}`);
     return validateManifest(await response.json());
   }

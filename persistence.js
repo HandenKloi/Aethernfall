@@ -284,13 +284,13 @@
         const arenaEngine = rules.arenaEngine;
         player.story = storyEngine?.normalize
           ? storyEngine.normalize(saved.story)
-          : object(saved.story);
+          : { ...object(defaults.story) };
         player.arenas = {};
         const savedArenas = object(saved.arenas);
         for (const id of rules.zoneIds) {
           player.arenas[id] = arenaEngine?.normalize
             ? arenaEngine.normalize(id, savedArenas[id], player.progression.completedCycles)
-            : object(savedArenas[id]);
+            : { ...object(defaults.arenas?.[id]) };
         }
       }
 
@@ -388,13 +388,13 @@
           quests: persistentQuests
         };
       if (rules.saveSchema >= 5) {
-        persistentPlayer.story = rules.storyEngine?.normalize ? rules.storyEngine.normalize(player.story) : { ...object(player.story) };
+        persistentPlayer.story = rules.storyEngine?.normalize ? rules.storyEngine.normalize(player.story) : { ...object(rules.defaults?.player?.story), ...object(player.story) };
         persistentPlayer.arenas = {};
         const arenas = object(player.arenas);
         for (const id of rules.zoneIds) {
           persistentPlayer.arenas[id] = rules.arenaEngine?.normalize
             ? rules.arenaEngine.normalize(id, arenas[id], progression.completedCycles)
-            : { ...object(arenas[id]) };
+            : { ...object(rules.defaults?.player?.arenas?.[id]), ...object(arenas[id]) };
         }
       }
       const persistentSettings = {

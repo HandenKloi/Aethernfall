@@ -95,7 +95,7 @@
     const start = hash(zoneId, seed) % list.length;
     for (let offset = 0; offset < list.length; offset++) {
       const candidate = list[(start + offset) % list.length];
-      if (!placed.some(item => item.id === candidate.id && Math.hypot(item.x - x, item.y - y) <= 720)) {
+      if (!placed.some(item => item.visualId === candidate.id && Math.hypot(item.x - x, item.y - y) <= 720)) {
         return Object.freeze({...candidate, frame:hash(zoneId, Number(seed) + 7919) % 2});
       }
     }

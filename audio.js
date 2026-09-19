@@ -17,7 +17,7 @@
   };
 
   let ctx = null, masterGain = null, musicGain = null, ambientGain = null, sfxGain = null;
-  let musicNodes = [], ambientNodes = [], unlocked = false, lastError = '';
+  let musicNodes = [], ambientNodes = [], unlocked = false, lastError = '', bedStale = false;
 
   function gain(value, destination) {
     const node = ctx.createGain();
@@ -32,7 +32,7 @@
 
   function noteContextState() {
     unlocked = !!ctx && ctx.state === 'running';
-    if (unlocked && !musicNodes.length) rebuildBed();
+    if (unlocked && (!musicNodes.length || bedStale)) rebuildBed();
   }
 
   function ensure() {
@@ -137,6 +137,7 @@
 
   function rebuildBed() {
     if (!ctx || !unlocked || ctx.state !== 'running') return;
+    bedStale = false;
     stopNodes(musicNodes); stopNodes(ambientNodes);
     const tone = zoneTone(), now = ctx.currentTime;
     const modeScale = { exploration:1, danger:1.06, arena:1.12, boss:.75, victory:1.5, defeat:.68, story:.94 }[state.mode] || 1;
@@ -176,13 +177,14 @@
     if (musicGain) musicGain.gain.setTargetAtTime(state.music * (state.musicEnabled ? 1 : 0), ctx.currentTime, .025);
     if (ambientGain) ambientGain.gain.setTargetAtTime(state.ambient, ctx.currentTime, .025);
     if (sfxGain) sfxGain.gain.setTargetAtTime(state.sfx, ctx.currentTime, .025);
-    if (unlocked && ctx?.state === 'running' && !musicNodes.length) rebuildBed();
+    if (unlocked && ctx?.state === 'running' && (!musicNodes.length || bedStale)) rebuildBed();
   }
 
   function setZone(zone) {
     if (!['mistwood', 'stonevale', 'ashfield', 'frostmere', 'starreach'].includes(zone) || zone === state.zone) return false;
     state.zone = zone;
     state.mode = 'exploration';
+    bedStale = true;
     rebuildBed();
     return true;
   }
@@ -190,6 +192,7 @@
   function setMode(mode) {
     if (!['exploration','danger','arena','boss','victory','defeat','story'].includes(mode) || mode === state.mode) return false;
     state.mode = mode;
+    bedStale = true;
     rebuildBed();
     return true;
   }

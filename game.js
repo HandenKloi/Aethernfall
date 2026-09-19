@@ -2576,7 +2576,7 @@
   function updateArena() {
     if (!arenaEngine) return;
     const state = currentArenaState(), z = zones[zoneId], distance = Math.hypot(player.x - z.boss.x, player.y - z.boss.y);
-    if ((state.phase === 'idle' || state.phase === 'defeat') && distance < ARENA_DEFINITIONS[zoneId].radius * .78) startArena();
+    if ((state.phase === 'idle' || state.phase === 'defeat' || state.phase === 'completed') && distance < ARENA_DEFINITIONS[zoneId].radius * .78) startArena();
     if (currentArenaState().phase === 'transition' && time >= arenaTransitionAt) advanceArena();
     if (!arenaCombatPhase()) return;
     const limit = ARENA_DEFINITIONS[zoneId].radius - player.r - 12;

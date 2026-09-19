@@ -40,11 +40,15 @@
 
   async function sheetAvailable(sheet, baseURI) {
     const url = new URL(PATHS[sheet], baseURI);
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), 5000) : null;
     try {
-      const response = await fetch(url, { cache:'force-cache', credentials:'same-origin' });
+      const response = await fetch(url, { cache:'force-cache', credentials:'same-origin', signal: controller?.signal });
       return response.ok;
     } catch (_) {
       return false;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
