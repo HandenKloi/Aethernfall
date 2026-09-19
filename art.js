@@ -1,6 +1,6 @@
 "use strict";
 
-/* Aethernfall 5.1.10 — directional actors and cached zone-material frames. */
+/* Aethernfall 5.1.10.1 — directional actors and cached zone-material frames. */
 (() => {
   'use strict';
 
@@ -411,8 +411,11 @@
     return 'ruins';
   }
   function drawWorldObject(ctx, id, x, y, options = {}) {
-    if (drawFrame(ctx, id, x, y, options)) return true;
-    return draw(ctx, worldFallbackId(id), x, y, Number(options.height) || 96, !!options.flip);
+    // Zone prop atlases in 5.1.10 are placeholder geometric silhouettes. Prefer the
+    // authored painterly legacy sheet and keep the zone atlas only as a last-resort fallback.
+    const height = Number(options.height) || 96;
+    if (draw(ctx, worldFallbackId(id), x, y, height, !!options.flip)) return true;
+    return drawFrame(ctx, id, x, y, options);
   }
   function drawActorPart(ctx, r, image, offset, width, height, u, v, w, h, angle = 0, px = u + w / 2, py = v) {
     ctx.save();

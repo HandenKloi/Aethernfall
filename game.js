@@ -3,7 +3,7 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '5.1.10';
+  const BUILD_VERSION = '5.1.10.1';
   const SAVE_SCHEMA = 5;
   const BASE_STATS = Object.freeze({ startLevel: 6, damage: 32, maxHp: 240, maxStamina: 100, speed: 205, damagePerLevel: 3, hpPerLevel: 18 });
   const MAX_UPGRADE_RANK = 5;
@@ -4496,11 +4496,13 @@
     ctx.save();
     ctx.translate(W / 2 - player.x + cameraImpactX, H / 2 - player.y * .82 + cameraImpactY);
     const visual = zoneVisuals?.ZONES[zoneId], material = visual?.terrain;
-    const zoneBase = material && art?.zonePattern(ctx, material.base, profile.detail % 3);
-    const basePattern = zoneBase || (zoneId === 'mistwood' ? patterns.grass : zoneId === 'stonevale' ? patterns.stone : patterns.dirt);
-    texturedRect(basePattern, z.ground, -160, -160, WORLD.w + 320, WORLD.h * .82 + 320, zoneBase ? .92 : .42 + profile.textureScale * .3);
-    if (zoneBase) {
-      const pathPattern = art.zonePattern(ctx, material.path, 1), secondaryPattern = art.zonePattern(ctx, material.secondary, 2);
+    // The generated zone-terrain atlases are intentionally simple geometry placeholders.
+    // Render the authored painterly terrain sheet instead while retaining zone layout data.
+    const basePattern = zoneId === 'mistwood' ? patterns.grass : zoneId === 'stonevale' || zoneId === 'frostmere' ? patterns.stone : patterns.dirt;
+    texturedRect(basePattern, z.ground, -160, -160, WORLD.w + 320, WORLD.h * .82 + 320, .76 + profile.textureScale * .18);
+    if (visual && material) {
+      const pathPattern = zoneId === 'stonevale' ? patterns.dirt : patterns.stone || patterns.dirt;
+      const secondaryPattern = zoneId === 'mistwood' ? patterns.grass : patterns.stone;
       if (pathPattern && visual.path.length > 1) {
         ctx.save(); ctx.globalAlpha = .72; ctx.strokeStyle = pathPattern; ctx.lineWidth = 92; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.beginPath();
         visual.path.forEach(([x,y], index) => index ? ctx.lineTo(x,y*.82) : ctx.moveTo(x,y*.82)); ctx.stroke(); ctx.restore();
@@ -4510,14 +4512,14 @@
         for (const landmark of visual.landmarks) { ctx.beginPath(); ctx.ellipse(landmark.x,landmark.y*.82,112,48,0,0,Math.PI*2); ctx.fill(); }
         ctx.restore();
       }
-      const arenaPattern = art.zonePattern(ctx, material.arena, 0);
+      const arenaPattern = patterns.stone || patterns.dirt;
       if (arenaPattern) { const arena = LANDMARKS[zoneId]?.find(item => item[2] === 'BOSS'); if (arena) { ctx.save(); ctx.globalAlpha=.5; ctx.fillStyle=arenaPattern; ctx.beginPath(); ctx.ellipse(arena[0],arena[1]*.82,185,82,0,0,Math.PI*2); ctx.fill(); ctx.restore(); } }
       const hazard = visual.hazard;
       if (hazard && visible(hazard.x,hazard.y,hazard.rx+80)) {
-        const hazardPattern = art.zonePattern(ctx, material.hazard, 2);
+        const hazardPattern = (zoneId === 'mistwood' || zoneId === 'frostmere') ? patterns.water : (patterns.stone || patterns.dirt);
         ctx.save(); ctx.beginPath(); ctx.ellipse(hazard.x,hazard.y*.82,hazard.rx,hazard.ry,0,0,Math.PI*2); ctx.clip();
         if (hazardPattern) { ctx.globalAlpha=.68; ctx.fillStyle=hazardPattern; ctx.fillRect(hazard.x-hazard.rx,hazard.y*.82-hazard.ry,hazard.rx*2,hazard.ry*2); }
-        if (profile.detail > 0) { const frames=profile.detail>=3?6:4; art.drawFrame(ctx, material.hazard, hazard.x, hazard.y*.82+hazard.ry, {frame:11+(Math.floor(time*5)%frames),width:hazard.rx*2,height:hazard.ry*2}); }
+        if (profile.detail > 1) { ctx.globalAlpha=.18; ctx.strokeStyle=z.accent; ctx.lineWidth=2; ctx.beginPath(); ctx.ellipse(hazard.x,hazard.y*.82,hazard.rx*.82,hazard.ry*.64,0,0,Math.PI*2); ctx.stroke(); }
         ctx.restore();
       }
     }
@@ -4551,23 +4553,21 @@
     }
   }
   function drawAmbientItem(a) {
-    if (a.visualId && art?.has(a.visualId)) {
-      const p = screenPos(a.x,a.y), height = a.height * a.scale;
-      ctx.save();
-      if (Math.abs(a.x-player.x) < 70 && a.y > player.y && a.y-player.y < height) ctx.globalAlpha=.38;
-      groundShadow(p.x,p.y+12,(a.footprint || 16)*a.scale);
-      art.drawFrame(ctx,a.visualId,p.x,p.y+16,{height,frame:a.frame}); ctx.restore(); return;
-    }
     if (art?.has('pine')) {
-      const p = screenPos(a.x, a.y),
-        tree = zoneId === 'mistwood';
-      const name = tree ? a.kind < .5 ? 'pine' : 'oak' : zoneId === 'stonevale' ? 'rock' : a.kind < .3 ? 'ruins' : 'rock';
+      const p = screenPos(a.x, a.y), id = a.visualId || '';
+      let name = 'ruins', height = Math.max(42, (a.height || 72) * a.scale);
+      if (/pine|tree/.test(id)) name = 'pine';
+      else if (/oak|stump/.test(id)) name = 'oak';
+      else if (/fern|reed|bush|bloom|shrub/.test(id)) { name = 'herb'; height *= .68; }
+      else if (/log/.test(id)) { name = 'wood'; height *= .72; }
+      else if (/boulder|stone|spire|vein|shard|fragment|cluster|heap|drift/.test(id)) { name = 'rock'; height *= .76; }
+      else if (/lantern|brazier|orb/.test(id)) { name = 'shrine'; height *= .62; }
       ctx.save();
-      if (tree && Math.abs(a.x - player.x) < 85 && a.y > player.y && a.y - player.y < 190) ctx.globalAlpha = .3;
-      groundShadow(p.x, p.y + 12, (tree ? 30 : 24) * a.scale);
-      ctx.translate(p.x, p.y + 16);
-      if (tree) ctx.rotate(Math.sin(time * 1.2 + a.x * .01) * .012);
-      art.draw(ctx, name, 0, 0, (tree ? 118 : 50) * a.scale);
+      if (/pine|tree|oak/.test(id) && Math.abs(a.x-player.x) < 85 && a.y > player.y && a.y-player.y < height) ctx.globalAlpha=.32;
+      groundShadow(p.x,p.y+12,(a.footprint || 16)*a.scale);
+      ctx.translate(p.x,p.y+16);
+      if (/pine|tree|oak/.test(id)) ctx.rotate(Math.sin(time*1.2+a.x*.01)*.012);
+      art.draw(ctx,name,0,0,height);
       ctx.restore();
       return;
     }
@@ -4658,16 +4658,16 @@
   }
   function drawCamp(z) {
     const campVisual = zoneVisuals?.ZONES[zoneId]?.camp;
-    if (campVisual && art?.has(campVisual.id)) {
-      const p=screenPos(z.camp.x,z.camp.y-100); groundShadow(p.x,p.y+14,campVisual.footprint);
-      art.drawFrame(ctx,campVisual.id,p.x,p.y+20,{height:campVisual.height}); drawCampBoard(z); return;
-    }
     if (art?.has('house')) {
       const p = screenPos(z.camp.x, z.camp.y - 100);
       groundShadow(p.x, p.y + 14, 55);
       art.draw(ctx, 'house', p.x, p.y + 20, 130);
       drawCampBoard(z);
       return;
+    }
+    if (campVisual && art?.has(campVisual.id)) {
+      const p=screenPos(z.camp.x,z.camp.y-100); groundShadow(p.x,p.y+14,campVisual.footprint);
+      art.drawFrame(ctx,campVisual.id,p.x,p.y+20,{height:campVisual.height}); drawCampBoard(z); return;
     }
     const s = screenPos(z.camp.x, z.camp.y - 100);
     ctx.save();
@@ -4796,16 +4796,6 @@
     const open = canUsePortal();
     groundShadow(s.x, s.y + 17, 43);
     const portalVisual=zoneVisuals?.ZONES[zoneId]?.portal;
-    if (portalVisual && art?.has(portalVisual.id)) {
-      const arenaState=currentArenaState?.();
-      const state=transitioning ? 'transition' : arenaState?.phase === 'completed' ? 'completed' : open ? 'open' : inspectCurrentQuest()?.active?.type === 'portal' ? 'charging' : 'locked';
-      art.drawFrame(ctx,portalVisual.id,s.x,s.y+22,{height:portalVisual.height,frame:zoneVisuals.portalFrame(state)});
-      if (open) {
-        const portalFamily={mistwood:'mist',stonevale:'stone',ashfield:'ash',frostmere:'frost',starreach:'star'}[zoneId]||'mist';
-        art.drawVfxFrame?.(ctx,`vfx.portal.${portalFamily}`,s.x,s.y-18,82,Math.floor(time*8),0,.55);
-      }
-      return;
-    }
     if (art?.has('portal')) {
       ctx.save();
       ctx.globalAlpha = open ? 1 : .58;
@@ -4824,6 +4814,10 @@
         ctx.fill();
         ctx.restore();
       }
+    } else if (portalVisual && art?.has(portalVisual.id)) {
+      const arenaState=currentArenaState?.();
+      const state=transitioning ? 'transition' : arenaState?.phase === 'completed' ? 'completed' : open ? 'open' : inspectCurrentQuest()?.active?.type === 'portal' ? 'charging' : 'locked';
+      art.drawFrame(ctx,portalVisual.id,s.x,s.y+22,{height:portalVisual.height,frame:zoneVisuals.portalFrame(state)});
     } else {
       ctx.fillStyle = '#63756b';
       ctx.fillRect(s.x - 34, s.y - 75, 13, 92);
@@ -4835,14 +4829,14 @@
   }
   function drawResource(e) {
     const visualId=zoneVisuals?.ZONES[zoneId]?.resources?.[e.type];
-    if (visualId && art?.has(visualId)) {
-      const p=screenPos(e.x,e.y); groundShadow(p.x,p.y+12,17); art.drawFrame(ctx,visualId,p.x,p.y+16,{height:e.type==='herb'?38:44}); return;
-    }
     if (art?.has(e.type)) {
       const p = screenPos(e.x, e.y);
       groundShadow(p.x, p.y + 12, 17);
       art.draw(ctx, e.type, p.x, p.y + 16, e.type === 'herb' ? 36 : 40);
       return;
+    }
+    if (visualId && art?.has(visualId)) {
+      const p=screenPos(e.x,e.y); groundShadow(p.x,p.y+12,17); art.drawFrame(ctx,visualId,p.x,p.y+16,{height:e.type==='herb'?38:44}); return;
     }
     const s = screenPos(e.x, e.y);
     ctx.save();
