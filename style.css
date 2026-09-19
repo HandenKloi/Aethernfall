@@ -998,6 +998,7 @@ button:focus-visible {
 }
 .action.skill { gap:1px; }
 .action.skill small { font-size:7px; max-width:48px; overflow:hidden; text-overflow:ellipsis; }
+.action.use small { font-size:7px; max-width:46px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 body.left-handed .joystick { left:auto; right:calc(var(--right) + 14px); }
 body.left-handed .actions { right:auto; left:calc(var(--left) + 12px); }
 @media(max-width:390px) and (orientation:portrait) {
