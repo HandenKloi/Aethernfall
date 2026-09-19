@@ -1326,3 +1326,95 @@ body.left-handed[data-control-size="compact"] .actions, body.left-handed[data-co
   border: 1px solid rgba(255, 255, 255, .06);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
 }
+
+
+/* 5.1.10.5 visual polish: cleaner board marker, menu labels and control labels */
+.settingsTabs {
+  gap: 8px;
+}
+.settingsTabs button {
+  min-height: 58px;
+  padding: 8px 6px;
+  text-align: center;
+}
+.settingsTabs button .uiIconButtonContent,
+.settingsTabs button [data-ui-icon] {
+  flex-direction: column;
+  gap: 4px;
+}
+.settingsTabs button .uiIconLabel,
+.settingsTabs button .uiIconFallback {
+  display: block;
+  font-size: 10px;
+  line-height: 1.08;
+  text-align: center;
+}
+.settingsTabs .uiIcon {
+  width: 18px;
+  height: 18px;
+}
+.seg button,
+.modalBody .btn,
+.devicePresets .btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+#qualitySeg button,
+#fpsSeg button {
+  min-height: 52px;
+  line-height: 1.1;
+}
+.action {
+  text-align: center;
+}
+.action .actionIcon {
+  position: absolute;
+  left: 50%;
+  top: 55%;
+  transform: translate(-50%, -18%);
+}
+.attack .actionIcon {
+  top: 56%;
+}
+.use .actionIcon {
+  top: 54%;
+}
+.action small {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 78%;
+  min-height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  margin: 0;
+  font-size: 8px;
+  line-height: 1.05;
+  font-weight: 700;
+}
+.action.skill small,
+.action.use small,
+.action.attack small,
+.action.block small,
+.action.dodge small {
+  max-width: 78%;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+.actionMeta {
+  position: absolute;
+  left: 50%;
+  bottom: 9px;
+  transform: translateX(-50%);
+  min-width: 18px;
+  text-align: center;
+}
+.action .uiIconFallback {
+  max-width: 48px;
+}
