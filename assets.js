@@ -40,7 +40,9 @@
       image.decoding = 'async';
       image.onload = async () => {
         try {
-          if (image.naturalWidth !== pack.width || image.naturalHeight !== pack.height) throw new Error(`Asset dimensions: ${pack.src}`);
+          // Real files can drift from the manifest's declared width/height (re-export,
+          // recompression, a sheet that grew a row). Don't discard a perfectly good image
+          // over that — decodeGroup() measures the real size and scales frame rects to match.
           if (typeof image.decode === 'function') await image.decode().catch(() => {});
           finish(true, image);
         } catch (error) {
@@ -93,11 +95,30 @@
       return aliases[id] || id;
     }
 
-    function buildEntries(tier, packs, images) {
+    function scaleRect(rect, scaleX, scaleY) {
+      return [rect[0] * scaleX, rect[1] * scaleY, rect[2] * scaleX, rect[3] * scaleY];
+    }
+    // Records store pixel rects authored against the manifest's declared pack size. When the
+    // real decoded image is a different size (see decodeGroup), remap every rect/frame/pivot
+    // into the real image's coordinate space so crops stay aligned instead of sampling the
+    // wrong region — a uniform approximation, but far closer than not scaling at all.
+    function scaleRecord(record, scaleX, scaleY) {
+      if (scaleX === 1 && scaleY === 1) return record;
+      const scaled = { ...record };
+      if (Array.isArray(record.rect)) scaled.rect = scaleRect(record.rect, scaleX, scaleY);
+      if (Array.isArray(record.frames)) scaled.frames = record.frames.map(frame => scaleRect(frame, scaleX, scaleY));
+      if (Array.isArray(record.pivot)) scaled.pivot = [record.pivot[0] * scaleX, record.pivot[1] * scaleY];
+      return Object.freeze(scaled);
+    }
+
+    function buildEntries(tier, packs, images, scales) {
       const entries = new Map();
       for (const pack of packs) {
         const image = images.get(pack.id);
-        for (const record of recordIndex.get(`${tier}:${pack.id}`) || []) entries.set(record.id, Object.freeze({ record, image, pack }));
+        const scale = scales?.get(pack.id) || { x:1, y:1 };
+        for (const record of recordIndex.get(`${tier}:${pack.id}`) || []) {
+          entries.set(record.id, Object.freeze({ record: scaleRecord(record, scale.x, scale.y), image, pack }));
+        }
       }
       return entries;
     }
@@ -107,17 +128,21 @@
       if (!packs.length) throw new Error(`No asset group: ${tier}:${groupId}`);
       const settled = await Promise.allSettled(packs.map(pack => Promise.resolve().then(() => makeImage(pack))));
       const images = new Map();
+      const scales = new Map();
       const skipped = [];
       for (let index = 0; index < settled.length; index++) {
         const result = settled[index];
         const pack = packs[index];
         if (result.status === 'rejected') { skipped.push({ pack, reason: result.reason }); continue; }
         const image = result.value;
-        if (!image || image.naturalWidth !== pack.width || image.naturalHeight !== pack.height) {
-          skipped.push({ pack, reason: new Error(`Decoded dimensions: ${pack.src}`) });
+        if (!image || !(image.naturalWidth > 0) || !(image.naturalHeight > 0)) {
+          skipped.push({ pack, reason: new Error(`Decoded image has no pixels: ${pack.src}`) });
           continue;
         }
         images.set(pack.id, image);
+        const scaleX = image.naturalWidth / pack.width, scaleY = image.naturalHeight / pack.height;
+        scales.set(pack.id, { x:scaleX, y:scaleY });
+        if (scaleX !== 1 || scaleY !== 1) console.warn(`Aethernfall asset pack size drift: ${tier}:${pack.id} declared ${pack.width}x${pack.height}, decoded ${image.naturalWidth}x${image.naturalHeight} — scaling frame rects to compensate`);
       }
       if (!images.size) {
         // Every single pack in the group failed — genuinely nothing to show, so surface it
@@ -131,7 +156,7 @@
         for (const { pack, reason } of skipped) console.warn(`Aethernfall asset pack skipped: ${tier}:${pack.id}`, reason);
       }
       const okPacks = packs.filter(pack => images.has(pack.id));
-      return { id:groupId, tier, packs:okPacks, images, entries:buildEntries(tier, okPacks, images), incomplete: skipped.length > 0 };
+      return { id:groupId, tier, packs:okPacks, images, entries:buildEntries(tier, okPacks, images, scales), incomplete: skipped.length > 0 };
     }
 
     async function loadGroup(groupId, slot) {
