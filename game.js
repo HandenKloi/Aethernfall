@@ -3,7 +3,7 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '5.1.10.1';
+  const BUILD_VERSION = '5.1.10.2';
   const SAVE_SCHEMA = 5;
   const BASE_STATS = Object.freeze({ startLevel: 6, damage: 32, maxHp: 240, maxStamina: 100, speed: 205, damagePerLevel: 3, hpPerLevel: 18 });
   const MAX_UPGRADE_RANK = 5;
@@ -5353,13 +5353,16 @@
       ctx.save();
       ctx.font = '700 11px system-ui';
       ctx.textAlign = 'center';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 3;
+      ctx.shadowColor = 'rgba(0,0,0,.55)';
+      ctx.shadowBlur = 8;
       const active = dist(player, z.scout) < 130;
-      ctx.fillStyle = 'rgba(8,14,12,.76)';
       const npcName = storyApi?.NPCS[z.npcId]?.name || 'Дозорный';
       const label = active ? '✦  ' + npcName : npcName;
-      const w = ctx.measureText(label).width + 18;
       const labelY = s.y - (art?.has(NPC_VISUAL_IDS[z.npcId] || '') ? 106 : 58);
-      ctx.fillRect(s.x - w / 2, labelY, w, 20);
+      ctx.strokeStyle = 'rgba(8,14,12,.82)';
+      ctx.strokeText(label, s.x, labelY + 15);
       ctx.fillStyle = active ? '#f0d58e' : '#d3ddd8';
       ctx.fillText(label, s.x, labelY + 15);
       ctx.restore();
@@ -5395,11 +5398,18 @@
   function drawDiscoveryLabels() {
     const list = LANDMARKS[zoneId] || [];
     ctx.save(); ctx.font = '700 11px system-ui'; ctx.textAlign = 'center';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 3;
+    ctx.shadowColor = 'rgba(0,0,0,.58)';
+    ctx.shadowBlur = 8;
     for (let i = 0; i < list.length; i++) {
       const [x, y, , name] = list[i], id = `${zoneId}:${i}`;
       if (!player.discoveries.includes(id) || Math.hypot(player.x - x, player.y - y) > 280) continue;
-      const p = screenPos(x, y - 75), w = ctx.measureText(name).width + 18;
-      ctx.fillStyle = 'rgba(8,14,12,.72)'; ctx.fillRect(p.x - w / 2, p.y - 14, w, 20); ctx.fillStyle = '#e9d79a'; ctx.fillText(name, p.x, p.y + 1);
+      const p = screenPos(x, y - 75);
+      ctx.strokeStyle = 'rgba(8,14,12,.82)';
+      ctx.strokeText(name, p.x, p.y + 1);
+      ctx.fillStyle = '#e9d79a';
+      ctx.fillText(name, p.x, p.y + 1);
     }
     ctx.restore();
   }

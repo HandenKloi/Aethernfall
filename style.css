@@ -1198,3 +1198,38 @@ body.left-handed[data-control-size="compact"] .actions, body.left-handed[data-co
   .buildSummary { grid-template-columns:1fr; }
   .buildStatRow { align-items:flex-start; }
 }
+
+
+/* 5.1.10.2 UI readability pass: remove bulky dark text blocks from overlays and labels. */
+.zonePanel,
+#questTracker,
+#zoneBadge,
+#toast,
+.lootTicker {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+#questTracker {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+#zoneText,
+#objectiveText,
+#questTitle,
+#questProgress,
+#zoneBadge,
+#toast,
+.lootTicker {
+  text-shadow: 0 2px 8px rgba(0,0,0,.72), 0 0 2px rgba(0,0,0,.75);
+}
+#toast {
+  padding: 0 !important;
+  max-width: min(92vw, 360px);
+}
+.lootTicker {
+  padding: 0 !important;
+  max-width: min(92vw, 360px);
+}
