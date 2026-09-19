@@ -1,6 +1,11 @@
 {
-  "version": "5.1.10",
+  "version": "5.1.10.1",
   "files": [
+    {
+      "path": "RELEASE_NOTES_5.1.10.1.md",
+      "bytes": 952,
+      "sha256": "f8748a0d29835444a4f0df5af6e1883a1d87609924029fc728bdc160272b1430"
+    },
     {
       "path": "RELEASE_NOTES_5.1.10.md",
       "bytes": 859,
@@ -13,8 +18,8 @@
     },
     {
       "path": "art.js",
-      "bytes": 24527,
-      "sha256": "f2e7d5fdaaa88555d407109f1afec2660e0aceb55974863d0b636c51d8d34d7f"
+      "bytes": 24736,
+      "sha256": "50a0b82ae8cb236e71cbb7e2d57bf0df1c5cbd7a5954a53f0bcb6af55f0c3e05"
     },
     {
       "path": "assets/art/characters.webp",
@@ -48,8 +53,8 @@
     },
     {
       "path": "assets/manifest.json",
-      "bytes": 514137,
-      "sha256": "7fda237c79cf2ccca155654d68c7786917a9b16ef4a23d97d1712f13fbe3485e"
+      "bytes": 514139,
+      "sha256": "8f88c632c9b97c637fc43772ad4936f15be56fdd23d68d269966e16f844bcf7a"
     },
     {
       "path": "assets/packs/high/ashfield-actors.webp",
@@ -728,8 +733,8 @@
     },
     {
       "path": "audio.js",
-      "bytes": 12300,
-      "sha256": "37b2982a7d4e0150d7cd160d87a6a061a3b2ed612481ba908bb9e979ca68faaf"
+      "bytes": 12302,
+      "sha256": "a76518607b85b055d3a7c1078f233faf91f987b6626356eef7e44208f8036559"
     },
     {
       "path": "builds.js",
@@ -748,13 +753,13 @@
     },
     {
       "path": "game.js",
-      "bytes": 281912,
-      "sha256": "45c01d8830309ae2444eb5099bd058c7765c0b40b634d15659b86ab2ac1cdb56"
+      "bytes": 281936,
+      "sha256": "1ad2768acf6228f4583d721f9f4424c7800973702785fcbf101f86cb90064256"
     },
     {
       "path": "index.html",
-      "bytes": 9700,
-      "sha256": "29d59fc08a69cbb99d2380604c98a1fa46a0bed3ad2be2a507848b1c5b0c11a3"
+      "bytes": 9738,
+      "sha256": "b3f13e8e2c743f318be85a8dd5ed262cb2f407d017e3dfa5f9528697983718bb"
     },
     {
       "path": "index.pdf",
@@ -763,8 +768,8 @@
     },
     {
       "path": "manifest.json",
-      "bytes": 656,
-      "sha256": "0a253dfbce4d991971891e9c862091663013449f6e87f06890e0cd162329cb6e"
+      "bytes": 658,
+      "sha256": "13f5814dc6dfce3bb851bf8d9b2f5d13af92adefc0a6e645df109359972e40d2"
     },
     {
       "path": "persistence.js",
@@ -783,8 +788,8 @@
     },
     {
       "path": "selftest.html",
-      "bytes": 2490,
-      "sha256": "938d7e137b9e62e184c4e8f8b2b54d4fc556b740654371e6ee5d53543d0527a8"
+      "bytes": 2494,
+      "sha256": "42cd8689cd36c9707ae504620fb6c0b0817dfb3dc00987e4a36a4f6b6532a011"
     },
     {
       "path": "story.js",
@@ -793,13 +798,13 @@
     },
     {
       "path": "style.css",
-      "bytes": 30517,
-      "sha256": "3ff121dde70cae5770071aa21f8cfe74ac2aeb9b2bc76868af5b998cf3a23f9d"
+      "bytes": 30631,
+      "sha256": "31e7f949eafd1cfeafd9e736310a37d738d385f5c8d5ba4f1accd8e0e72ef8b5"
     },
     {
       "path": "sw.js",
-      "bytes": 5332,
-      "sha256": "7be2a42f06bb0310ee7619954a52f6d79fb771089bc235ba03561fa12c93ddc3"
+      "bytes": 5334,
+      "sha256": "f28122f72777e5d266b28e4424f5a4269a772a8df823d1534557ec31c7197ef6"
     },
     {
       "path": "sw.pdf",
@@ -813,8 +818,8 @@
     },
     {
       "path": "tests/visual-runtime.test.js",
-      "bytes": 5431,
-      "sha256": "8d98f92428010501a1010c33c1704726694dc580e714a5d14b7b1770c0b90674"
+      "bytes": 6982,
+      "sha256": "4500aa7fecfbbe6f2b5d6074a36611da6da5910f6aea595d2dae1482fab0d625"
     },
     {
       "path": "ui-icons.js",
@@ -823,8 +828,8 @@
     },
     {
       "path": "vfx.js",
-      "bytes": 6649,
-      "sha256": "15ee9b86b4f97d14e6c4102cf6212365a8df65bdbe52d130f79a26d4b49ea2df"
+      "bytes": 6651,
+      "sha256": "e9d75d4a6926ce51d377adf2303f25c713daeb6551876ec682693e188782f922"
     },
     {
       "path": "world.js",
@@ -833,8 +838,8 @@
     },
     {
       "path": "zone-visuals.js",
-      "bytes": 8035,
-      "sha256": "a8ed32dc90ff80065ad5be89656ce0ce3f357cbf6830213c0aa11d56d2f99fdd"
+      "bytes": 8037,
+      "sha256": "ee180676fc2325dd162c5188bfbb56e20cf94e830cf144a808e622ffe74a194d"
     }
   ]
 }

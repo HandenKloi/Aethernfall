@@ -1,6 +1,6 @@
 "use strict";
 
-/* Aethernfall 5.1.10 — local procedural audio mixer, no network assets. */
+/* Aethernfall 5.1.10.1 — local procedural audio mixer, no network assets. */
 (() => {
   'use strict';
 

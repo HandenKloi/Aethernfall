@@ -76,7 +76,10 @@ function testVisibleCollisionPlan() {
 
 function testWorldObjectFallback() {
   const env = loadBrowserScript('art.js');
-  const records = new Map([['legacy.ruins', entry('legacy-ruins')]]);
+  const records = new Map([
+    ['legacy.ruins', entry('legacy-ruins')],
+    ['landmark.mist.unknown', entry('geometric-placeholder')]
+  ]);
   env.AetherArt.setAssetManager({
     source:id => records.get(id === 'ruins' ? 'legacy.ruins' : id) || null,
     has:id => records.has(id === 'ruins' ? 'legacy.ruins' : id),
@@ -85,7 +88,7 @@ function testWorldObjectFallback() {
   const ctx = drawingContext();
   assert.equal(typeof env.AetherArt.drawWorldObject, 'function');
   assert.equal(env.AetherArt.drawWorldObject(ctx, 'landmark.mist.unknown', 10, 20, { height:120 }), true);
-  assert.deepEqual(ctx.images, ['legacy-ruins'], 'missing landmark pack must use a visible legacy fallback');
+  assert.deepEqual(ctx.images, ['legacy-ruins'], 'painterly world fallback must win over a geometric zone placeholder');
 }
 
 function testManifestVersionAndCoverage() {
@@ -103,7 +106,33 @@ function testManifestVersionAndCoverage() {
   }
 }
 
-const tests = [testEquipmentLayers, testPainterlyPlayerEquipment, testVisibleCollisionPlan, testWorldObjectFallback, testManifestVersionAndCoverage];
+
+function testReleaseVersionConsistency() {
+  const game = fs.readFileSync(path.join(ROOT, 'game.js'), 'utf8');
+  const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
+  const index = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  const appManifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
+  const assetManifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'assets/manifest.json'), 'utf8'));
+  const version = game.match(/BUILD_VERSION\s*=\s*'([^']+)'/)[1];
+  assert.equal(sw.match(/const VERSION\s*=\s*'([^']+)'/)[1], version);
+  assert.equal(appManifest.version, version);
+  assert.equal(assetManifest.buildVersion, version);
+  assert.ok(index.includes(`<title>Aethernfall v${version}</title>`));
+  assert.ok(index.includes(`game.js?v=${version}`));
+  assert.ok(index.includes(`style.css?v=${version}`));
+}
+
+
+function testPainterlyFallbackCoverage() {
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'assets/manifest.json'), 'utf8'));
+  const required = ['legacy.house','legacy.oak','legacy.pine','legacy.rock','legacy.ruins','legacy.shrine','legacy.herb','legacy.wood','legacy.ore'];
+  for (const tier of manifest.tiers) {
+    const ids = new Set(manifest.records.filter(record => record.tier === tier).map(record => record.id));
+    for (const id of required) assert.ok(ids.has(id), `${tier} is missing painterly fallback ${id}`);
+  }
+}
+
+const tests = [testEquipmentLayers, testPainterlyPlayerEquipment, testVisibleCollisionPlan, testWorldObjectFallback, testManifestVersionAndCoverage, testReleaseVersionConsistency, testPainterlyFallbackCoverage];
 let failures = 0;
 for (const test of tests) {
   try { test(); console.log(`PASS ${test.name}`); }
