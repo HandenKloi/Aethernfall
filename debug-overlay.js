@@ -24,6 +24,11 @@
     try { localStorage.setItem(STORE_KEY, JSON.stringify(log.slice(-MAX_ENTRIES))); } catch (_) {}
   }
 
+  // Значок считает только реальные проблемы текущего запуска (ошибки, отклонённые промисы, зависания,
+  // console.error), а не накопленный за все сессии лог и не информационные записи.
+  const SESSION_START = new Date().toISOString();
+  const COUNTED_TYPES = new Set(['error', 'promise', 'freeze', 'console.error']);
+  const sessionProblems = () => log.filter(e => e.t >= SESSION_START && COUNTED_TYPES.has(e.type)).length;
   let log = loadLog();
   let panelOpen = false;
 
@@ -57,6 +62,15 @@
     });
   });
 
+  // JSON.stringify бросает на циклических объектах; логгер не должен ломать вызывающий код.
+  function describe(a) {
+    try {
+      if (a instanceof Error) return a.stack || a.message;
+      return a !== null && typeof a === 'object' ? JSON.stringify(a) : String(a);
+    } catch (_) {
+      return Object.prototype.toString.call(a);
+    }
+  }
   // Mirror the game's own warnings/errors (e.g. asset pack failures) into the same log,
   // so a silent console.warn about a missing model shows up right next to any freeze.
   for (const level of ['warn', 'error']) {
@@ -66,24 +80,29 @@
       original(...args);
       push({
         type: 'console.' + level,
-        message: args.map(a => (a instanceof Error ? (a.stack || a.message) : typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ')
+        message: args.map(describe).join(' ')
       });
     };
   }
 
   document.addEventListener('visibilitychange', () => {
+    if (document.hidden) hiddenSinceLastTick = true;
     push({ type: 'state', message: document.hidden ? 'Вкладка свёрнута/скрыта' : 'Вкладка снова видима' });
   });
 
-  // Freeze detector: a long gap between animation frames while the page is visible
-  // means the main thread was blocked, not just backgrounded.
+  // Freeze detector: a long gap between animation frames means the main thread was
+  // blocked — but only if the page stayed visible the whole time. rAF simply pauses
+  // while backgrounded, so a gap that includes hidden time is not a freeze and would
+  // otherwise be reported as a false alarm every time the tab is minimized for a while.
   let lastTick = performance.now();
+  let hiddenSinceLastTick = document.hidden;
   function tick(now) {
     const gap = now - lastTick;
     lastTick = now;
-    if (gap > FREEZE_THRESHOLD_MS && document.visibilityState === 'visible') {
+    if (gap > FREEZE_THRESHOLD_MS && document.visibilityState === 'visible' && !hiddenSinceLastTick) {
       push({ type: 'freeze', message: `Кадр задержан на ${Math.round(gap)} мс` });
     }
+    hiddenSinceLastTick = false;
     requestAnimationFrame(tick);
   }
   requestAnimationFrame(tick);
@@ -94,7 +113,7 @@
     const badge = document.createElement('button');
     badge.type = 'button';
     badge.setAttribute('aria-label', 'Debug log');
-    badge.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:2147483647;width:36px;height:36px;border-radius:50%;background:rgba(20,24,22,.62);color:#fff;border:1px solid rgba(255,255,255,.28);font:12px/1 -apple-system,system-ui;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;';
+    badge.style.cssText = 'position:fixed;left:50%;bottom:calc(8px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:2147483647;width:36px;height:36px;border-radius:50%;background:rgba(20,24,22,.62);color:#fff;border:1px solid rgba(255,255,255,.28);font:12px/1 -apple-system,system-ui;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;';
     document.body.appendChild(badge);
 
     const panel = document.createElement('div');
@@ -116,7 +135,8 @@
     document.body.appendChild(bar);
 
     function render() {
-      badge.textContent = log.length ? '🐞' + log.length : '🐞';
+      const problems = sessionProblems();
+      badge.textContent = problems ? '🐞' + problems : '🐞';
       if (!panelOpen) return;
       panel.textContent = log.length
         ? log.slice().reverse().map(e => `[${timeLabel(e.t)}] ${e.type.toUpperCase()}: ${e.message}${e.source ? '\n  ' + e.source : ''}${e.stack ? '\n' + e.stack : ''}`).join('\n\n')

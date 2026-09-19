@@ -111,6 +111,7 @@
         goalY = Math.floor(target.y / step);
       queue[0] = start;
       parents[start] = -1;
+      cost[start] = 0; // буфер переиспользуется: без сброса стоимость копится от вызова к вызову
       let head = 0,
         tail = 1,
         end = -1;

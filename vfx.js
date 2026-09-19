@@ -1,6 +1,6 @@
 "use strict";
 
-/* Aethernfall 5.1.3 — bounded allocation-free decorative VFX pool. */
+/* Aethernfall 5.1.9 — bounded allocation-free decorative VFX pool. */
 (() => {
   'use strict';
   const EFFECT_IDS = Object.freeze([

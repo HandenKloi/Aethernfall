@@ -3,7 +3,7 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '5.1.6';
+  const BUILD_VERSION = '5.1.9';
   const SAVE_SCHEMA = 5;
   const BASE_STATS = Object.freeze({ startLevel: 6, damage: 32, maxHp: 240, maxStamina: 100, speed: 205, damagePerLevel: 3, hpPerLevel: 18 });
   const MAX_UPGRADE_RANK = 5;
@@ -1257,7 +1257,9 @@
       });
       const button = $('updateBtn');
       const offer = () => {
-        if (reg.waiting) button.classList.remove('hidden');
+        // Без активного контроллера это первая установка, а не обновление.
+        const updateReady = Boolean(reg.waiting && navigator.serviceWorker.controller);
+        button.classList.toggle('hidden', !updateReady);
       };
       offer();
       reg.addEventListener('updatefound', () => {
@@ -2046,23 +2048,32 @@
   }
   async function loadAssetSystem() {
     if (!assetsApi) return null;
-    try {
-      const manifestUrl = new URL(`assets/manifest.json?v=${BUILD_VERSION}`, document.baseURI).href;
-      const manifest = await assetsApi.loadManifest(manifestUrl);
-      const manager = assetsApi.createManager({ manifest, baseUrl:new URL('assets/', document.baseURI).href });
-      manager.setTier(QUALITY_ASSET_TIERS[activeQualityKey()] || 'low');
-      await manager.loadTier(zoneId);
-      assetManager?.destroy?.();
-      assetManager = manager;
-      art?.setAssetManager?.(manager);
-      return manager;
-    } catch (error) {
-      console.warn('Aethernfall asset fallback', error);
-      return null;
+    const manifestUrl = new URL(`assets/manifest.json?v=${BUILD_VERSION}`, document.baseURI).href;
+    const delays = [0, 400, 1200];
+    let lastError = null;
+    for (const delay of delays) {
+      if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+      try {
+        const manifest = await assetsApi.loadManifest(manifestUrl);
+        const manager = assetsApi.createManager({ manifest, baseUrl:new URL('assets/', document.baseURI).href });
+        manager.setTier(QUALITY_ASSET_TIERS[activeQualityKey()] || 'low');
+        await manager.loadTier(zoneId);
+        assetManager?.destroy?.();
+        assetManager = manager;
+        art?.setAssetManager?.(manager);
+        return manager;
+      } catch (error) {
+        lastError = error;
+      }
     }
+    // A transient network blip (very common right as the tab backgrounds/resumes on mobile)
+    // shouldn't permanently disable every managed sprite for the rest of the session — retried
+    // a few times above; only warn once every attempt is exhausted.
+    console.warn('Aethernfall asset fallback', lastError);
+    return null;
   }
   async function reloadAssetPacks() {
-    if (!assetManager) return null;
+    if (!assetManager) return loadAssetSystem();
     const operation = ++assetReloadSerial, targetZone = zoneId;
     try {
       const result = await assetManager.loadTier(targetZone);
@@ -2074,7 +2085,7 @@
     }
   }
   function loadZoneAssets() {
-    if (!assetManager) return;
+    if (!assetManager) { void loadAssetSystem(); return; }
     const targetZone = zoneId, operation = ++assetReloadSerial;
     void assetManager.loadTier(targetZone).then(() => {
       if (operation === assetReloadSerial && targetZone === zoneId) art?.setAssetManager?.(assetManager);
@@ -2226,10 +2237,16 @@
       );
     }
   }
+  // Новый цикл (после финала кампании) делает врагов и боссов сильнее. Первое прохождение не меняется.
+  const CYCLE_SCALING = Object.freeze({ hp: .30, damage: .18, maxCycles: 6 });
+  function cycleScale(perCycle) {
+    const cycles = clamp(Math.floor(Number(player.progression?.completedCycles) || 0), 0, CYCLE_SCALING.maxCycles);
+    return 1 + cycles * perCycle;
+  }
   function scaledEnemyDamage(baseDamage, level) {
     const safeLevel = clamp(Math.floor(Number(level) || 1), 1, 100);
     const extra = Math.max(0, safeLevel - 6);
-    return Math.round(baseDamage * (1 + extra * .055));
+    return Math.round(baseDamage * (1 + extra * .055) * cycleScale(CYCLE_SCALING.damage));
   }
   // Level 6 is the original starting balance. Never change a wounded enemy mid-fight.
   function scaleEnemy(e) {
@@ -2237,7 +2254,7 @@
     const level = clamp(Math.floor(Number(player.level) || 1), 1, 100);
     e.level = level;
     const extra = Math.max(0, level - 6);
-    e.hp = e.maxHp = Math.round(e.baseStats.hp * (1 + extra * .09));
+    e.hp = e.maxHp = Math.round(e.baseStats.hp * (1 + extra * .09) * cycleScale(CYCLE_SCALING.hp));
     e.damage = scaledEnemyDamage(e.baseStats.damage, level);
   }
   function addEnemy(type, x, y, options = {}) {
@@ -2381,6 +2398,23 @@
     actor.x = clamp(actor.x, edge, WORLD.w - edge);
     actor.y = clamp(actor.y, edge, WORLD.h - edge);
   }
+  // Враги не должны появляться в радиусе обнаружения у лагеря и разведчика:
+  // иначе герой получает урон, пока читает первую подсказку.
+  function keepClearOfCamp(x, y, camp, type) {
+    const minDist = type === 'marksman' ? 580 : 380;
+    const edge = 150;
+    if (Math.hypot(x - camp.x, y - camp.y) >= minDist) return { x, y };
+    const base = Math.atan2(y - camp.y, x - camp.x);
+    // Радиальный вынос; если упираемся в границу мира — перебираем углы с шагом 30°.
+    for (let step = 0; step < 12; step++) {
+      const sign = step % 2 ? -1 : 1;
+      const angle = base + sign * Math.ceil(step / 2) * Math.PI / 6;
+      const nx = camp.x + Math.cos(angle) * minDist,
+        ny = camp.y + Math.sin(angle) * minDist;
+      if (nx >= edge && nx <= WORLD.w - edge && ny >= edge && ny <= WORLD.h - edge) return { x: nx, y: ny };
+    }
+    return { x, y };
+  }
   function resetZone() {
     resetImpactFeedback();
     physics?.set([]);
@@ -2404,9 +2438,11 @@
     const enemyPlan = worldEngine.enemyPlan(zoneId);
     const eventPlan = worldEngine.eventPlan(zoneId);
     for (let i = 0; i < enemyPlan.ambient.length; i++) {
-      const x = 150 + rng(i + 300 + zoneId.length) * (WORLD.w - 300),
-        y = 150 + rng(i + 620 + zoneId.length * 7) * (WORLD.h - 300);
-      addEnemy(enemyPlan.ambient[i], x, y);
+      const spot = keepClearOfCamp(
+        150 + rng(i + 300 + zoneId.length) * (WORLD.w - 300),
+        150 + rng(i + 620 + zoneId.length * 7) * (WORLD.h - 300),
+        z.camp, enemyPlan.ambient[i]);
+      addEnemy(enemyPlan.ambient[i], spot.x, spot.y);
     }
     const [eventX,eventY] = LANDMARKS[zoneId][eventPlan.landmarkIndex];
     for (const entry of eventPlan.enemies) addEnemy(entry.type, eventX + entry.dx, eventY + entry.dy);
@@ -3114,7 +3150,7 @@
         ui.loading.classList.add('hidden');
         transitioning = false;
         if (firstCampaignCompletion) openCampaignFinale();
-        else toast(cycleCompleted ? zones[zoneId].name + ' · получен Осколок пламени' : zones[zoneId].name);
+        else toast(cycleCompleted ? zones[zoneId].name + ' · получен Осколок пламени · цикл ' + (player.progression.completedCycles + 1) + ': враги сильнее' : zones[zoneId].name);
       }, 120);
     }
     requestAnimationFrame(tick);
@@ -3126,7 +3162,7 @@
     const ending = storyEngine?.deriveEnding(player.story) || { id:'restoration', title:'Печать пяти земель', text:'Разлом затих.' };
     player.story = storyEngine?.normalize({ ...player.story, ending:ending.id }) || player.story;
     audio.setMode?.('story'); audio.sfx('victory');
-    openModal('Кампания завершена', `<article class="card campaignFinale"><p class="note">ФИНАЛ · ${ending.id === 'restoration' ? 'ВОССТАНОВЛЕНИЕ' : 'ВОЗНЕСЕНИЕ'}</p><h3>${escapeHTML(ending.title)}</h3><p>${escapeHTML(ending.text)}</p><p class="note">Пять арен очищены. Можно продолжить исследование, поручения и сбор другого build; новый цикл вновь откроет испытания без повторной награды текущего цикла.</p></article><button class="btn" id="campaignContinue">Продолжить игру</button>`);
+    openModal('Кампания завершена', `<article class="card campaignFinale"><p class="note">ФИНАЛ · ${ending.id === 'restoration' ? 'ВОССТАНОВЛЕНИЕ' : 'ВОЗНЕСЕНИЕ'}</p><h3>${escapeHTML(ending.title)}</h3><p>${escapeHTML(ending.text)}</p><p class="note">Пять арен очищены. Можно продолжить исследование, поручения и сбор другого build; новый цикл вновь откроет испытания без повторной награды текущего цикла. Враги каждого нового цикла становятся сильнее.</p></article><button class="btn" id="campaignContinue">Продолжить игру</button>`);
     bindTap($('campaignContinue'), closeModal);
   }
   let previousModalFocus = null;
@@ -4362,7 +4398,9 @@
     setWidth(ui.xp, xpPercent + '%');
     ui.stamina?.parentElement?.setAttribute('aria-valuenow', String(Math.round(staminaPercent)));
     ui.xp?.parentElement?.setAttribute('aria-valuenow', String(Math.round(xpPercent)));
-    setText(ui.level, 'Ур. ' + player.level);
+    const cycleNo = Math.floor(Number(player.progression?.completedCycles) || 0);
+    setText(ui.level, 'Ур. ' + player.level + (cycleNo > 0 ? ' · Ц' + (cycleNo + 1) : ''));
+    ui.level?.setAttribute('title', cycleNo > 0 ? `Цикл ${cycleNo + 1}: враги сильнее` : '');
     const z = zones[zoneId];
     setText(ui.zone, z.name);
     const objective = currentObjective();
@@ -5083,6 +5121,31 @@
       ctx.restore();
     }
   }
+  // Радиальное свечение рисуется один раз на цвет и дальше только масштабируется:
+  // раньше на каждую частицу каждый кадр создавался новый CanvasGradient (лишний мусор для GC на iPhone).
+  const glowSprites = new Map();
+  function glowSprite(color) {
+    let sprite = glowSprites.get(color);
+    if (sprite !== undefined) return sprite;
+    if (glowSprites.size >= 32) glowSprites.clear();
+    sprite = null;
+    try {
+      const size = 64, half = size / 2;
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      const c = canvas.getContext('2d');
+      const gradient = c.createRadialGradient(half, half, 0, half, half, half);
+      gradient.addColorStop(0, color);
+      gradient.addColorStop(1, 'transparent');
+      c.fillStyle = gradient;
+      c.fillRect(0, 0, size, size);
+      sprite = canvas;
+    } catch (_) {
+      sprite = null; // некорректный цвет — частица просто не рисуется, кадр не ломается
+    }
+    glowSprites.set(color, sprite);
+    return sprite;
+  }
   function drawParticles() {
     for (const p of particles) {
       const s = screenPos(p.x, p.y);
@@ -5092,13 +5155,8 @@
       if (p.kind === 'glow' || p.kind === 'ember') {
         ctx.globalCompositeOperation = 'lighter';
         const r = p.size * (2.2 + (1 - t) * 1.4);
-        const grad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
-        grad.addColorStop(0, p.color);
-        grad.addColorStop(1, 'transparent');
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
-        ctx.fill();
+        const sprite = glowSprite(p.color);
+        if (sprite) ctx.drawImage(sprite, s.x - r, s.y - r, r * 2, r * 2);
       } else {
         // Sparks stretch into a short streak along their velocity for a sense of motion.
         const speed = Math.hypot(p.vx, p.vy);
