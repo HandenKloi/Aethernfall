@@ -1,5 +1,5 @@
 {
-  "version": "5.1.10.4",
+  "version": "5.1.10.5",
   "files": [
     {
       "path": "RELEASE_NOTES_5.1.10.1.md",
@@ -20,6 +20,11 @@
       "path": "RELEASE_NOTES_5.1.10.4.md",
       "bytes": 428,
       "sha256": "a85b012d9a12125f4e1dbe66e697d180731228fc6c2dfc0dc7299014dddb14b0"
+    },
+    {
+      "path": "RELEASE_NOTES_5.1.10.5.md",
+      "bytes": 776,
+      "sha256": "a4d20ea6e87a4302c1b494c8c3fbf31794aa46c2a205dcd912a33be1770d7eb2"
     },
     {
       "path": "RELEASE_NOTES_5.1.10.md",
@@ -768,13 +773,13 @@
     },
     {
       "path": "game.js",
-      "bytes": 284070,
-      "sha256": "72fbdef8fbe92d5dda4377e86ac7835b04b82594767c63708a672a778002e634"
+      "bytes": 286179,
+      "sha256": "77842d00877bc1f6b085404a0fab5abf413b0bba31c6d4c43917792bdb19d2e2"
     },
     {
       "path": "index.html",
       "bytes": 9775,
-      "sha256": "48bb8efb5f63f0ce59c6c9a9251e27765a93785394e079a5b19cd2da51f97fac"
+      "sha256": "b4cebbae4c9795a07fe8d9440e4c5914bb71e3e8c527eee23ba0d3ac6c5a2685"
     },
     {
       "path": "index.pdf",
@@ -784,7 +789,7 @@
     {
       "path": "manifest.json",
       "bytes": 658,
-      "sha256": "65ae1326cedfaa215d778ad0e015ad0917105ac67ce23eed50c12ae499569799"
+      "sha256": "47f6ab183c269640413a09f67a45ccf97e906ec5592bd73dd877772ee06165cb"
     },
     {
       "path": "persistence.js",
@@ -804,7 +809,7 @@
     {
       "path": "selftest.html",
       "bytes": 2494,
-      "sha256": "23e1af59054a0c527ebacf63901b35d91cf8ce72313552f506ec4f8b135ecdd1"
+      "sha256": "3adf4441992ad652b6efa7b5ecd63b781195a5190296df04bf8c26a243872e71"
     },
     {
       "path": "story.js",
@@ -813,13 +818,13 @@
     },
     {
       "path": "style.css",
-      "bytes": 33231,
-      "sha256": "abf095cdc7507727e7118839c899d721b1bd2cb08fdd828bccaa25a459a415c5"
+      "bytes": 34868,
+      "sha256": "81a78e61fd95d6d8916d02655a11b292597b7cdca170366c2ca282e67e91b763"
     },
     {
       "path": "sw.js",
       "bytes": 5334,
-      "sha256": "7e0369a5cac4c3dea23f14071fd7e3b532e65a79c95142a28efc36f75120c780"
+      "sha256": "8315e980c055585f23ed3698e6ccb8a828f93d8df254457ef8f4149bb724fb36"
     },
     {
       "path": "sw.pdf",
