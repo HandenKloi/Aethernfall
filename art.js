@@ -1,6 +1,6 @@
 "use strict";
 
-/* Aethernfall 5.1.9 — directional actors and cached zone-material frames. */
+/* Aethernfall 5.1.10 — directional actors and cached zone-material frames. */
 (() => {
   'use strict';
 
@@ -320,6 +320,15 @@
     ctx.restore();
     return true;
   }
+  const EQUIPMENT_VISUALS = Object.freeze({
+    starterBlade:'equipment.weapon.starter_blade',
+    dawnBlade:'equipment.weapon.dawn_blade',
+    buckler:'equipment.offhand.buckler'
+  });
+  function drawEquipmentLayer(ctx, id, direction, height) {
+    const visualId = EQUIPMENT_VISUALS[id];
+    return visualId ? drawActorFrame(ctx, managedSource(visualId), direction, height, false) : false;
+  }
   function clipTransform(clip, progress, t, moving) {
     const pulse = Math.sin(Math.PI * Math.min(1, progress));
     const result = { rotation:0, x:0, y:moving ? Math.sin(t * 12) * 1.4 : Math.sin(t * 2) * .35, sx:1, sy:1 };
@@ -380,15 +389,30 @@
     ctx.rotate(transform.rotation * (flip ? -1 : 1)); ctx.scale(transform.sx, transform.sy);
     bossAttachments(ctx, entry.record, height, clip, progress, options.phase2);
     drawActorFrame(ctx, entry, direction, height, false);
-    // The painterly player master already contains coherent armor, cloth and
-    // weapon detail. The rejected 5.1.0 polygon equipment masks are intentionally not
-    // composited over it; equipment still affects gameplay and UI normally.
+    // Equipment sheets share the actor's directional frame contract. Keeping them
+    // inside the actor transform makes the blade and buckler follow attacks, dodges,
+    // hit reactions and left-facing mirroring without another per-frame rig.
+    if (name === 'player.ranger' && options.equipment) {
+      drawEquipmentLayer(ctx, options.equipment.weapon, direction, height);
+      drawEquipmentLayer(ctx, options.equipment.offhand, direction, height);
+    }
     if (entry.record.rig === 'marksman') marksmanAttachment(ctx, height, clip, progress);
     ctx.restore(); return true;
   }
   function actor(ctx, name, x, y, options, ...legacy) {
     if (options && typeof options === 'object') return managedActor(ctx, name, x, y, options);
     return legacyActor(ctx, name, x, y, options, ...legacy);
+  }
+  function worldFallbackId(id) {
+    if (id.startsWith('portal.')) return 'portal';
+    if (id.startsWith('camp.')) return 'house';
+    if (/shrine|well|circle|heart/.test(id)) return 'shrine';
+    if (/grove|shelter/.test(id)) return 'oak';
+    return 'ruins';
+  }
+  function drawWorldObject(ctx, id, x, y, options = {}) {
+    if (drawFrame(ctx, id, x, y, options)) return true;
+    return draw(ctx, worldFallbackId(id), x, y, Number(options.height) || 96, !!options.flip);
   }
   function drawActorPart(ctx, r, image, offset, width, height, u, v, w, h, angle = 0, px = u + w / 2, py = v) {
     ctx.save();
@@ -473,13 +497,40 @@
     ctx.stroke();
     ctx.restore();
   }
+  function drawPlayerEquipment(ctx, x, y, height, options = {}) {
+    const loadout = options.loadout || options.equipment;
+    if (!loadout) return false;
+    const scale = (Number(height) || 88) / 88;
+    const action = options.action || 'idle', progress = Number.isFinite(options.progress) ? options.progress : 1;
+    const walk = options.moving ? 1 : 0, t = Number(options.time) || 0;
+    const weaponHand = hand(action, progress, t, walk, false);
+    const shieldHand = hand(action, progress, t, walk, true);
+    let drawn = false;
+    ctx.save();
+    ctx.translate(x, y);
+    if (options.flip) ctx.scale(-1, 1);
+    ctx.scale(scale, scale);
+    if (loadout.weapon && loadout.weapon !== 'emptyHand') {
+      drawn = weapon(ctx, weaponHand.x, weaponHand.y, action === 'attack' ? 48 : 43,
+        .5 + armAngle(action, progress, t, walk)) || drawn;
+    }
+    if (loadout.offhand === 'buckler') {
+      shield(ctx, shieldHand.x, shieldHand.y, action === 'block' ? 34 : 29,
+        action === 'block' ? -.5 : 0);
+      drawn = true;
+    }
+    ctx.restore();
+    return drawn;
+  }
   window.AetherArt = {
     hand,
     shield,
+    drawPlayerEquipment,
     bodyLean,
     load,
     draw,
     drawFrame,
+    drawWorldObject,
     drawVfxFrame,
     zonePattern,
     actor,

@@ -3,7 +3,7 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '5.1.9';
+  const BUILD_VERSION = '5.1.10';
   const SAVE_SCHEMA = 5;
   const BASE_STATS = Object.freeze({ startLevel: 6, damage: 32, maxHp: 240, maxStamina: 100, speed: 205, damagePerLevel: 3, hpPerLevel: 18 });
   const MAX_UPGRADE_RANK = 5;
@@ -343,6 +343,7 @@
   };
   const QUALITY_ASSET_TIERS = Object.freeze({ low:'low', medium:'medium', high:'high', 'very-high':'very-high', ultra:'ultra' });
   const AUTO_TIER_ORDER = Object.freeze(['low','medium','high','very-high','ultra']);
+  const QUALITY_LABELS = Object.freeze({ low:'Производительность', medium:'Среднее', high:'Высокое', 'very-high':'Очень высокое', ultra:'Качество' });
   const FPS = [30, 40, 45, 60];
   const detected = device.ram >= 8 && device.cores >= 8 ? 'high' : device.ram >= 4 && device.cores >= 4 ? 'medium' : 'low';
   let autoTier = detected === 'low' ? 'low' : 'medium', autoStableWindows = 0, autoPoorWindows = 0;
@@ -2353,24 +2354,9 @@
   }
   function buildObstacles() {
     if (!physics) return;
-    const z = zones[zoneId],
-      items = [{
-        x: z.camp.x,
-        y: z.camp.y - 100,
-        r: 48
-      }, {
-        x: zoneId === 'mistwood' ? 1180 : zoneId === 'stonevale' ? 1220 : 1520,
-        y: zoneId === 'mistwood' ? 430 : zoneId === 'stonevale' ? 530 : 910,
-        r: 65
-      }, ...(zoneVisuals?.ZONES[zoneId]?.landmarks || LANDMARKS[zoneId].map(([x,y]) => ({x,y,footprint:43}))).map(item => ({
-        x:item.x, y:item.y + 8, r:item.footprint || 43
-      }))];
-    ambient = ambient.filter(a => [z.camp, z.scout, z.portal].every(p => dist(a, p) > 120) && items.every(o => dist(a, o) > o.r + 55 * a.scale));
-    for (const a of ambient) items.push({
-      x: a.x,
-      y: a.y + 8,
-      r: (a.footprint || 18) * a.scale
-    });
+    const z = zones[zoneId], fixed = zoneVisuals?.staticObstacles?.(zoneId, z.camp, []) || [];
+    ambient = ambient.filter(a => [z.camp, z.scout, z.portal].every(p => dist(a, p) > 120) && fixed.every(o => dist(a, o) > o.r + 55 * a.scale));
+    const items = zoneVisuals?.staticObstacles?.(zoneId, z.camp, ambient) || fixed;
     physics.set(items);
     // Gatherables are interaction targets, not walls. Relocate them away from true
     // static footprints, but keep them out of movement, LOS and projectile collision.
@@ -3442,14 +3428,7 @@
     return true;
   }
   function devicePanel() {
-    const names = {
-      auto: `Auto (${detected})`,
-      low: 'Низкое',
-      medium: 'Среднее',
-      high: 'Высокое',
-      'very-high': 'Очень высокое',
-      ultra: 'Ультра'
-    };
+    const names = { auto: `Авто (${QUALITY_LABELS[detected] || detected})`, ...QUALITY_LABELS };
     return `<div class="sectionTitle">ИГРА НА УСТРОЙСТВЕ</div>
       <div class="card"><p>Текущее качество: <b>${names[settings.quality]}</b><br>
       Лимит отрисовки: <b>${settings.fps} FPS</b><br>DPR: <b>${DPR.toFixed(2)}</b><br>Разрешение игры: ${canvas.width} × ${canvas.height}</p></div>
@@ -3583,7 +3562,7 @@
     const tabs = `<nav class="settingsTabs" aria-label="Категории настроек">${SETTINGS_TABS.map(([id,label,icon]) => `<button data-settings-tab="${id}" class="${settingsCategory === id ? 'active' : ''}" aria-pressed="${settingsCategory === id}">${uiIcon('navigation',icon,label)}</button>`).join('')}</nav>`;
     let content = '';
     if (settingsCategory === 'game') content = `<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><article class="card"><h3>Путь пяти земель</h3><p>${campaignComplete() ? 'Кампания завершена · ' + escapeHTML(storyEngine?.deriveEnding(player.story).title || '') : escapeHTML(zones[zoneId].name + ' · ' + currentObjective())}</p></article><button class="btn" id="menuTraining">Тренировка и управление</button>`;
-    else if (settingsCategory === 'graphics') content = `<div class="sectionTitle">КАЧЕСТВО</div><div class="seg" id="qualitySeg">${[['auto','Auto'],['low','Performance'],['medium','Balanced'],['high','Quality'],['very-high','Very High'],['ultra','Ultra']].map(([q,label]) => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}">${label}</button>`).join('')}</div><p class="note">Auto начинает с безопасного профиля и повышает качество только после стабильных замеров. Активный профиль: ${activeQualityKey()}.</p><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div>`;
+    else if (settingsCategory === 'graphics') content = `<div class="sectionTitle">КАЧЕСТВО</div><div class="seg" id="qualitySeg">${[['auto','Авто'],['low','Производительность'],['ultra','Качество']].map(([q,label]) => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}">${label}</button>`).join('')}</div><p class="note">Авто начинает с безопасного профиля и повышает качество только после стабильных замеров. Активный профиль: ${QUALITY_LABELS[activeQualityKey()] || activeQualityKey()}.</p><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div>`;
     else if (settingsCategory === 'audio') content = `<button class="btn" id="musicToggle">Музыка: ${settings.musicEnabled ? 'включена' : 'выключена'}</button><button class="btn" id="voiceToggle">Голоса: ${settings.voiceEnabled ? 'включены' : 'выключены'}</button><button class="btn secondary" id="audioTestBtn">Проверить звук</button><p class="note" id="audioStatus">${audioStatusText()}</p>${volumeRow('masterVolume','Общая громкость',settings.masterVolume)}${volumeRow('musicVolume','Музыка',settings.musicVolume)}${volumeRow('ambientVolume','Окружение',settings.ambientVolume)}${volumeRow('sfxVolume','Эффекты',settings.sfxVolume)}${volumeRow('voiceVolume','Голоса',settings.voiceVolume)}`;
     else if (settingsCategory === 'controls') content = `<div class="seg"><button id="control-right" class="${settings.controls === 'right' ? 'active' : ''}">Правша</button><button id="control-left" class="${settings.controls === 'left' ? 'active' : ''}">Левша</button></div><p class="note">WASD · Space атака · F блок/парирование · Shift уклонение · E действие · Q расходник.</p><div class="seg"><button id="controlSize-compact" class="${settings.controlSize === 'compact' ? 'active' : ''}">Компактно</button><button id="controlSize-normal" class="${settings.controlSize === 'normal' ? 'active' : ''}">Обычно</button><button id="controlSize-large" class="${settings.controlSize === 'large' ? 'active' : ''}">Крупно</button></div><button class="btn" id="hapticsToggle" ${hapticsAvailable ? '' : 'disabled'}>${hapticsAvailable ? `Виброотклик: ${settings.haptics ? 'включён' : 'выключен'}` : 'Виброотклик: недоступен'}</button>`;
     else if (settingsCategory === 'interface') content = `<div class="seg"><button id="bright-85" class="${settings.brightness === 85 ? 'active' : ''}">Темнее</button><button id="bright-100" class="${settings.brightness === 100 ? 'active' : ''}">Обычно</button><button id="bright-115" class="${settings.brightness === 115 ? 'active' : ''}">Ярче</button></div><div class="seg uiScaleSeg"><button id="ui-small" class="${settings.uiScale === 'small' ? 'active' : ''}">Текст 90%</button><button id="ui-normal" class="${settings.uiScale === 'normal' ? 'active' : ''}">Текст 100%</button><button id="ui-large" class="${settings.uiScale === 'large' ? 'active' : ''}">Текст 115%</button></div><div class="seg"><button id="map-normal" class="${settings.minimapSize === 'normal' ? 'active' : ''}">Карта обычная</button><button id="map-large" class="${settings.minimapSize === 'large' ? 'active' : ''}">Карта крупная</button></div><button class="btn" id="numbersToggle">Цифры урона: ${settings.combatNumbers ? 'включены' : 'выключены'}</button>`;
@@ -5052,8 +5031,10 @@
       const legacyOptions = { moving:legacyMoving, action:legacyAction, progress:legacyProgress,
         flip:legacyPlayerName !== 'heroBack' && Math.cos(player.dir) < 0,
         death:legacyAction === 'death' ? legacyProgress : 0 };
-      if (!drawLegacyActor(legacyPlayerName, s.x, s.y + 18, 88, legacyOptions))
-        drawLegacyActor('hero', s.x, s.y + 18, 88, legacyOptions);
+      if (!drawLegacyActor(legacyPlayerName, s.x, s.y + 18, 88, legacyOptions)) drawLegacyActor('hero', s.x, s.y + 18, 88, legacyOptions);
+      art.drawPlayerEquipment?.(ctx, s.x, s.y + 18, 88, {
+        ...legacyOptions, time, loadout:player.loadout
+      });
       return;
     }
     ctx.save();
@@ -5685,12 +5666,13 @@
     }
     for (const e of entities) if ((e.hp > 0 || e._corpseUntil > time) && visible(e.x, e.y, 100)) drawQueue.push(e);
     for (const a of ambient) if (visible(a.x, a.y, 250)) drawQueue.push(a);
-    for (const item of structures) if (art?.has(item.asset) && visible(item.x, item.y, 200)) drawQueue.push(item);
+    for (const item of structures) if (visible(item.x, item.y, 200)) drawQueue.push(item);
     drawQueue.sort(sortDepth);
     for (const e of drawQueue) {
       if (e.kind === 'structure') {
         const p = screenPos(e.x, e.y);
-        art.drawFrame(ctx, e.asset, p.x, p.y + 20, {height:e.height});
+        groundShadow(p.x, p.y + 14, e.footprint || 40);
+        art.drawWorldObject(ctx, e.asset, p.x, p.y + 20, {height:e.height});
       } else if (e.kind === 'enemy') drawEntity(e);else if (e.kind === 'resource') drawResource(e);else if (e.kind === 'player') drawPlayer();else if (typeof e.scale === 'number') drawAmbientItem(e);else if (e.kind === 'camp') drawCamp(z);else if (e.kind === 'scout') drawScout(z);else drawPortal(z);
     }
     drawLighting(z);

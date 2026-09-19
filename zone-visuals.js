@@ -1,6 +1,6 @@
 "use strict";
 
-/* Aethernfall 5.1.9 — immutable world visual registry. */
+/* Aethernfall 5.1.10 — immutable world visual registry. */
 (() => {
   'use strict';
   const PORTAL_STATES = Object.freeze(['locked','charging','open','transition','completed']);
@@ -102,6 +102,17 @@
     const candidate = list[start];
     return Object.freeze({...candidate, frame:hash(zoneId, Number(seed) + 7919) % 2});
   }
+  function staticObstacles(zoneId, camp, placedAmbient = []) {
+    const zone = ZONES[zoneId] || ZONES.mistwood;
+    return [
+      { x:camp.x, y:camp.y - 100, r:zone.camp.footprint, visualId:zone.camp.id },
+      ...zone.landmarks.map(item => ({ x:item.x, y:item.y + 8, r:item.footprint, visualId:item.id })),
+      ...placedAmbient.map(item => ({
+        x:item.x, y:item.y + 8, r:(item.footprint || 18) * (item.scale || 1),
+        visualId:item.visualId || ''
+      }))
+    ];
+  }
   const portalFrame = state => Math.max(0, PORTAL_STATES.indexOf(state));
-  globalThis.AetherZoneVisuals = Object.freeze({ ZONES, PORTAL_STATES, chooseAmbient, portalFrame });
+  globalThis.AetherZoneVisuals = Object.freeze({ ZONES, PORTAL_STATES, chooseAmbient, staticObstacles, portalFrame });
 })();
