@@ -8,9 +8,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#101817">
-<title>Aethernfall v5.1.10.2</title>
-<link rel="manifest" href="manifest.json?v=5.1.10.2">
-<link rel="stylesheet" href="style.css?v=5.1.10.2">
+<title>Aethernfall v5.1.10.4</title>
+<link rel="manifest" href="manifest.json?v=5.1.10.4">
+<link rel="stylesheet" href="style.css?v=5.1.10.4">
 <link rel="apple-touch-icon" href="assets/icon-192.png">
 <link rel="icon" href="assets/icon-192.png">
 <meta name="apple-mobile-web-app-title" content="Aethernfall">
@@ -31,16 +31,16 @@
 <span id="levelText">Ур. 6</span>
 </div>
 <div class="bar hp" role="progressbar" aria-label="Здоровье" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100">
-<span id="hpFill">
-</span>
+<span id="hpFill"></span>
+<span class="barValue" id="hpValue">240/240</span>
 </div>
 <div class="bar stamina" role="progressbar" aria-label="Выносливость" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100">
-<span id="staminaFill">
-</span>
+<span id="staminaFill"></span>
+<span class="barValue" id="staminaValue">100/100</span>
 </div>
 <div class="bar xp" role="progressbar" aria-label="Опыт" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-<span id="xpFill">
-</span>
+<span id="xpFill"></span>
+<span class="barValue" id="xpValue">0/100</span>
 </div>
 </div>
 </section>
@@ -101,15 +101,15 @@
 <span class="actionIcon" data-ui-icon="actions:interact"><span class="uiIconFallback">Действие</span></span>
 </button>
 <button id="skill1Btn" class="action skill" data-act="skill1" data-ui-icon-button aria-label="Разрез ветра">
-<small>РАЗРЕЗ</small><span class="actionMeta" id="skill1Meta">20 EN</span>
+<small>РАЗРЕЗ</small>
 <span class="actionIcon" data-ui-icon="actions:wind-slash"><span class="uiIconFallback">Разрез</span></span>
 </button>
 <button id="skill2Btn" class="action skill" data-act="skill2" data-ui-icon-button aria-label="Тройной импульс">
-<small>ИМПУЛЬС</small><span class="actionMeta" id="skill2Meta">20 EN</span>
+<small>ИМПУЛЬС</small>
 <span class="actionIcon" data-ui-icon="actions:triple-pulse"><span class="uiIconFallback">Импульс</span></span>
 </button>
 <button id="skill3Btn" class="action skill" data-act="skill3" data-ui-icon-button aria-label="Второе дыхание">
-<small>ДЫХАНИЕ</small><span class="actionMeta" id="skill3Meta">20 EN</span>
+<small>ДЫХАНИЕ</small><span class="actionMeta" id="skill3Meta"></span>
 <span class="actionIcon" data-ui-icon="actions:second-wind"><span class="uiIconFallback">Дыхание</span></span>
 </button>
 <button id="blockBtn" class="action block" data-act="block" data-ui-icon-button aria-label="Блок и парирование">
@@ -117,7 +117,7 @@
 <span class="actionIcon" data-ui-icon="actions:block"><span class="uiIconFallback">Блок</span></span>
 </button>
 <button id="dodgeBtn" class="action dodge" data-act="dodge" data-ui-icon-button aria-label="Уклонение">
-<small>УКЛОН</small><span class="actionMeta" id="dodgeMeta">24 EN</span>
+<small>УКЛОН</small><span class="actionMeta" id="dodgeMeta"></span>
 <span class="actionIcon" data-ui-icon="actions:dodge"><span class="uiIconFallback">Уклон</span></span>
 </button>
 <button id="attackBtn" class="action attack" data-act="attack" data-ui-icon-button aria-label="Атака">
@@ -152,22 +152,22 @@
 </div>
 </div>
 </div>
-<script src="debug-overlay.js?v=5.1.10.2" defer></script>
-<script src="physics.js?v=5.1.10.2" defer></script>
-<script src="assets.js?v=5.1.10.2" defer></script>
-<script src="art.js?v=5.1.10.2" defer></script>
-<script src="audio.js?v=5.1.10.2" defer></script>
-<script src="persistence.js?v=5.1.10.2" defer></script>
-<script src="quests.js?v=5.1.10.2" defer></script>
-<script src="combat.js?v=5.1.10.2" defer></script>
-<script src="builds.js?v=5.1.10.2" defer></script>
-<script src="world.js?v=5.1.10.2" defer></script>
-<script src="zone-visuals.js?v=5.1.10.2" defer></script>
-<script src="arenas.js?v=5.1.10.2" defer></script>
-<script src="story.js?v=5.1.10.2" defer></script>
-<script src="ui-icons.js?v=5.1.10.2" defer></script>
-<script src="vfx.js?v=5.1.10.2" defer></script>
-<script src="game.js?v=5.1.10.2" defer>
+<script src="debug-overlay.js?v=5.1.10.4" defer></script>
+<script src="physics.js?v=5.1.10.4" defer></script>
+<script src="assets.js?v=5.1.10.4" defer></script>
+<script src="art.js?v=5.1.10.4" defer></script>
+<script src="audio.js?v=5.1.10.4" defer></script>
+<script src="persistence.js?v=5.1.10.4" defer></script>
+<script src="quests.js?v=5.1.10.4" defer></script>
+<script src="combat.js?v=5.1.10.4" defer></script>
+<script src="builds.js?v=5.1.10.4" defer></script>
+<script src="world.js?v=5.1.10.4" defer></script>
+<script src="zone-visuals.js?v=5.1.10.4" defer></script>
+<script src="arenas.js?v=5.1.10.4" defer></script>
+<script src="story.js?v=5.1.10.4" defer></script>
+<script src="ui-icons.js?v=5.1.10.4" defer></script>
+<script src="vfx.js?v=5.1.10.4" defer></script>
+<script src="game.js?v=5.1.10.4" defer>
 </script>
 <div id="perfMonitor" class="perfMonitor hidden" aria-live="polite">
   <div>

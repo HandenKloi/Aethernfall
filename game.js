@@ -3,7 +3,7 @@
 (() => {
   'use strict';
 
-  const BUILD_VERSION = '5.1.10.2';
+  const BUILD_VERSION = '5.1.10.4';
   const SAVE_SCHEMA = 5;
   const BASE_STATS = Object.freeze({ startLevel: 6, damage: 32, maxHp: 240, maxStamina: 100, speed: 205, damagePerLevel: 3, hpPerLevel: 18 });
   const MAX_UPGRADE_RANK = 5;
@@ -196,13 +196,16 @@
   const MAP_MARKER_STYLE = { color:'#f5e5a4', fill:'rgba(8,16,15,.82)' };
   const ui = {
     hp: $('hpFill'),
+    hpValue: $('hpValue'),
     bossHud: $('bossHud'),
     bossName: $('bossName'),
     bossPhase: $('bossPhase'),
     bossHpText: $('bossHpText'),
     bossHpFill: $('bossHpFill'),
     stamina: $('staminaFill'),
+    staminaValue: $('staminaValue'),
     xp: $('xpFill'),
+    xpValue: $('xpValue'),
     level: $('levelText'),
     zone: $('zoneText'),
     objective: $('objectiveText'),
@@ -241,8 +244,6 @@
     skill1Btn: $('skill1Btn'),
     skill2Btn: $('skill2Btn'),
     skill3Btn: $('skill3Btn'),
-    skill1Meta: $('skill1Meta'),
-    skill2Meta: $('skill2Meta'),
     skill3Meta: $('skill3Meta'),
     blockBtn: $('blockBtn'),
     dodgeBtn: $('dodgeBtn'),
@@ -344,7 +345,7 @@
   const QUALITY_ASSET_TIERS = Object.freeze({ low:'low', medium:'medium', high:'high', 'very-high':'very-high', ultra:'ultra' });
   const AUTO_TIER_ORDER = Object.freeze(['low','medium','high','very-high','ultra']);
   const QUALITY_LABELS = Object.freeze({ low:'Производительность', medium:'Среднее', high:'Высокое', 'very-high':'Очень высокое', ultra:'Качество' });
-  const FPS = [30, 40, 45, 60];
+  const FPS = [30, 60];
   const detected = device.ram >= 8 && device.cores >= 8 ? 'high' : device.ram >= 4 && device.cores >= 4 ? 'medium' : 'low';
   let autoTier = detected === 'low' ? 'low' : 'medium', autoStableWindows = 0, autoPoorWindows = 0;
   function activeQualityKey() { return settings.quality === 'auto' ? autoTier : settings.quality; }
@@ -3562,7 +3563,7 @@
     const tabs = `<nav class="settingsTabs" aria-label="Категории настроек">${SETTINGS_TABS.map(([id,label,icon]) => `<button data-settings-tab="${id}" class="${settingsCategory === id ? 'active' : ''}" aria-pressed="${settingsCategory === id}">${uiIcon('navigation',icon,label)}</button>`).join('')}</nav>`;
     let content = '';
     if (settingsCategory === 'game') content = `<div class="stats"><div class="stat"><b>${player.level}</b>Уровень</div><div class="stat"><b>${Math.round(player.hp)}</b>Здоровье</div><div class="stat"><b>${player.damage}</b>Урон</div></div><article class="card"><h3>Путь пяти земель</h3><p>${campaignComplete() ? 'Кампания завершена · ' + escapeHTML(storyEngine?.deriveEnding(player.story).title || '') : escapeHTML(zones[zoneId].name + ' · ' + currentObjective())}</p></article><button class="btn" id="menuTraining">Тренировка и управление</button>`;
-    else if (settingsCategory === 'graphics') content = `<div class="sectionTitle">КАЧЕСТВО</div><div class="seg" id="qualitySeg">${[['auto','Авто'],['low','Производительность'],['ultra','Качество']].map(([q,label]) => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}">${label}</button>`).join('')}</div><p class="note">Авто начинает с безопасного профиля и повышает качество только после стабильных замеров. Активный профиль: ${QUALITY_LABELS[activeQualityKey()] || activeQualityKey()}.</p><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div>`;
+    else if (settingsCategory === 'graphics') content = `<div class="sectionTitle">КАЧЕСТВО</div><div class="seg" id="qualitySeg">${[['auto','Авто'],['low','Производительность'],['ultra','Качество']].map(([q,label]) => `<button data-q="${q}" class="${settings.quality === q ? 'active' : ''}" title="${label}">${label}</button>`).join('')}</div><p class="note">Авто начинает с безопасного профиля и повышает качество только после стабильных замеров. Активный профиль: ${QUALITY_LABELS[activeQualityKey()] || activeQualityKey()}.</p><div class="sectionTitle">ЧАСТОТА КАДРОВ</div><div class="seg fps" id="fpsSeg">${FPS.map(f => `<button data-f="${f}" class="${settings.fps === f ? 'active' : ''}">${f}</button>`).join('')}</div>`;
     else if (settingsCategory === 'audio') content = `<button class="btn" id="musicToggle">Музыка: ${settings.musicEnabled ? 'включена' : 'выключена'}</button><button class="btn" id="voiceToggle">Голоса: ${settings.voiceEnabled ? 'включены' : 'выключены'}</button><button class="btn secondary" id="audioTestBtn">Проверить звук</button><p class="note" id="audioStatus">${audioStatusText()}</p>${volumeRow('masterVolume','Общая громкость',settings.masterVolume)}${volumeRow('musicVolume','Музыка',settings.musicVolume)}${volumeRow('ambientVolume','Окружение',settings.ambientVolume)}${volumeRow('sfxVolume','Эффекты',settings.sfxVolume)}${volumeRow('voiceVolume','Голоса',settings.voiceVolume)}`;
     else if (settingsCategory === 'controls') content = `<div class="seg"><button id="control-right" class="${settings.controls === 'right' ? 'active' : ''}">Правша</button><button id="control-left" class="${settings.controls === 'left' ? 'active' : ''}">Левша</button></div><p class="note">WASD · Space атака · F блок/парирование · Shift уклонение · E действие · Q расходник.</p><div class="seg"><button id="controlSize-compact" class="${settings.controlSize === 'compact' ? 'active' : ''}">Компактно</button><button id="controlSize-normal" class="${settings.controlSize === 'normal' ? 'active' : ''}">Обычно</button><button id="controlSize-large" class="${settings.controlSize === 'large' ? 'active' : ''}">Крупно</button></div><button class="btn" id="hapticsToggle" ${hapticsAvailable ? '' : 'disabled'}>${hapticsAvailable ? `Виброотклик: ${settings.haptics ? 'включён' : 'выключен'}` : 'Виброотклик: недоступен'}</button>`;
     else if (settingsCategory === 'interface') content = `<div class="seg"><button id="bright-85" class="${settings.brightness === 85 ? 'active' : ''}">Темнее</button><button id="bright-100" class="${settings.brightness === 100 ? 'active' : ''}">Обычно</button><button id="bright-115" class="${settings.brightness === 115 ? 'active' : ''}">Ярче</button></div><div class="seg uiScaleSeg"><button id="ui-small" class="${settings.uiScale === 'small' ? 'active' : ''}">Текст 90%</button><button id="ui-normal" class="${settings.uiScale === 'normal' ? 'active' : ''}">Текст 100%</button><button id="ui-large" class="${settings.uiScale === 'large' ? 'active' : ''}">Текст 115%</button></div><div class="seg"><button id="map-normal" class="${settings.minimapSize === 'normal' ? 'active' : ''}">Карта обычная</button><button id="map-large" class="${settings.minimapSize === 'large' ? 'active' : ''}">Карта крупная</button></div><button class="btn" id="numbersToggle">Цифры урона: ${settings.combatNumbers ? 'включены' : 'выключены'}</button>`;
@@ -4358,6 +4359,7 @@
     updateTutorialUI();
     const hpPercent = clamp(player.hp / player.maxHp * 100, 0, 100);
     setWidth(ui.hp, hpPercent + '%');
+    setText(ui.hpValue, `${Math.max(0, Math.round(player.hp))}/${Math.max(1, Math.round(player.maxHp))}`);
     ui.hp?.parentElement?.setAttribute('aria-valuenow', String(Math.round(hpPercent)));
     const guardian = entities.find(e => e.kind === 'enemy' && isBoss(e) && e.hp > 0 && e.aiState === 'chase');
     const bossActive = !!guardian;
@@ -4375,6 +4377,8 @@
       xpPercent = clamp(player.xp / player.xpNeed * 100, 0, 100);
     setWidth(ui.stamina, staminaPercent + '%');
     setWidth(ui.xp, xpPercent + '%');
+    setText(ui.staminaValue, `${Math.max(0, Math.round(player.stamina))}/${Math.max(1, Math.round(player.maxStamina))}`);
+    setText(ui.xpValue, `${Math.max(0, Math.round(player.xp))}/${Math.max(1, Math.round(player.xpNeed))}`);
     ui.stamina?.parentElement?.setAttribute('aria-valuenow', String(Math.round(staminaPercent)));
     ui.xp?.parentElement?.setAttribute('aria-valuenow', String(Math.round(xpPercent)));
     const cycleNo = Math.floor(Number(player.progression?.completedCycles) || 0);
@@ -4383,9 +4387,12 @@
     const z = zones[zoneId];
     setText(ui.zone, z.name);
     const objective = currentObjective();
+    const objectiveHasCounter = /\b\d+\s*\/\s*\d+\b/.test(objective);
     setText(ui.objective, objective);
     setText(ui.questTitle, quest().title);
     setText(ui.questProgress, objective);
+    ui.objective?.classList.toggle('objectiveCounter', objectiveHasCounter);
+    ui.questProgress?.classList.toggle('objectiveCounter', objectiveHasCounter);
     setText(ui.badge, z.badge);
     setText(ui.herb, player.inv.herb);
     setText(ui.wood, player.inv.wood);
@@ -4412,10 +4419,10 @@
     updateActionState(ui.skill1Btn, getActionPresentation('skill1', actionState, time, ui.skill1Btn?.classList.contains('pressed')));
     updateActionState(ui.skill2Btn, getActionPresentation('skill2', actionState, time, ui.skill2Btn?.classList.contains('pressed')));
     const secondWindLeft = Math.max(0, player.secondWindCd - time);
-    if (ui.skill3Meta) setText(ui.skill3Meta, secondWindLeft > 0 ? `${Math.ceil(secondWindLeft)}с` : `${buildProfile.combat.skillStaminaCost} EN`);
+    if (ui.skill3Meta) setText(ui.skill3Meta, secondWindLeft > 0 ? `${Math.ceil(secondWindLeft)}с` : '');
     updateActionState(ui.skill3Btn, getActionPresentation('skill3', actionState, time, ui.skill3Btn?.classList.contains('pressed')));
     const dodgeLeft = Math.max(0, player.dodgeCd - time);
-    if (ui.dodgeMeta) setText(ui.dodgeMeta, dodgeLeft > 0 ? `${dodgeLeft.toFixed(1)}с` : `${buildProfile.combat.dodgeStaminaCost} EN`);
+    if (ui.dodgeMeta) setText(ui.dodgeMeta, dodgeLeft > 0 ? `${dodgeLeft.toFixed(1)}с` : '');
     updateActionState(ui.dodgeBtn, getActionPresentation('dodge', actionState, time, ui.dodgeBtn?.classList.contains('pressed')));
     const perfectWindow = player.story?.choices?.shardDoctrine === 'seal' ? .22 : .16;
     const riposteReady = player.riposteUntil > time,
@@ -4435,8 +4442,8 @@
       portalLocked: 'ЗАКРЫТО',
       scout: 'ГОВОРИТЬ',
       camp: 'ЛАГЕРЬ',
-      loot: 'ПОДОБРАТЬ',
-      resource: 'СОБРАТЬ'
+      loot: 'ВЗЯТЬ',
+      resource: 'СБОР'
     }[hit.type] : 'ДЕЙСТВИЕ');
   }
   function isoY(v) {
@@ -5255,26 +5262,79 @@
   function drawLoot() {
     for (const l of lootDrops) {
       if (!visible(l.x, l.y, 35)) continue;
-      const asset = { coin:'icon.item.gold', guardianToken:'icon.item.guardian_token', emberShard:'icon.item.ember_shard', herb:'icon.item.herb', wood:'icon.item.wood', ore:'icon.item.ore' }[l.id] || `icon.item.${l.id}`;
+      const asset = { coin:'gold', guardianToken:'guardianToken', emberShard:'emberShard', herb:'herb', wood:'wood', ore:'ore' }[l.id] || l.id;
       if (art?.has(asset)) {
         const p = screenPos(l.x, l.y);
-        art.drawFrame(ctx, asset, p.x, p.y + 3 + Math.sin(time * 4 + l.x) * 2, {height:25});
+        art.drawFrame(ctx, asset, p.x, p.y + 3 + Math.sin(time * 4 + l.x) * 2, { height:l.id === 'coin' ? 22 : 25 });
         continue;
       }
       const s = screenPos(l.x, l.y);
       ctx.save();
       ctx.translate(s.x, s.y + Math.sin(time * 4 + l.x) * 3);
-      ctx.shadowColor = l.id === 'coin' ? 'rgba(230,194,92,.85)' : 'rgba(190,220,216,.65)';
       ctx.shadowBlur = profile.detail >= 2 ? 10 : 0;
-      ctx.fillStyle = l.id === 'coin' ? '#e6c25e' : l.id === 'guardianToken' ? '#b79be8' : '#bdd2cc';
-      ctx.beginPath();
-      ctx.arc(0, -12, 8, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = 'rgba(255,255,255,.35)';
-      ctx.beginPath();
-      ctx.arc(-2, -14, 2.2, 0, Math.PI * 2);
-      ctx.fill();
+      if (l.id === 'coin') {
+        ctx.shadowColor = 'rgba(230,194,92,.85)';
+        ctx.fillStyle = '#e6c25e';
+        ctx.strokeStyle = '#f7e3a0';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.ellipse(0, -12, 8, 6.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = 'rgba(125,88,21,.55)';
+        ctx.beginPath();
+        ctx.moveTo(-3, -12);
+        ctx.lineTo(3, -12);
+        ctx.stroke();
+      } else if (l.id === 'guardianToken') {
+        ctx.shadowColor = 'rgba(184,155,232,.72)';
+        ctx.fillStyle = '#4b5f6a';
+        ctx.strokeStyle = '#d9c98b';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(0, -20);
+        ctx.lineTo(8, -16);
+        ctx.lineTo(7, -7);
+        ctx.quadraticCurveTo(0, 1, -7, -7);
+        ctx.lineTo(-8, -16);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = 'rgba(217,201,139,.8)';
+        ctx.beginPath();
+        ctx.moveTo(0, -17);
+        ctx.lineTo(0, -6);
+        ctx.moveTo(-4, -12);
+        ctx.lineTo(4, -12);
+        ctx.stroke();
+      } else if (l.id === 'emberShard') {
+        ctx.shadowColor = 'rgba(255,140,92,.8)';
+        ctx.fillStyle = '#ff9a62';
+        ctx.strokeStyle = '#ffd0a9';
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.moveTo(0, -21);
+        ctx.lineTo(6, -14);
+        ctx.lineTo(3, -5);
+        ctx.lineTo(-4, -2);
+        ctx.lineTo(-6, -12);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        ctx.shadowColor = 'rgba(190,220,216,.65)';
+        ctx.fillStyle = '#bdd2cc';
+        ctx.beginPath();
+        ctx.arc(0, -12, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(255,255,255,.35)';
+        ctx.beginPath();
+        ctx.arc(-2, -14, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.restore();
     }
   }

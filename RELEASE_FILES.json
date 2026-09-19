@@ -1,5 +1,5 @@
 {
-  "version": "5.1.10.2",
+  "version": "5.1.10.4",
   "files": [
     {
       "path": "RELEASE_NOTES_5.1.10.1.md",
@@ -10,6 +10,16 @@
       "path": "RELEASE_NOTES_5.1.10.2.md",
       "bytes": 676,
       "sha256": "c5ddba4ff62e91fe7b26c142acc06093fbf928bfa5075bb073538f75ab8a3fdf"
+    },
+    {
+      "path": "RELEASE_NOTES_5.1.10.3.md",
+      "bytes": 930,
+      "sha256": "19da42a33800ea57a60e5c392e31994421d8e83438e940a0f3dbd890f0c136c0"
+    },
+    {
+      "path": "RELEASE_NOTES_5.1.10.4.md",
+      "bytes": 428,
+      "sha256": "a85b012d9a12125f4e1dbe66e697d180731228fc6c2dfc0dc7299014dddb14b0"
     },
     {
       "path": "RELEASE_NOTES_5.1.10.md",
@@ -64,7 +74,7 @@
     {
       "path": "assets/manifest.json",
       "bytes": 514139,
-      "sha256": "8f88c632c9b97c637fc43772ad4936f15be56fdd23d68d269966e16f844bcf7a"
+      "sha256": "121430b78331d8a2a286ee1f289f928ddf8cdac466c61cfe58e5a0a5b0a126cb"
     },
     {
       "path": "assets/packs/high/ashfield-actors.webp",
@@ -758,13 +768,13 @@
     },
     {
       "path": "game.js",
-      "bytes": 282100,
-      "sha256": "12867fdeae70e49cc716f1a221013465e113803e0b768e5eaca37e6b4cb0a656"
+      "bytes": 284070,
+      "sha256": "72fbdef8fbe92d5dda4377e86ac7835b04b82594767c63708a672a778002e634"
     },
     {
       "path": "index.html",
-      "bytes": 9738,
-      "sha256": "2475250981fb1b2b67ac51753c9ca4855e3708d359a704e134826a2e74f1d26a"
+      "bytes": 9775,
+      "sha256": "48bb8efb5f63f0ce59c6c9a9251e27765a93785394e079a5b19cd2da51f97fac"
     },
     {
       "path": "index.pdf",
@@ -774,7 +784,7 @@
     {
       "path": "manifest.json",
       "bytes": 658,
-      "sha256": "9514f1ca47dee37789105bb3ee333bd86ae88386d6dcc82da2824b00810d1bdd"
+      "sha256": "65ae1326cedfaa215d778ad0e015ad0917105ac67ce23eed50c12ae499569799"
     },
     {
       "path": "persistence.js",
@@ -794,7 +804,7 @@
     {
       "path": "selftest.html",
       "bytes": 2494,
-      "sha256": "8ea9c5514dc6bb9370b959ae0f41f46d59f5a014ab241f2172c4d04fd3147162"
+      "sha256": "23e1af59054a0c527ebacf63901b35d91cf8ce72313552f506ec4f8b135ecdd1"
     },
     {
       "path": "story.js",
@@ -803,13 +813,13 @@
     },
     {
       "path": "style.css",
-      "bytes": 31341,
-      "sha256": "248f28fd4413399ff640bd71ff33b995b228b2cd8a1bb81b32d258eb80dd1029"
+      "bytes": 33231,
+      "sha256": "abf095cdc7507727e7118839c899d721b1bd2cb08fdd828bccaa25a459a415c5"
     },
     {
       "path": "sw.js",
       "bytes": 5334,
-      "sha256": "864e0ca91c540e216731bd9928dcd15f3eb4192accc312bf2d3f2628fcb6062f"
+      "sha256": "7e0369a5cac4c3dea23f14071fd7e3b532e65a79c95142a28efc36f75120c780"
     },
     {
       "path": "sw.pdf",
